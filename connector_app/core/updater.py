@@ -81,7 +81,8 @@ class Updater:
             subprocess.Popen([temp_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
             
             # Kill current app to allow overwrite
-            sys.exit(0)
+            # Kill current app to allow overwrite
+            os._exit(0)
             
         except Exception as e:
             print(f"[Updater] Update failed: {e}")
