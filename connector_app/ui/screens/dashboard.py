@@ -6,6 +6,8 @@ from core.config_manager import ConfigManager
 from core.engine import PecConnectorEngine
 from core.history_manager import HistoryManager
 
+from version import __version__
+
 class DashboardScreen(ctk.CTkFrame):
     def __init__(self, master, on_reset, notify_callback=None):
         super().__init__(master)
@@ -27,7 +29,7 @@ class DashboardScreen(ctk.CTkFrame):
         self.header_frame = ctk.CTkFrame(self, height=60, fg_color="transparent")
         self.header_frame.grid(row=0, column=0, sticky="ew", padx=20, pady=10)
         
-        self.lbl_title = ctk.CTkLabel(self.header_frame, text="Conector ProBPA v3.2", font=("Roboto", 20, "bold"))
+        self.lbl_title = ctk.CTkLabel(self.header_frame, text=f"Conector ProBPA v{__version__}", font=("Roboto", 20, "bold"))
         self.lbl_title.pack(side="left")
         
         mun_name = self.config_manager.get("municipality_name", "Desconhecido")
@@ -69,6 +71,13 @@ class DashboardScreen(ctk.CTkFrame):
         # Live Log Box
         self.log_box = ctk.CTkTextbox(self.tab_status, height=200, state="disabled")
         self.log_box.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Config Log Tags (Accessing underlying tkinter widget)
+        try:
+            self.log_box._textbox.tag_config("highlight", foreground="yellow")
+            self.log_box._textbox.tag_config("error", foreground="#FF5252")
+        except:
+            pass
 
     def _setup_history_tab(self):
         self.tab_history.grid_columnconfigure(0, weight=1)
@@ -99,10 +108,18 @@ class DashboardScreen(ctk.CTkFrame):
 
     # --- LOGIC ---
     
-    def log(self, message):
+    def log(self, message, level="info"):
         self.log_box.configure(state="normal")
         ts = datetime.now().strftime("%H:%M:%S")
-        self.log_box.insert("end", f"[{ts}] {message}\n")
+        full_msg = f"[{ts}] {message}\n"
+        
+        if level == "highlight":
+            self.log_box.insert("end", full_msg, "highlight")
+        elif level == "error":
+            self.log_box.insert("end", full_msg, "error")
+        else:
+            self.log_box.insert("end", full_msg)
+            
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
 
@@ -238,10 +255,10 @@ class DashboardScreen(ctk.CTkFrame):
                 notes = info.get("notes", "")
                 url = info.get("url")
                 
-                self.after(0, self.log, f"Nova versão encontrada: {version}")
+                self.after(0, self.log, f"Nova versão encontrada: {version}", "highlight")
                 self.after(0, lambda: self._prompt_update(version, notes, url, updater))
             else:
-                self.after(0, self.log, "Você já está na versão mais recente.")
+                self.after(0, self.log, "Você já está na versão mais recente.", "info")
                 self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
                 if self.notify_callback:
                     # Only notify if manually triggered or relevant? 
@@ -250,7 +267,7 @@ class DashboardScreen(ctk.CTkFrame):
                     pass
                     
         except Exception as e:
-            self.after(0, self.log, f"Erro ao verificar updates: {e}")
+            self.after(0, self.log, f"Erro ao verificar updates: {e}", "error")
             self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
 
     def _prompt_update(self, version, notes, url, updater):
