@@ -1,0 +1,24 @@
+{
+  "projects": {
+    "default": "probpa-025"
+  },
+  "targets": {
+    "probpa-025": {
+      "hosting": {
+        "admin": [
+          "probpa-admin"
+        ],
+        "entidade": [
+          "probpa-entidade"
+        ],
+        "producao": [
+          "probpa-producao"
+        ],
+        "website": [
+          "website-probpa"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

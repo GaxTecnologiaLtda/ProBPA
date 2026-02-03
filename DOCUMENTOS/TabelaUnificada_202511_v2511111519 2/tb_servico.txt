@@ -1,0 +1,73 @@
+100Serviço de Atenção a Saúde no Sistema Penitenciário                                                                     202511
+101Estratégia de Saúde da Família                                                                                          202511
+102Estratégias de Agentes Comunitário de Saúde                                                                             202511
+103Serviço de Atendimento Móvel de Urgências                                                                               202511
+104Regulação Assistêncial dos Serviços de Saúde                                                                            202511
+105Serviço de Atenção em Neurologia/ Neurocirurgia                                                                         202511
+106Serviço de Atenção a DST/HIV/AIDS                                                                                       202511
+107Atenção à Saúde Auditiva                                                                                                202511
+108Atenção a Saúde do Trabalhador                                                                                          202511
+109Serviço de Atenção a Saúde dos Adolecentes em Conflito com a Lei, em Regime de Internação e Internação Provisória       202511
+110Serviço de Atenção a Saúde Reprodutiva                                                                                  202511
+111Serviço de Atenção ao Paciente com Tuberculose                                                                          202511
+112Serviço de Atenção ao Pré-Natal e Nascimento                                                                            202511
+113Serviço de Atenção Domiciliar                                                                                           202511
+114Serviço de Atenção em Saúde Bucal                                                                                       202511
+115Serviço de Atenção Psicossocial                                                                                         202511
+116Serviço de Atenção Cardiovascular/Cardiologia                                                                           202511
+117Serviço de Cirurgia Reparadora                                                                                          202511
+118Serviço de Cirurgia Torácica                                                                                            202511
+119Serviço de Controle de Tabagismo                                                                                        202511
+120Serviço de Diagnóstico por Anatomia Patológica e/ou Citopatologia                                                       202511
+121Diagnóstico por Imagem                                                                                                  202511
+122Serviço de Diagnóstico por Métodos Gráficos/Dinâmicos                                                                   202511
+123Serviço de Dispensação de Órteses, Próteses e Materiais Especiais                                                       202511
+124Serviço de Endocrinologia                                                                                               202511
+125Serviço de Farmácia                                                                                                     202511
+126Serviço de Fisioterapia                                                                                                 202511
+127Serviço de Atenção à Obesidade                                                                                          202511
+128Serviço de Hemoterapia                                                                                                  202511
+129Servico de Laboratório de Histocompatibilidade                                                                          202511
+130Atenção à Doença Renal Crônica                                                                                          202511
+131Serviço de Oftalmologia                                                                                                 202511
+132Serviço de Oncologia                                                                                                    202511
+133Serviço de Pneumologia                                                                                                  202511
+134Serviço de Práticas Integrativas e Complementares                                                                       202511
+135Serviço de Reabilitação                                                                                                 202511
+136Serviço de Suporte Nutricional                                                                                          202511
+137Serviço de Telemedicina                                                                                                 202511
+138Serviço de Traumato-Ortopedia                                                                                           202511
+139Serviço de Triagem Neonatal                                                                                             202511
+140Serviço de Urgência e Emergência                                                                                        202511
+141Serviço de Vigilância em Saúde                                                                                          202511
+142Serviço de Endoscopia                                                                                                   202511
+143Serviço Móvel de Urgência (exceto SAMU)                                                                                 202511
+144Serviço Posto de Coleta de Materiais Biológicos                                                                         202511
+145Serviço de Diagnóstico por Laboratório Clínico                                                                          202511
+146Serviço de Videolaparoscopia                                                                                            202511
+147Serviço de Apoio a Saúde da Família                                                                                     202511
+148Hospital-Dia                                                                                                            202511
+149Transplante                                                                                                             202511
+150Cirurgia Vascular                                                                                                       202511
+151Medicina Nuclear                                                                                                        202511
+152Atenção à Saúde da População Indígena                                                                                   202511
+153Atenção Especializada no Processo Transexualizador                                                                      202511
+154Serviço de Banco de Tecidos                                                                                             202511
+155Serviço de Traumatologia  Ortopedia                                                                                     202511
+157Serviço de Laboratorio de Protese Dentaria                                                                              202511
+158Serviço de Atenção Integral em Hanseniase                                                                               202511
+159Atenção Primária                                                                                                        202511
+160Teleconsultoria                                                                                                         202511
+161Consultório na Rua                                                                                                      202511
+162Serviço de Terapia Intensiva                                                                                            202511
+163Serviço de Cuidados Intermediários                                                                                      202511
+164Serviço de Órteses,Próteses e Materiais Especiais em Reabilitação                                                       202511
+165Atenção às Pessoas em Situação de Violência Sexual                                                                      202511
+166Serviço de  Análise Laboratorial  de Produtos Sujeitos á  Vigilância Sanitária                                          202511
+167Atendimento Itinerante de Asistência e Ensino em Saúde                                                                  202511
+168Atenção Às Pessoas com Doenças Raras                                                                                    202511
+169Serviço de Atenção em Urologia                                                                                          202511
+170Comissões e Comitês                                                                                                     202511
+171Cuidados Paliativos                                                                                                     202511
+173Logística de Imunobiológicos                                                                                            202511
+174Imunização                                                                                                              202511

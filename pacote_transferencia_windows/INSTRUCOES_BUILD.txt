@@ -1,0 +1,13 @@
+=========================================================
+   PASSO 1: PREPARACAO DO AMBIENTE (SUA MAQUINA)
+=========================================================
+
+1. Execute o arquivo 'install_build_env.bat' como Administrador.
+   - Ele vai tentar instalar o Python (se nao tiver).
+   - Vai instalar o PyInstaller.
+   - Vai rodar o build automaticamente.
+
+2. Apos o termino, uma pasta 'entrega_cliente' sera criada.
+   ESTA eh a pasta que voce manda para o municipio.
+
+=========================================================

@@ -1,0 +1,146 @@
+[
+  {
+    "value": "0202010503",
+    "label": "0202010503 - Dosagem de hemoglobina glicosilada",
+    "original_sigtap": "0202010503",
+    "original_ab": "ABEX008",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "%"
+  },
+  {
+    "value": "0211070270",
+    "label": "0211070270 - Potencial evocado auditivo p/ triagem auditiva (teste da orelhinha)",
+    "original_sigtap": "0211070270",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0211070149",
+    "label": "0211070149 - Emissões otoacústicas evocadas p/ triagem auditiva (teste da orelhinha)",
+    "original_sigtap": "0211070149",
+    "original_ab": "ABEX020",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0205020178",
+    "label": "0205020178 - Ultrassonografia transfontanela",
+    "original_sigtap": "0205020178",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0206010079",
+    "label": "0206010079 - Tomografia computadorizada do crânio",
+    "original_sigtap": "0206010079",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0207010064",
+    "label": "0207010064 - Ressonância magnética de crânio",
+    "original_sigtap": "0207010064",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0211060100",
+    "label": "0211060100 - Fundoscopia",
+    "original_sigtap": "0211060100",
+    "original_ab": "ABPG013",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "ABEX022",
+    "label": "ABEX022 - Teste do olhinho (TRV)",
+    "original_sigtap": null,
+    "original_ab": "ABEX022",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0202020509",
+    "label": "0202020509 - Prova do laço",
+    "original_sigtap": "0202020509",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "-"
+  },
+  {
+    "value": "0205020143",
+    "label": "0205020143 - Ultrassonografia obstétrica",
+    "original_sigtap": "0205020143",
+    "original_ab": "ABEX024",
+    "result_structure": "tipoResultadoExame > 3 - Semanas tipoResultadoExame > 2 - Dias tipoResultadoExame > 4 - Data",
+    "unit": "Semanas / dias / DPP eco"
+  },
+  {
+    "value": "0205020151",
+    "label": "0205020151 - ultrassonografia obstétrica c/ doppler colorido e pulsado",
+    "original_sigtap": "0205020151",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 3 - Semanas tipoResultadoExame > 2 - Dias tipoResultadoExame > 4 - Data",
+    "unit": "Semanas / dias / DPP eco"
+  },
+  {
+    "value": "0205010059",
+    "label": "0205010059 - Ultrassonografia doppler de fluxo obstétrico",
+    "original_sigtap": "0205010059",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 3 - Semanas tipoResultadoExame > 2 - Dias tipoResultadoExame > 4 - Data",
+    "unit": "Semanas / dias / DPP eco"
+  },
+  {
+    "value": "0202010295",
+    "label": "0202010295 - Dosagem de colesterol total",
+    "original_sigtap": "0202010295",
+    "original_ab": "ABEX002",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "mg/dL"
+  },
+  {
+    "value": "0202010279",
+    "label": "0202010279 - Dosagem de colesterol HDL",
+    "original_sigtap": "0202010279",
+    "original_ab": "ABEX007",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "mg/dL"
+  },
+  {
+    "value": "0202010287",
+    "label": "0202010287 - Dosagem de colesterol LDL",
+    "original_sigtap": "0202010287",
+    "original_ab": "ABEX009",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "mg/dL"
+  },
+  {
+    "value": "0202010678",
+    "label": "0202010678 - Dosagem de triglicerídeos",
+    "original_sigtap": "0202010678",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "mg/dL"
+  },
+  {
+    "value": "0202010317",
+    "label": "0202010317 - Dosagem de creatinina",
+    "original_sigtap": "0202010317",
+    "original_ab": "ABEX003",
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "mg/dL"
+  },
+  {
+    "value": "0202050025",
+    "label": "0202050025 - Clearance de creatinina",
+    "original_sigtap": "0202050025",
+    "original_ab": null,
+    "result_structure": "tipoResultadoExame > 1 - Valor",
+    "unit": "mL/min/1,73 m²"
+  }
+]

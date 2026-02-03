@@ -1,0 +1,39 @@
+========================================================
+   GUIA DE EXECUÇÃO: SCANNER DE DIAGNÓSTICO PROFUNDO
+========================================================
+
+Este guia ensina como rodar o "Raio-X" (Deep Scanner) no banco de dados do e-SUS
+para descobrirmos onde os dados de procedimentos estão escondidos.
+
+--------------------------------------------------------
+PASSO 1: CONFIGURAÇÃO (AUTOMÁTICA)
+--------------------------------------------------------
+
+JÁ CONFIGUREI TUDO! 
+As senhas e portas já estão dentro do script.
+
+1. Apenas pule para o Passo 2 e execute o script.
+
+(Ele vai conectar direto em localhost:5433 com a senha que você me passou).
+
+--------------------------------------------------------
+PASSO 2: EXECUÇÃO
+--------------------------------------------------------
+
+1. Dentro da pasta, segure a tecla SHIFT do teclado.
+2. Com o SHIFT pressionado, clique com o botão DIREITO numa área vazia da pasta.
+3. Escolha a opção "Abrir janela do PowerShell aqui" ou "Abrir janela de comando aqui".
+
+4. Na janela preta/azul que abrir, digite e aperte ENTER:
+
+   python deep_map_esus.py
+
+   (O script vai tentar conectar automaticamente. Se falhar, vai pedir a senha).
+
+--------------------------------------------------------
+PASSO 3: ENVIO
+--------------------------------------------------------
+
+1. Aguarde a mensagem "SUCESSO!".
+2. Um arquivo chamado "scan.json" vai aparecer na pasta AUTOMATICAMENTE.
+3. Envie este arquivo "scan.json" para a equipe de suporte.

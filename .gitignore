@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Connector App Build Artifacts
+connector_app/build/
+connector_app/dist/
+connector_app/release/
+connector_app/installer/
+*.spec
+!connector_app/packaging/*.spec
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+node_modules
+
+# Data Dumps (Large Files)
+postgreSQL e-sus/
+*.xml

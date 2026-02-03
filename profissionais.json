@@ -1,0 +1,234 @@
+[
+    {
+        "nome": "Janine",
+        "email": "ninejanine.jm@gmail.com",
+        "cpf": "09721834424",
+        "funcao": "Auxiliar adm ",
+        "numero_conselho": "75349",
+        "unidade_atuacao": "CNES 0207098 - CENTRAL DE GESTÃO EM SAÚDE"
+    },
+    {
+        "nome": "Maria de Fátima Cristina da Silva Dantas ",
+        "email": "cristinacrisdantas@gmail.com",
+        "cpf": "70187003459",
+        "funcao": "Recepcionista ",
+        "numero_conselho": "70187003459",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Wagna Rosemary Freire de Oliveira ",
+        "email": "wagna8379@hotmail.com",
+        "cpf": "00925817490",
+        "funcao": "Técnica de enfermagem ",
+        "numero_conselho": "000596701",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Bruna Kauane de Oliveira de Sousa",
+        "email": "fisiobrunasousa@gmail.com",
+        "cpf": "70824917430",
+        "funcao": "Fisioterapeuta Geral",
+        "numero_conselho": "400272-F",
+        "unidade_atuacao": "EMULTI, atuo na UBS santo amaro "
+    },
+    {
+        "nome": "Adriana Ferreira da Silva ",
+        "email": "adrianadanielmalu@gmail.com",
+        "cpf": "70023221410",
+        "funcao": "Recepcionista ",
+        "numero_conselho": "70023221410",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Maria Iolanda Mariano ",
+        "email": "iomarioano@gmail.com",
+        "cpf": "03519957493",
+        "funcao": "Enfermeira ",
+        "numero_conselho": "193045",
+        "unidade_atuacao": "CNES 9186468- UBS CASTELIANO, CNES 3014444 - USF CARNAUBAL"
+    },
+    {
+        "nome": "Larissa Helen Maniçoba Lourenço ",
+        "email": "larrissahellem26@gmail.com",
+        "cpf": "71100698426",
+        "funcao": "Recepcionista ",
+        "numero_conselho": "71100698426",
+        "unidade_atuacao": "CNES 2407531 - USF CASCALHO"
+    },
+    {
+        "nome": "Paulo Artur Gonçalves Soares ",
+        "email": "pauloartur20@hotmail.com",
+        "cpf": "10099882410",
+        "funcao": "Biomédico ",
+        "numero_conselho": "8242",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Rosilene Rodrigues de Lima ",
+        "email": "rosilenerodrigues2609@gmail.com",
+        "cpf": "05273030490",
+        "funcao": "Técnica de Enfermagem ",
+        "numero_conselho": "595996",
+        "unidade_atuacao": "CNES 2407515 - USF SANTO AMARO"
+    },
+    {
+        "nome": "Karolina Kelly Vieira Sarmento ",
+        "email": "karolinakelly08@gmail.com",
+        "cpf": "08867295471",
+        "funcao": "Fisioterapeuta ",
+        "numero_conselho": "229342-F",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Damiao Soares de Oliveira ",
+        "email": "damiaosoaresdeoliveira@gmail.com",
+        "cpf": "06764491410",
+        "funcao": "Técnico de enfermagem ",
+        "numero_conselho": "1198270",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "MARIA DAS GRAÇAS CAVALCANTE DE ALMEIDA",
+        "email": "gracinhaalmeida1972@gmail.com",
+        "cpf": "68560046420",
+        "funcao": "Auxiliar de enfermagem ",
+        "numero_conselho": "449184",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Kallyne Kelly de Souza Maniçoba ",
+        "email": "kallynekelly23@gmail.com",
+        "cpf": "06121808405",
+        "funcao": "Enfermeira ",
+        "numero_conselho": "449439",
+        "unidade_atuacao": "CNES 2407477 - USF ALTO BOA VISTA"
+    },
+    {
+        "nome": "Manoel Emídio de Souza Neto ",
+        "email": "emidioneto23@hotmail.com",
+        "cpf": "09816593450",
+        "funcao": "Enfermeiro ",
+        "numero_conselho": "489999",
+        "unidade_atuacao": "CNES 2407523 - USF MANOEL EMIDIO"
+    },
+    {
+        "nome": "Francisca Vanderlane de oliveira ",
+        "email": "vanderlaneoliveira67@gmail.com",
+        "cpf": "01738734493",
+        "funcao": "Técnica de enfermagem ",
+        "numero_conselho": "972101",
+        "unidade_atuacao": "CNES 2407515 - USF SANTO AMARO"
+    },
+    {
+        "nome": "Rita de Cassia Alves dos Santos ",
+        "email": "ritadecassia383@gmail.com",
+        "cpf": "05739665405",
+        "funcao": "Técnica de Enfermagem ",
+        "numero_conselho": "595995",
+        "unidade_atuacao": "CNES 2407515 - USF SANTO AMARO"
+    },
+    {
+        "nome": "Francisca Francineide de Oliveira ",
+        "email": "francineide1976.fo@gmail.com",
+        "cpf": "68571838420",
+        "funcao": "Técnica de enfermagem ",
+        "numero_conselho": "1537213",
+        "unidade_atuacao": "CNES 2407515 - USF SANTO AMARO"
+    },
+    {
+        "nome": "Francisca Francineide de Oliveira ",
+        "email": "francineide1976.fo@gmail.com",
+        "cpf": "68571838420",
+        "funcao": "Técnica de enfermagem ",
+        "numero_conselho": "1537213",
+        "unidade_atuacao": "CNES 2407515 - USF SANTO AMARO"
+    },
+    {
+        "nome": "Tamires Débora Nunes da Silveira ",
+        "email": "tamiresdebora@hotmail.com",
+        "cpf": "07395053435",
+        "funcao": "Nutricionista ",
+        "numero_conselho": "13621",
+        "unidade_atuacao": "CNES 2407477 - USF ALTO BOA VISTA, CNES 2407515 - USF SANTO AMARO"
+    },
+    {
+        "nome": "ANTONIA ELIZANNE BENTO DA SILVA ",
+        "email": "elizannebento@gmail.com",
+        "cpf": "01066100403",
+        "funcao": "ENFERMEIRA ",
+        "numero_conselho": "237845",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Claudia Bruna de Sousa Maniçoba ",
+        "email": "claudiabruna590@gmail.com",
+        "cpf": "017.596.264-22",
+        "funcao": "Técnica de enfermagem ",
+        "numero_conselho": "1221521",
+        "unidade_atuacao": "CNES 9186468- UBS CASTELIANO"
+    },
+    {
+        "nome": "FRANCISCA FABIANA BARBOSA DE OLIVEIRA ",
+        "email": "fabianabarbosa620@gmail.com",
+        "cpf": "09971900404",
+        "funcao": "Técnica de enfermagem ",
+        "numero_conselho": "0858718",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Jussara mayara Bernardo da Silva ",
+        "email": "jussaramayara2009@hotmail.com",
+        "cpf": "05634509426",
+        "funcao": "Fisioterapeuta ",
+        "numero_conselho": "146467-f",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Rayane Gomes Abrantes",
+        "email": "rayanegomesabrantes@gmail.com",
+        "cpf": "06069772430",
+        "funcao": "Enfermeira ",
+        "numero_conselho": "000.569.213",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Jocélio Barbosa da Silva ",
+        "email": "jocelioalexandria@hotmail.com",
+        "cpf": "03831861466",
+        "funcao": "Bioquímico ",
+        "numero_conselho": "4169",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Francisco Canindé de Sousa ",
+        "email": "canindesousa57@gmail.com",
+        "cpf": "38458022468",
+        "funcao": "Auxiliar de laboratório ",
+        "numero_conselho": "38458022468",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Aline Kelly de Almeida Sousa ",
+        "email": "alinekelly84@hotmail.com",
+        "cpf": "06337836417",
+        "funcao": "Enfermeira ",
+        "numero_conselho": "385764",
+        "unidade_atuacao": "CNES 2407531 - USF CASCALHO"
+    },
+    {
+        "nome": "Ana Paula de Oliveira Sousa ",
+        "email": "anapaulaenf09@hotmail.com",
+        "cpf": "09153920400",
+        "funcao": "Enfermeira ",
+        "numero_conselho": "449179",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    },
+    {
+        "nome": "Tácito Roccelli Viana Cartaxo ",
+        "email": "tacitocartaxo@hotmail.com",
+        "cpf": "00406822450",
+        "funcao": "Médico",
+        "numero_conselho": "6064",
+        "unidade_atuacao": "CNES 2407469 - CENTRO DE SAÚDE DE ALEXANDRIA"
+    }
+]

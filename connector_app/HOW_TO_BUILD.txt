@@ -1,0 +1,55 @@
+==============================================================================
+GUIA DE COMPILAÇÃO E GERAÇÃO DE INSTALADOR (ProBPA Connector)
+==============================================================================
+
+Este guia descreve como transformar o código fonte Python em um Instalador Windows (.exe) profissional.
+
+PRÉ-REQUISITOS
+--------------
+1. Python 3.10 ou superior instalado no Windows.
+   - Certifique-se de marcar "Add Python to PATH" durante a instalação.
+2. Inno Setup 6.x instalado.
+   - Download: https://jrsoftware.org/isdl.php
+3. Acesso à internet (para baixar dependências do Python).
+
+PASSO A PASSO
+-------------
+
+1. PREPARAÇÃO
+   - Copie toda a pasta 'connector_app' para sua máquina Windows.
+   - Evite caminhos muito longos ou com espaços. Sugestão: C:\ProBPA_Build\
+
+2. COMPILAÇÃO (Gera o Executável do App)
+   - Abra a pasta 'connector_app'.
+   - Clique duas vezes em 'compile_build_kit.bat'.
+   - O script fará:
+     a) Instalação das bibliotecas (Flet, Requests, Psycopg2, etc).
+     b) Execução do 'flet pack' para criar o 'ProBPA_Connector.exe'.
+     c) Cópia do resultado para a pasta 'release' e 'Downloads'.
+
+3. EMPACOTAMENTO (Gera o Instalador Final)
+   - O passo anterior (2) tenta rodar o Inno Setup automaticamente se ele estiver instalado em 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'.
+   - Se falhar ou se você quiser fazer manualmente:
+     a) Clique com botão direito no arquivo 'packaging\setup_script.iss'
+     b) Escolha "Compile".
+     c) O Inno Setup vai gerar o arquivo 'Setup_Conector_ProBPA_v1.exe' na pasta 'installer'.
+
+4. RESULTADO FINAL
+   - O arquivo que você deve entregar ao cliente (ou colocar na Landing Page) é:
+     connector_app\installer\Setup_Conector_ProBPA_v1.exe
+
+   - Ao instalar, ele cria:
+     * Ícone no Desktop
+     * Atalho no Menu Iniciar
+     * Opção de Desinstalar no Painel de Controle
+
+DICAS DE TESTE
+--------------
+- Instale em uma máquina limpa (sem Python) para garantir que ele é 100% autônomo.
+- O App deve abrir a tela "Configuração" na primeira vez.
+- Preencha dados fictícios de banco para testar o botão "Testar Conexão".
+
+PROBLEMAS COMUNS
+----------------
+- "ModuleNotFoundError": Certifique-se de usar o 'compile_build_kit.bat' atualizado que usa 'flet pack'.
+- "Icon not found": O script foi ajustado para usar ícone padrão se o personalizado não existir. Para usar um próprio, coloque um 'icon.ico' na pasta 'assets' e descomente a linha no 'setup_script.iss'.
