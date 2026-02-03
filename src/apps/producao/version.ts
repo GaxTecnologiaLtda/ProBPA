@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.10.0';
+export const APP_VERSION = '1.10.1';
 
 export const getVersionString = () => {
     return APP_VERSION;
@@ -19,6 +19,14 @@ export interface ReleaseParams {
 }
 
 export const LATEST_CHANGES: ReleaseParams[] = [
+    {
+        version: '1.10.1',
+        date: '03/02/2026',
+        title: 'Correções de Interface (Atividade Coletiva)',
+        changes: [
+            { text: 'Correção Ativ. Coletiva: Procedimentos básicos (ex: Aferição de Pressão) não abrem mais incorretamente o formulário de Atividade Coletiva na interface simplificada.', scope: 'SIMPLIFIED' }
+        ]
+    },
     {
         version: '1.10.0',
         date: '26/01/2026',

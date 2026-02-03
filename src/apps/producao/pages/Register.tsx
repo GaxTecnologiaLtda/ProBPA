@@ -2263,6 +2263,7 @@ export const Register: React.FC = () => {
                                     isExpanded={proc.isExpanded}
                                     onToggleExpand={handleToggleExpand}
                                     userCbo={formData.cbo}
+                                    interfaceType={interfaceType}
                                 />
                             ))}
                             {/* Add Button */}
