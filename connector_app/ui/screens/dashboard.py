@@ -94,17 +94,31 @@ class DashboardScreen(ctk.CTkFrame):
         # Locked UI
         self.tab_config.grid_columnconfigure(0, weight=1)
         
-        ctk.CTkLabel(self.tab_config, text="Área Restrita", font=("Roboto", 20, "bold")).pack(pady=30)
-        ctk.CTkLabel(self.tab_config, text="Ações de configuração exigem senha de administrador.", text_color="gray").pack()
+        # Title / Warning
+        ctk.CTkLabel(self.tab_config, text="Área Restrita (Administrador)", font=("Roboto", 24, "bold")).pack(pady=(30, 10))
+        ctk.CTkLabel(self.tab_config, text="Ações sensíveis. Cuidado.", text_color="gray").pack(pady=(0, 30))
 
-        self.btn_change_db = ctk.CTkButton(self.tab_config, text="Configurações de Banco", command=lambda: self.request_admin_action("edit_db"), fg_color="gray")
-        self.btn_change_db.pack(pady=10)
+        # Maintenance Section
+        frm_maint = ctk.CTkFrame(self.tab_config)
+        frm_maint.pack(fill="x", padx=40, pady=10)
+        
+        ctk.CTkLabel(frm_maint, text="Manutenção & Atualizações", font=("Roboto", 14, "bold")).pack(pady=10)
+        
+        self.btn_check_update = ctk.CTkButton(frm_maint, text="Verificar Atualizações", command=self.check_for_updates, fg_color="#00897B", height=40)
+        self.btn_check_update.pack(pady=10, padx=20, fill="x")
 
-        self.btn_check_update = ctk.CTkButton(self.tab_config, text="Verificar Atualizações", command=self.check_for_updates, fg_color="#00897B")
-        self.btn_check_update.pack(pady=10)
+        self.btn_change_db = ctk.CTkButton(frm_maint, text="Reconfigurar Banco de Dados", command=lambda: self.request_admin_action("edit_db"), fg_color="#546E7A")
+        self.btn_change_db.pack(pady=10, padx=20, fill="x")
 
-        self.btn_reset = ctk.CTkButton(self.tab_config, text="Desvincular (Reset Completo)", command=lambda: self.request_admin_action("reset"), fg_color="red")
-        self.btn_reset.pack(pady=20)
+        # Danger Zone
+        frm_danger = ctk.CTkFrame(self.tab_config, fg_color="#370000", border_color="red", border_width=1)
+        frm_danger.pack(fill="x", padx=40, pady=30)
+        
+        ctk.CTkLabel(frm_danger, text="Zona de Perigo", text_color="#EF5350", font=("Roboto", 14, "bold")).pack(pady=10)
+        ctk.CTkLabel(frm_danger, text="Ações irreversíveis que afetarão a conexão.", text_color="#FFCDD2").pack(pady=(0,10))
+
+        self.btn_reset = ctk.CTkButton(frm_danger, text="DESVINCULAR / RESETAR APP", command=lambda: self.request_admin_action("reset"), fg_color="#C62828", hover_color="#B71C1C", height=40)
+        self.btn_reset.pack(pady=20, padx=20, fill="x")
 
     # --- LOGIC ---
     
