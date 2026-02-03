@@ -5,8 +5,10 @@ from PIL import Image
 import pystray
 from pystray import MenuItem as item
 from core.config_manager import ConfigManager
+from core.single_instance import SingleInstance
 from ui.screens.activation import ActivationScreen
 from ui.screens.dashboard import DashboardScreen
+from ui.screens.welcome import WelcomeScreen
 
 import os
 
@@ -26,6 +28,14 @@ def resource_path(relative_path):
 class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
+        
+        # --- SINGLE INSTANCE CHECK ---
+        self.single_instance = SingleInstance(on_show_request=self.show_window_from_tray)
+        if not self.single_instance.check():
+            print("Another instance is running. Notifying and exiting.")
+            self.single_instance.notify_existing()
+            sys.exit(0)
+            
         self.title("Conector ProBPA v3.2 (Background Service)")
         self.geometry("900x700")
         
@@ -49,26 +59,24 @@ class MainWindow(ctk.CTk):
         self.container = ctk.CTkFrame(self)
         self.container.pack(fill="both", expand=True)
 
-        self.check_initial_state()
+        if self.start_minimized:
+            # If starting minimized (e.g. auto-start), skip welcome screen?
+            # Or just show welcome screen but window is hidden?
+            # Better to skip welcome screen logic if hidden, just go straight to dashboard
+            self.check_initial_state(skip_welcome=True)
+            self.withdraw()
+        else:
+            # Normal start -> Show Welcome
+            self.check_initial_state(skip_welcome=False)
         
         # Start Tray in separate thread
         threading.Thread(target=self.setup_tray, daemon=True).start()
 
-        if self.start_minimized:
-            self.withdraw()
-
-    def setup_tray(self):
-        try:
-            icon_path = resource_path("assets/icon.ico")
-            image = Image.open(icon_path)
-            menu = (
-                item('Abrir Painel', self.show_window_from_tray),
-                item('Sair', self.quit_app)
-            )
-            self.tray_icon = pystray.Icon("name", image, "Conector ProBPA", menu)
-            self.tray_icon.run()
-        except Exception as e:
-            print(f"Tray Error: {e}")
+    def show_window_from_tray(self, icon=None, item=None):
+        # Called by Tray click OR Single Instance Socket
+        self.after(0, self.deiconify)
+        self.after(0, self.lift)
+        self.after(0, self.focus_force)
 
     def show_notification(self, title, message):
         if self.tray_icon:
@@ -77,7 +85,6 @@ class MainWindow(ctk.CTk):
             except Exception as e:
                 print(f"Notification Error: {e}")
 
-    def show_window_from_tray(self, icon, item):
         self.after(0, self.deiconify)
         self.after(0, self.lift)
 
