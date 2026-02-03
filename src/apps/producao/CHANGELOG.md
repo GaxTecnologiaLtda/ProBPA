@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.1] - 2026-02-03
+### Correções de Interface
+
+#### Interface Simplificada (Correções)
+- **[SIMP] Atividade Coletiva:** Corrigido bug onde procedimentos básicos de enfermagem (ex: Aferição de Pressão, Medição de Altura) eram identificados incorretamente como Atividade Coletiva, bloqueando o fluxo de registro simplificado.
+
+## [1.10.0] - 2026-01-26
+### Central de Tutoriais e Onboarding
+
+#### Tutoriais e Ajuda
+- **[GERAL] Nova Central de Ajuda:** Área dedicada com vídeos e manuais.
+- **[SIMP] Tour Guiado:** Apresentação interativa das funcionalidades simplificadas.
+
 ## [1.9.0] - 2026-01-24
 ### Múltiplos Vínculos e Melhorias de UX
 

@@ -22,6 +22,7 @@ interface ProcedureCardProps {
     isExpanded: boolean;
     onToggleExpand: (index: number) => void;
     userCbo?: string;
+    interfaceType?: 'PEC' | 'SIMPLIFIED';
 }
 
 // Debounce hook (local)
@@ -47,7 +48,8 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
     onOpenSigtap,
     isExpanded,
     onToggleExpand,
-    userCbo
+    userCbo,
+    interfaceType = 'PEC'
 }) => {
     // Local UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -178,6 +180,11 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
         setProcedureType(proc.procedureType);
         setShowSuggestions(false);
 
+        // Check for collective activity potential
+        const isPotentialCollective = (proc as any).groupCode === '01' || ((proc as any).formCode && (proc as any).formCode.includes('coletiva'));
+        // Only enable flag if NOT in simplified mode
+        const shouldFlagAsCollective = interfaceType !== 'SIMPLIFIED' && isPotentialCollective;
+
         // Reset fields
         onUpdate(index, {
             ...data,
@@ -191,7 +198,7 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
             subGroupCode: (proc as any).subGroupCode,
             formCode: (proc as any).formCode,
             // Automatic Trigger: isCollective?
-            isCollectiveActivity: (proc as any).groupCode === '01' || ((proc as any).formCode && (proc as any).formCode.includes('coletiva'))
+            isCollectiveActivity: shouldFlagAsCollective
         });
     };
 
@@ -217,8 +224,8 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                             <span>Qtd: {data.quantity}</span>
                             {data.cidCodes.length > 0 && <span>• {data.cidCodes.length} CIDs</span>}
 
-                            {/* Visual Badge for Collective Activity */}
-                            {(data.groupCode === '01' || (data.formCode && data.formCode.includes('coletiva'))) && (
+                            {/* Visual Badge for Collective Activity (Hidden in Simplified) */}
+                            {interfaceType !== 'SIMPLIFIED' && (data.groupCode === '01' || (data.formCode && data.formCode.includes('coletiva'))) && (
                                 <span className="ml-2 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] px-1.5 py-0.5 rounded font-bold border border-purple-200 dark:border-purple-800">
                                     🟣 Atividade Coletiva
                                 </span>
