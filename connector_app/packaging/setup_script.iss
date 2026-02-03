@@ -40,7 +40,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "autostart"; Description: "Iniciar com o Windows (Silencioso)"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "..\release\ProBPA_Connector\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\ProBPA_Connector\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Force copy icon to root for shortcuts
 Source: "..\assets\icon.ico"; DestDir: "{app}"; DestName: "probpa.ico"; Flags: ignoreversion
 
