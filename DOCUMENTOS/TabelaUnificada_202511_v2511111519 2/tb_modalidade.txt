@@ -1,4 +1,0 @@
-01Ambulatorial                                                                                        202511
-02Hospitalar                                                                                          202511
-03Hospital Dia                                                                                        202511
-06Atenção Domiciliar                                                                                  202511
