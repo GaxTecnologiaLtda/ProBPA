@@ -72,6 +72,19 @@ class MainWindow(ctk.CTk):
         # Start Tray in separate thread
         threading.Thread(target=self.setup_tray, daemon=True).start()
 
+    def setup_tray(self):
+        try:
+            icon_path = resource_path("assets/icon.ico")
+            image = Image.open(icon_path)
+            menu = (
+                item('Abrir Painel', self.show_window_from_tray),
+                item('Sair', self.quit_app)
+            )
+            self.tray_icon = pystray.Icon("name", image, "Conector ProBPA", menu)
+            self.tray_icon.run()
+        except Exception as e:
+            print(f"Tray Error: {e}")
+
     def show_window_from_tray(self, icon=None, item=None):
         # Called by Tray click OR Single Instance Socket
         self.after(0, self.deiconify)
@@ -84,9 +97,6 @@ class MainWindow(ctk.CTk):
                 self.tray_icon.notify(message, title)
             except Exception as e:
                 print(f"Notification Error: {e}")
-
-        self.after(0, self.deiconify)
-        self.after(0, self.lift)
 
     def hide_window(self):
         self.withdraw()
