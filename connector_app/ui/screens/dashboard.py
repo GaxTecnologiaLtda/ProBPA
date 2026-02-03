@@ -50,6 +50,9 @@ class DashboardScreen(ctk.CTkFrame):
         self.stop_event = threading.Event()
         threading.Thread(target=self.scheduler_loop, daemon=True).start()
 
+        # Auto-check for updates on startup
+        self.after(2000, self.check_for_updates)
+
     def _setup_status_tab(self):
         self.tab_status.grid_columnconfigure(0, weight=1)
         
@@ -241,19 +244,27 @@ class DashboardScreen(ctk.CTkFrame):
                 self.after(0, self.log, "Você já está na versão mais recente.")
                 self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
                 if self.notify_callback:
-                    self.notify_callback("Atualização", "Sistema atualizado!")
+                    # Only notify if manually triggered or relevant? 
+                    # For auto-check on startup, maybe silent if no update?
+                    # But here we notify "System updated"
+                    pass
                     
         except Exception as e:
             self.after(0, self.log, f"Erro ao verificar updates: {e}")
             self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
 
     def _prompt_update(self, version, notes, url, updater):
-        # Create a simple top-level dialog since CTk doesn't have a native Yes/No MsgBox easily accessible without external libs sometimes
-        # Or better, just use a Toplevel window
-        
         dialog = ctk.CTkToplevel(self)
         dialog.title("Atualização Disponível")
         dialog.geometry("400x250")
+        # Helper to center window
+        dialog.update_idletasks()
+        width = 400
+        height = 250
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f'{width}x{height}+{x}+{y}')
+        
         dialog.attributes("-topmost", True)
         
         ctk.CTkLabel(dialog, text=f"Nova Versão Disponível: v{version}", font=("Roboto", 16, "bold")).pack(pady=20)
@@ -275,13 +286,15 @@ class DashboardScreen(ctk.CTkFrame):
 
     def _start_download(self, url, updater):
         self.log("Iniciando download da atualização...")
-        self.btn_check_update.configure(text="Baixando...")
+        self.btn_check_update.configure(text="Baixando (0%)...", state="disabled")
+        
+        def progress_handler(percent):
+            pct_int = int(percent * 100)
+            self.after(0, lambda: self.btn_check_update.configure(text=f"Baixando ({pct_int}%)..."))
         
         def download_task():
             try:
-                # Progress callback could be added here
-                updater.download_and_install(url)
-                # The app will exit inside download_and_install
+                updater.download_and_install(url, progress_callback=progress_handler)
             except Exception as e:
                 self.after(0, self.log, f"Erro no download: {e}")
                 self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
