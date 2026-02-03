@@ -1,110 +1,127 @@
 name: Build and Release Connector
 
 on:
-    push:
-        tags:
-            - "v*" # Trigger on version tags, e.g. v3.3.0
+  push:
+    tags:
+      - "v*" # Trigger on version tags, e.g. v3.3.0
 
 jobs:
-    build-windows:
-        runs-on: windows-latest
-        permissions:
-            contents: write
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v3
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-            - name: Set up Python
-              uses: actions/setup-python@v4
-              with:
-                  python-version: "3.9"
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
 
-            - name: Install Dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install -r connector_app/requirements.txt
-                  pip install pyinstaller packaging requests
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r connector_app/requirements.txt
+          pip install pyinstaller packaging requests
 
-            - name: Build Executable (PyInstaller)
-              run: |
-                  cd connector_app
-                  pyinstaller --noconfirm --log-level=WARN --clean packaging/windows.spec
+      - name: Build Executable (PyInstaller)
+        run: |
+          cd connector_app
+          pyinstaller --noconfirm --log-level=WARN --clean packaging/windows.spec
 
-            - name: Install Inno Setup (via Chocolatey)
-              run: choco install innosetup --no-progress
+      - name: Install Inno Setup (via Chocolatey)
+        run: choco install innosetup --no-progress
 
-            - name: Build Installer (Inno Setup)
-              run: |
-                  iscc "connector_app/packaging/setup_script.iss"
-                  ls connector_app/packaging/Output
+      - name: Build Installer (Inno Setup)
+        run: |
+          iscc "connector_app/packaging/setup_script.iss"
+          ls connector_app/packaging/Output
 
-            - name: Install Node.js
-              uses: actions/setup-node@v3
-              with:
-                  node-version: 18
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
 
-            - name: Build Website (to ensure dist exists)
-              run: |
-                  cd src/apps/website
-                  npm install
-                  npm run build
+      - name: Build Website (to ensure dist exists)
+        run: |
+          cd src/apps/website
+          npm install
+          npm run build
 
-            - name: Install Firebase Tools
-              run: npm install -g firebase-tools
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
 
-            - name: Create Version JSON
-              shell: python
-              run: |
-                  import json
-                  import os
-                  import shutil
+      - name: Create Version JSON
+        shell: python
+        run: |
+          import json
+          import os
+          import shutil
+          import glob
 
-                  # Get tag name (v3.3.0)
-                  tag = os.environ.get('GITHUB_REF_NAME', 'v0.0.0')
-                  version = tag.replace('v', '')
+          # Get tag name (v3.3.0)
+          tag = os.environ.get('GITHUB_REF_NAME', 'v0.0.0')
+          version = tag.replace('v', '')
 
-                  # Rename installer to include version
-                  installer_path = 'connector_app/packaging/Output/ProBPA_Connector_Setup.exe'
-                  new_installer_name = f'ProBPA_Connector_Setup_{tag}.exe'
-                  new_installer_path = f'connector_app/packaging/Output/{new_installer_name}'
+          # Find installer (robust search)
+          search_dir = 'connector_app/packaging/Output'
+          exe_files = glob.glob(f'{search_dir}/*.exe')
 
-                  if os.path.exists(installer_path):
-                      os.rename(installer_path, new_installer_path)
-                      print(f"Renamed installer to {new_installer_path}")
-                  else:
-                      print(f"Installer not found at {installer_path}")
+          if not exe_files:
+              print(f"ERROR: No .exe found in {search_dir}")
+              # Fallback search in root of packaging just in case
+              exe_files = glob.glob('connector_app/packaging/*.exe')
 
-                  # Define URL
-                  download_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{new_installer_name}"
+          if not exe_files:
+              print("CRITICAL: Installer not found anywhere relevant!")
+              exit(1)
+              
+          installer_path = exe_files[0]
+          print(f"Found installer at: {installer_path}")
 
-                  data = {
-                      "version": version,
-                      "url": download_url,
-                      "notes": "Auto-generated release"
-                  }
+          # Rename installer to include version
+          new_installer_name = f'ProBPA_Connector_Setup_{tag}.exe'
+          new_installer_path = f'{search_dir}/{new_installer_name}'
 
-                  # Ensure dist exists (it should from build, but just in case)
-                  dist_dir = 'src/apps/website/dist'
-                  os.makedirs(dist_dir, exist_ok=True)
+          try:
+              os.rename(installer_path, new_installer_path)
+              print(f"Renamed installer to {new_installer_path}")
+          except Exception as e:
+              print(f"Error renaming file: {e}")
+              # If rename fails (e.g. across drives?), try copy/delete
+              shutil.copy(installer_path, new_installer_path)
+              os.remove(installer_path)
+              print(f"Copied and removed original installer to {new_installer_path}")
 
-                  # Write JSON to website dist
-                  with open(f'{dist_dir}/connector_version.json', 'w') as f:
-                      json.dump(data, f, indent=4)
+          # Define URL
+          download_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{new_installer_name}"
 
-                  # Also copy to root for easier artifact upload if needed (optional)
-                  # shutil.copy(f'{dist_dir}/connector_version.json', 'connector_version.json')
+          data = {
+              "version": version,
+              "url": download_url,
+              "notes": "Auto-generated release"
+          }
 
-            - name: Deploy Version JSON to Firebase Hosting
-              run: |
-                  # Deploy the website dist (which now includes the JSON)
-                  # Using the correct target 'website' defined in firebase.json
-                  firebase deploy --only hosting:website --token "${{ secrets.FIREBASE_TOKEN }}"
+          # Ensure dist exists (it should from build, but just in case)
+          dist_dir = 'src/apps/website/dist'
+          os.makedirs(dist_dir, exist_ok=True)
 
-            - name: Create GitHub Release
-              uses: softprops/action-gh-release@v1
-              if: startsWith(github.ref, 'refs/tags/')
-              with:
-                  files: |
-                      connector_app/packaging/Output/ProBPA_Connector_Setup_*.exe
-                      src/apps/website/dist/connector_version.json
+          # Write JSON to website dist
+          with open(f'{dist_dir}/connector_version.json', 'w') as f:
+              json.dump(data, f, indent=4)
+
+      - name: Deploy Version JSON to Firebase Hosting
+        run: |
+          # Deploy the website dist (which now includes the JSON)
+          # Using the correct target 'website' defined in firebase.json
+          firebase deploy --only hosting:website --token "${{ secrets.FIREBASE_TOKEN }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            connector_app/packaging/Output/ProBPA_Connector_Setup_*.exe
+            src/apps/website/dist/connector_version.json
