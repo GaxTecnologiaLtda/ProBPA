@@ -1,0 +1,114 @@
+{
+    "project": {
+        "name": "ProBPA",
+        "description": "Sistema de Gestão de Produção Ambulatorial (BPA) e Licenciamento",
+        "root_directory": "/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA",
+        "stack": {
+            "frontend": {
+                "framework": "React 19",
+                "build_tool": "Vite",
+                "language": "TypeScript",
+                "routing": "React Router 7",
+                "styling": "TailwindCSS (inferred from commonly associated libraries) / CSS Modules",
+                "ui_libraries": [
+                    "Lucide React",
+                    "Recharts"
+                ]
+            },
+            "backend": {
+                "platform": "Firebase",
+                "services": [
+                    "Firebase Hosting (Multi-site)",
+                    "Cloud Functions (Node 20)",
+                    "Firestore (NoSQL Database)",
+                    "Firebase Auth"
+                ]
+            }
+        }
+    },
+    "architecture": {
+        "model": "Monorepo with Multiple Single Page Applications (SPAs)",
+        "deployment": {
+            "strategy": "Firebase Hosting Multi-Site",
+            "targets": {
+                "admin": "src/apps/administrativo/dist",
+                "entidade": "src/apps/entidade/dist",
+                "producao": "src/apps/producao/dist"
+            }
+        },
+        "security": {
+            "model": "Role-Based Access Control (RBAC) via Custom Claims",
+            "roles": [
+                "admin",
+                "MASTER",
+                "PROFESSIONAL"
+            ],
+            "claims_usage": "Access control in Firestore Security Rules and Frontend Routing"
+        }
+    },
+    "apps": {
+        "administrativo": {
+            "path": "src/apps/administrativo",
+            "purpose": "Painel de Super Administrador (GAX)",
+            "target_audience": "Equipe Interna / Suporte",
+            "key_features": [
+                "Gestão de Entidades (Públicas e Privadas)",
+                "Gestão de Municípios",
+                "Gestão de Licenças e Financeiro",
+                "Gestão de Usuários Admin",
+                "Chamados de Suporte (Visão Geral)",
+                "Relatórios Globais",
+                "Logs de Sistema",
+                "Gestão da Tabela SIGTAP"
+            ],
+            "data_access": "Acesso total (Admin) a todas as coleções"
+        },
+        "entidade": {
+            "path": "src/apps/entidade",
+            "purpose": "Painel de Gestão da Entidade de Saúde",
+            "target_audience": "Gestores Municipais, Secretários de Saúde, Diretores de Unidades",
+            "key_features": [
+                "Dashboard de Gestão",
+                "Gestão de Unidades de Saúde",
+                "Gestão de Profissionais",
+                "Definição e Acompanhamento de Metas",
+                "Monitoramento de Produção (BPA-C, BPA-I, BPA-MAG)",
+                "Exportação de Arquivos BPA",
+                "Gestão de Contratos e Documentos"
+            ],
+            "data_access": "Scoped Access via 'linkedEntityId' or 'entityId' (Master Role)"
+        },
+        "producao": {
+            "path": "src/apps/producao",
+            "purpose": "Interface Operacional de Registro de Produção (Mobile-First)",
+            "target_audience": "Profissionais de Saúde (Médicos, Enfermeiros, Técnicos)",
+            "key_features": [
+                "Registro de Procedimentos (BPA-C, BPA-I)",
+                "Histórico de Produção com Rolagem Horizontal Mobile",
+                "Dashboard Simplificado com Indicadores Visuais Premium",
+                "Identificação Detalhada do Profissional (CBO/CRM)",
+                "PWA Instalável com Atualização Automática Silenciosa",
+                "Acompanhamento de Metas Pessoais",
+                "Abertura de Chamados de Suporte"
+            ],
+            "data_access": "Scoped Access to own records and associated Unit/Entity data (Professional Role)"
+        }
+    },
+    "data_flow": {
+        "database": "Cloud Firestore",
+        "collections": {
+            "entities": "Dados cadastrais das entidades (Públicas/Privadas)",
+            "municipalities": "Municípios vinculados a entidades",
+            "units": "Unidades de saúde (UBS, Hospitais)",
+            "professionals": "Cadastro de profissionais de saúde",
+            "licenses": "Controle de vigência e pagamentos",
+            "bpa_records": "Registros de produção ambulatorial",
+            "goals": "Metas de produção configuradas pelos gestores",
+            "sigtap": "Tabela unificada de procedimentos do SUS"
+        },
+        "shared_logic": {
+            "location": "Lógica distribuída, com tipos compartilhados em `src/types.ts` e serviços isolados em cada app.",
+            "services": "Cada app possui sua própria camada de serviço (`src/apps/*/services`) para interagir com o Firestore, respeitando as regras de segurança."
+        }
+    }
+}

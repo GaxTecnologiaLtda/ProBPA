@@ -1,0 +1,26 @@
+{
+  "name": "probpa",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/jszip": "^3.4.0",
+    "buffer": "^6.0.3",
+    "firebase": "^12.6.0",
+    "iconv-lite": "^0.7.0",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.11.0",
+    "pdfjs-dist": "^5.4.530",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "vite": "^7.2.7"
+  }
+}

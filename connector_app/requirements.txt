@@ -1,0 +1,9 @@
+customtkinter
+packaging
+pillow
+pystray
+psycopg2-binary
+requests
+python-dotenv
+pyinstaller
+cryptography

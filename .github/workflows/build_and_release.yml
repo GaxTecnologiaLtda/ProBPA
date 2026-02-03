@@ -1,0 +1,77 @@
+name: Build and Release Connector
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags, e.g. v3.3.0
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r connector_app/requirements.txt
+        pip install pyinstaller packaging requests
+
+    - name: Build Executable (PyInstaller)
+      run: |
+        cd connector_app
+        pyinstaller --noconfirm --log-level=WARN --clean packaging/windows.spec
+
+    - name: Setup Inno Setup
+      uses: minchinweb/setup-inno-setup@v0.1.0
+      
+    - name: Build Installer (Inno Setup)
+      run: |
+        iscc "connector_app/packaging/setup_script.iss"
+
+    - name: Install Firebase Tools
+      run: npm install -g firebase-tools
+
+    - name: Create Version JSON
+      shell: python
+      run: |
+        import json
+        import os
+        
+        # Get tag name (v3.3.0)
+        tag = os.environ.get('GITHUB_REF_NAME', 'v0.0.0')
+        version = tag.replace('v', '')
+        
+        # Define URL (Assuming GitHub Release or Firebase Storage)
+        # For simplicity, we point to the GitHub Release asset
+        download_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/ProBPA_Connector_Setup_{tag}.exe"
+        
+        data = {
+            "version": version,
+            "url": download_url,
+            "notes": "Auto-generated release"
+        }
+        
+        with open('connector_version.json', 'w') as f:
+            json.dump(data, f, indent=4)
+
+    - name: Deploy Version JSON to Firebase Hosting
+      run: |
+        # Only deploy the JSON file to hosting
+        # We need FIREBASE_TOKEN secret
+        firebase deploy --only hosting:website-probpa --token "${{ secrets.FIREBASE_TOKEN }}"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          connector_app/packaging/Output/ProBPA_Connector_Setup.exe
+          connector_version.json

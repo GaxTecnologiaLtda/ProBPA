@@ -1,0 +1,646 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    ///////////////////////////////////////////
+    // 🔐 1. Funções auxiliares de segurança
+    ///////////////////////////////////////////
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    function isMasterOf(entityId) {
+      return request.auth != null
+          && request.auth.token.role == "MASTER"
+          && request.auth.token.entityId == entityId;
+    }
+
+    function isCoordinationOf(entityId) {
+      return request.auth != null
+          && request.auth.token.role == "COORDENAÇÃO"
+          && request.auth.token.entityId == entityId;
+    }
+
+    function isSubsedeOf(entityId) {
+      return request.auth != null
+          && request.auth.token.role == "SUBSEDE"
+          && request.auth.token.entityId == entityId;
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 2. Coleção ENTITIES (Admin + Master + Coordenação + Subsede)
+    // /entities/{entityId}
+    ///////////////////////////////////////////
+
+    match /entities/{entityId} {
+
+      // ADMIN pode tudo
+      allow read, write: if isAdmin();
+
+      // MASTER pode ver e editar apenas sua própria entidade
+      allow read, write: if isMasterOf(entityId);
+
+      // COORDENAÇÃO pode ver apenas sua própria entidade
+      allow read: if isCoordinationOf(entityId);
+
+      // SUBSEDE pode ver apenas sua própria entidade
+      allow read: if isSubsedeOf(entityId);
+
+      // PROFESSIONAL pode ler sua própria entidade (necessário para determinar tipo)
+      allow read: if request.auth != null 
+                  && request.auth.token.role == "PROFESSIONAL" 
+                  && request.auth.token.entityId == entityId;
+      
+      // PUBLIC REGISTRATION: Allow read of minimal entity info
+      allow read: if true; 
+    }
+
+
+    ///////////////////////////////////////////
+    // 🔐 3. Subcoleção MASTERS DE CADA ENTIDADE
+    // /entities/{entityId}/masters/{uid}
+    ///////////////////////////////////////////
+
+    match /entities/{entityId}/masters/{uid} {
+
+      // ADMIN pode gerenciar usuários mestre
+      allow read, write, delete: if isAdmin();
+
+      // MASTER pode apenas *ler* seus próprios dados
+      allow read: if isMasterOf(entityId) && request.auth.uid == uid;
+
+      // MASTER nunca pode escrever ou remover outro user
+      allow write: if false;
+      allow delete: if false;
+    }
+
+
+    ///////////////////////////////////////////
+    // 🔐 4. Coleção MUNICIPALITIES
+    // /municipalities/{municipalityId}
+    ///////////////////////////////////////////
+
+    match /municipalities/{municipalityId} {
+
+      // ADMIN pode tudo
+      allow read, write: if isAdmin();
+
+      // MASTER pode ler/escrever apenas dados da sua entidade
+      allow read: if request.auth != null && resource.data.linkedEntityId == request.auth.token.entityId;
+      allow create: if request.auth != null && request.resource.data.linkedEntityId == request.auth.token.entityId;
+      allow update: if request.auth != null 
+                    && resource.data.linkedEntityId == request.auth.token.entityId
+                    && request.resource.data.linkedEntityId == request.auth.token.entityId;
+      allow delete: if request.auth != null && resource.data.linkedEntityId == request.auth.token.entityId;
+      
+      // COORDENAÇÃO pode ler (via linkedEntityId)
+      allow read: if isCoordinationOf(resource.data.linkedEntityId);
+
+      // SUBSEDE pode ler APENAS se linkedEntityId bater e municipalityId bater com token
+      allow read: if isSubsedeOf(resource.data.linkedEntityId) 
+                  && municipalityId == request.auth.token.municipalityId;
+
+      // PUBLIC REGISTRATION: Allow read to resolve names (risk: scraping)
+      allow read: if true;
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 4.b. Coleção MUNICIPALITIES (Nova Estrutura Hierárquica)
+    // /municipalities/{entityType}/{entityId}/{municipalityId}
+    ///////////////////////////////////////////
+
+    match /municipalities/{entityType}/{entityId}/{municipalityId} {
+        // ADMIN pode tudo na nova estrutura
+        allow read, write: if isAdmin();
+        
+        // MASTER pode ver e editar apenas se o entityId da URL (path) bater com seu token
+        allow read, write: if isMasterOf(entityId);
+        
+        // COORDENAÇÃO pode ver apenas se o entityId bater
+        allow read: if isCoordinationOf(entityId);
+
+        // SUBSEDE pode ver apenas se o entityId bater E municipalityId bater
+        allow read: if isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId;
+
+        // PROFESSIONAL pode ler municípios da sua entidade (para pegar config de interface)
+        allow read: if request.auth.token.role == "PROFESSIONAL" 
+                    && request.auth.token.entityId == entityId;
+        
+        // PUBLIC REGISTRATION: Allow read
+        allow read: if true;
+
+        // 🔐 EXTRACTIONS (Dados do Conector - Nested)
+        match /extractions/{extractionId} {
+             // Admin, Master, Coordenação, Subsede (scoped)
+             allow read: if isAdmin()
+                         || isMasterOf(entityId)
+                         || isCoordinationOf(entityId)
+                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
+        }
+
+        // 🔐 Records duplicados (Produção)
+        match /bpai_records/{unitId}/professionals/{professionalId}/competencias/{comp}/dates/{date}/pacientes/{patId}/procedures/{procId} {
+             allow create: if isMasterOf(entityId)
+                           || (request.auth.token.role == "PROFESSIONAL" 
+                               && request.auth.token.professionalId == professionalId
+                               && request.auth.token.entityId == entityId);
+             allow read, update, delete: if isMasterOf(entityId)
+                                         || isCoordinationOf(entityId)
+                                         || (request.auth.token.role == "PROFESSIONAL" 
+                                             && request.auth.token.professionalId == professionalId)
+                                         // SUBSEDE (Read Only, Scoped)
+                                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
+        }
+
+        // 🔐 Professionals (Contextual Storage)
+        match /professionals/{professionalId} {
+             allow read: if isAdmin()
+                         || isMasterOf(entityId)
+                         || isCoordinationOf(entityId)
+                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
+                         || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.professionalId == professionalId);
+             
+             allow create, update, delete: if isAdmin() 
+                                           || isMasterOf(entityId);
+                                           
+             // PUBLIC REGISTRATION: Allow create (Sync Context)
+             allow create: if true;
+        }
+
+        // 🔐 Patients (New Scoped Collection)
+        match /patients/{patientId} {
+            allow read, write: if isAdmin()
+                               || isMasterOf(entityId)
+                               || isCoordinationOf(entityId)
+                               || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
+                               || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+        }
+
+        // 🔐 Goals (Nova Estrutura Hierárquica)
+        // Match: municipalities/{entityType}/{entityId}/{municipalityId}/goals/{goalId} (Sem competencia - Legacy-ish migration?)
+        // OR
+        // municipalities/{entityType}/{entityId}/{municipalityId}/goals/{competence}/goals/{goalId}
+        
+        match /goals/{goalId} {
+            // ADMIN
+            allow read, write: if isAdmin();
+            // MASTER
+            allow read, write: if isMasterOf(entityId);
+            // COORDENAÇÃO
+            allow read: if isCoordinationOf(entityId);
+            // SUBSEDE
+            allow read: if isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId;
+            // PROFESSIONAL (Read Only)
+            allow read: if request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId;
+        }
+
+        match /goals/{competence}/goals/{goalId} {
+             // ADMIN
+            allow read, write: if isAdmin();
+
+            // MASTER
+            // Check Entity + Municipality constraint
+            allow read, write: if isMasterOf(entityId)
+                               && (
+                                  !('municipalityId' in request.auth.token) 
+                                  || request.auth.token.municipalityId == null 
+                                  || request.auth.token.municipalityId == municipalityId
+                               );
+            
+            // COORDENAÇÃO (Read Only)
+            allow read: if isCoordinationOf(entityId);
+
+            // SUBSEDE (Read Only)
+            allow read: if isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId;
+
+            // PROFESSIONAL (Read Only, scoped)
+            allow read: if request.auth.token.role == "PROFESSIONAL"
+                        && request.auth.token.entityId == entityId
+                        && (
+                           resource.data.professionalId == request.auth.token.professionalId
+                           || (
+                              (resource.data.professionalId == null || resource.data.professionalId == "team" || resource.data.professionalId == "") 
+                              && resource.data.unitId == request.auth.token.unitId
+                           )
+                        );
+                        
+            match /progress/{progressId} {
+                allow read, write: if isAdmin();
+                
+                allow read, write: if isMasterOf(entityId)
+                                   && (
+                                      !('municipalityId' in request.auth.token) 
+                                      || request.auth.token.municipalityId == null 
+                                      || request.auth.token.municipalityId == municipalityId
+                                   );
+                                   
+                // Coordenação Read
+                allow read: if isCoordinationOf(entityId);
+
+                // Subsede Read
+                allow read: if isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId;
+
+                // Professional: Create only (calculate progress)
+                // Assuming professional can calculate progress for goals they can see.
+                // Requirements say: "Atualizar Progresso" button is available.
+                allow create: if request.auth.token.role == "PROFESSIONAL"
+                              && request.auth.token.entityId == entityId
+                              && (
+                                 get(/databases/$(database)/documents/municipalities/$(entityType)/$(entityId)/$(municipalityId)/goals/$(competence)/goals/$(goalId)).data.professionalId == request.auth.token.professionalId
+                                 || (
+                                    get(/databases/$(database)/documents/municipalities/$(entityType)/$(entityId)/$(municipalityId)/goals/$(competence)/goals/$(goalId)).data.professionalId == null
+                                    && get(/databases/$(database)/documents/municipalities/$(entityType)/$(entityId)/$(municipalityId)/goals/$(competence)/goals/$(goalId)).data.unitId == request.auth.token.unitId
+                                 )
+                              );
+                              
+                  allow read: if request.auth.token.role == "PROFESSIONAL"
+                              && request.auth.token.entityId == entityId;
+      }
+    }
+
+    // 🔐 Support Tickets (Contextual)
+    match /support_tickets/{ticketId} {
+        allow create: if request.auth != null; 
+        allow read: if isAdmin()
+                    || isMasterOf(entityId)
+                    || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.professionalId == resource.data.userId)
+                    // Allow simple User role match if userId is auth.uid 
+                    || resource.data.userId == request.auth.uid;
+    }
+  }
+
+
+    ///////////////////////////////////////////
+    // 🔐 5. Coleção LICENSES (Admin)
+    // /licenses/{licenseId}
+    ///////////////////////////////////////////
+
+    match /licenses/{licenseId} {
+      allow read, write, delete: if isAdmin();
+      
+      match /installments/{installmentId} {
+        allow read, write, delete: if isAdmin();
+      }
+    }
+
+
+    ///////////////////////////////////////////
+    // 🔐 6. Coleção UNITS
+    // /units/{unitId}
+    ///////////////////////////////////////////
+
+    match /units/{unitId} {
+
+      // ADMIN pode tudo
+      allow read, write: if isAdmin();
+
+      // MASTER pode ler / escrever unidades vinculadas à sua entidade
+      allow read: if isMasterOf(resource.data.entityId);
+      
+      // COORDENAÇÃO pode ler unidades vinculadas à sua entidade
+      allow read: if isCoordinationOf(resource.data.entityId);
+
+      // SUBSEDE pode ler unidades vinculadas à sua entidade
+      // Note: We don't filter units by municipality here strictly for reading list, 
+      // but UI filters them. Strict security would require checking unit municipality.
+      // Assuming 'municipalityId' field exists on unit doc to filter properly if needed.
+      // But requirement says "Nas demais abas, ele pode ver, mas sem mexer em nada".
+      // Usually Unit list is just viewing. 
+      // If we want to restrict visibility of Units to only those in the municipality:
+      // allow read: if isSubsedeOf(resource.data.entityId) && resource.data.municipalityId == request.auth.token.municipalityId;
+      // But existing Units doc might not have 'municipalityId' indexed or strictly required?
+      // Let's check 'Units.tsx' / 'units' collection structure.
+      // Assuming 'municipalityId' exists, we can enforce it.
+      // IF we want to serve "Gestão Unidades", showing only relevant ones is better.
+      allow read: if isSubsedeOf(resource.data.entityId); // Broader read for now to avoid breaking if field missing, filter in UI.
+
+      // PROFESSIONAL: Needs to read unit details (type, name, etc) for context
+      allow read: if request.auth.token.role == "PROFESSIONAL"; 
+      // Ideally we would strictly filter by assignment, but since 'assignments' is complex in token/doc, 
+      // allowing read of units is generally low risk (public info like address/name).
+      // Stricter: if resource.data.entityId == request.auth.token.entityId;
+
+      allow create: if request.auth != null
+        && request.resource.data.entityId == request.auth.token.entityId;
+
+      allow update, delete: if request.auth != null
+        && resource.data.entityId == request.auth.token.entityId;
+
+      // PUBLIC REGISTRATION: Allow read units (to select in form)
+      allow read: if true;
+    }
+
+
+    ///////////////////////////////////////////
+    // 🔐 7. Coleção PROFESSIONALS
+    // /professionals/{professionalId}
+    ///////////////////////////////////////////
+
+    match /professionals/{professionalId} {
+       allow read: if isAdmin() 
+                   || (request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId) // <--- RESTORED THIS LINE
+                   || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
+                   || (request.auth.token.role == "SUBSEDE" && resource.data.entityId == request.auth.token.entityId)
+                   || (request.auth != null && request.auth.token.role == "PROFESSIONAL" && request.auth.token.professionalId == professionalId);
+       
+       // PUBLIC REGISTRATION: Allow create (Self-Registration)
+       allow create: if true; // Validation logic should be in backend triggers ideally or limited here (e.g. active == true)
+       
+       allow create: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && request.resource.data.entityId == request.auth.token.entityId);
+       allow update: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId);
+       allow delete: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId);
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 9. Coleções SIGTAP (Leitura Auth, Escrita Admin)
+    ///////////////////////////////////////////
+
+    match /sigtap/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // Relaxed for testing
+    }
+
+    match /sigtap_import_history/{id} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // Relaxed for testing
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 10. Coleção PATIENTS
+    ///////////////////////////////////////////
+
+    match /patients/{patientId} {
+      // Allow any authenticated user to read/write patients for now
+      // Ideally, we should restrict this to the user's entity or similar, 
+      // but patients are often shared or global.
+      allow read, write: if request.auth != null;
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 11. Coleção BPA_RECORDS
+    ///////////////////////////////////////////
+
+    match /bpa_records/{path=**}/procedures/{recordId} {
+      // Helper functions for BPA ownership
+      function isMasterOfEntity(data) {
+        return request.auth.token.role == "MASTER" && data.entityId == request.auth.token.entityId;
+      }
+      function isCoordinationOfEntity(data) {
+        return request.auth.token.role == "COORDENAÇÃO" && data.entityId == request.auth.token.entityId;
+      }
+      function isSubsedeOfEntity(data) {
+         return request.auth.token.role == "SUBSEDE" 
+             && data.entityId == request.auth.token.entityId
+             && data.municipalityId == request.auth.token.municipalityId;
+      }
+      function isProfessionalOwner(data) {
+        // Check if the user is the professional linked to the record
+        // Allow if data.professionalId matches Auth UID OR the professionalId claim
+        return data.professionalId == request.auth.uid 
+            || (request.auth.token.professionalId != null && data.professionalId == request.auth.token.professionalId);
+      }
+
+      // Create: Check new data
+      allow create: if isAdmin() 
+                    || isMasterOfEntity(request.resource.data)
+                    || isProfessionalOwner(request.resource.data);
+      
+      // Read/Update/Delete: Check existing data
+      allow read: if isAdmin()
+                  || isMasterOfEntity(resource.data)
+                  || isCoordinationOfEntity(resource.data)
+                  || isSubsedeOfEntity(resource.data)
+                  || isProfessionalOwner(resource.data);
+                  
+      allow update, delete: if isAdmin()
+                            || isMasterOfEntity(resource.data)
+                            || isProfessionalOwner(resource.data);
+    }
+
+    // BPA-C Consolidated Records
+    match /bpa_records/BPA-C/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 12. Collection Group: PROCEDURES (New) & REGISTROS (Legacy)
+    ///////////////////////////////////////////
+    
+    match /{path=**}/procedures/{recordId} {
+      allow read: if isAdmin() 
+                  || (request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "SUBSEDE" && resource.data.entityId == request.auth.token.entityId && resource.data.municipalityId == request.auth.token.municipalityId)
+                  || (request.auth.token.role == "PROFESSIONAL" && (
+                      resource.data.professionalId == request.auth.uid
+                      || (request.auth.token.professionalId != null && resource.data.professionalId == request.auth.token.professionalId)
+                  ))
+                  // Allow if user has entityId claim matching resource (broader check for safety)
+                  || (request.auth.token.entityId == resource.data.entityId);
+    }
+
+    match /{path=**}/registros/{recordId} {
+      allow read: if isAdmin() 
+                  || (request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "SUBSEDE" && resource.data.entityId == request.auth.token.entityId && resource.data.municipalityId == request.auth.token.municipalityId)
+                  || (request.auth.token.role == "PROFESSIONAL" && resource.data.professionalId == request.auth.uid);
+    }
+
+    // SIGTAP Collection Group (Public Read for Auth)
+    match /{path=**}/procedimentos/{procedureId} {
+      allow read: if request.auth != null;
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 13. Coleção LEDI_BATCHES
+    ///////////////////////////////////////////
+
+    match /ledi_batches/{batchId} {
+      allow read, write: if isAdmin();
+      
+      // Logs Subcollection
+      match /logs/{logId} {
+        allow read, write: if isAdmin();
+      }
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 14. Coleção GOALS
+    // /goals/{goalId}
+    ///////////////////////////////////////////
+
+    ///////////////////////////////////////////
+    // 🔐 14. Coleção GOALS (Nested & Collection Group)
+    // match /{path=**}/goals/{goalId}
+    ///////////////////////////////////////////
+
+    match /{path=**}/goals/{goalId} {
+      
+      function isMasterReader(data) {
+        return request.auth.token.role == "MASTER" 
+            && data.entityId == request.auth.token.entityId
+            && (
+              request.auth.token.get('municipalityId', null) == null
+              || request.auth.token.get('municipalityId', '') == ''
+              || data.municipalityId == request.auth.token.municipalityId
+            );
+      }
+      
+      function isCoordinationReader(data) {
+        return request.auth.token.role == "COORDENAÇÃO" 
+            && data.entityId == request.auth.token.entityId;
+      }
+
+      function isSubsedeReader(data) {
+        return request.auth.token.role == "SUBSEDE" 
+            && data.entityId == request.auth.token.entityId
+            && data.municipalityId == request.auth.token.municipalityId;
+      }
+
+      function isProfessionalReader(data) {
+        return request.auth.token.role == "PROFESSIONAL"
+            && data.entityId == request.auth.token.entityId
+            // Removed strict municipalityId check because token claim might not match context
+            // && data.municipalityId == request.auth.token.municipalityId
+            && (
+               data.professionalId == request.auth.token.professionalId
+               || (
+                  (data.professionalId == null || data.professionalId == "team" || data.professionalId == "") 
+                  && data.unitId == request.auth.token.unitId
+               )
+            );
+      }
+
+      // READ: Admin, Master (scoped), Professional (scoped), COORDENAÇÃO, SUBSEDE
+      allow read: if isAdmin()
+                  || isMasterReader(resource.data)
+                  || isCoordinationReader(resource.data)
+                  || isSubsedeReader(resource.data)
+                  || isProfessionalReader(resource.data);
+
+      // WRITE: Admin, Master (scoped)
+      // Professional is EXPLICITLY EXCLUDED (Read-only)
+      allow create: if isAdmin()
+                    || isMasterReader(request.resource.data);
+                    
+      allow update, delete: if isAdmin()
+                            || isMasterReader(resource.data);
+
+      // Subcollection PROGRESS
+      match /progress/{progressId} {
+          allow read: if isAdmin()
+                      || isMasterReader(get(/databases/$(database)/documents/$(path)/goals/$(goalId)).data)
+                      || isCoordinationReader(get(/databases/$(database)/documents/$(path)/goals/$(goalId)).data)
+                      || isSubsedeReader(get(/databases/$(database)/documents/$(path)/goals/$(goalId)).data)
+                      || isProfessionalReader(get(/databases/$(database)/documents/$(path)/goals/$(goalId)).data);
+          
+          allow create: if isAdmin()
+                        || isMasterReader(get(/databases/$(database)/documents/$(path)/goals/$(goalId)).data);
+      }
+    }
+
+
+
+    ///////////////////////////////////////////
+    // 🔐 15. Coleção USERS (Entity Users)
+    // /users/{userId}
+    ///////////////////////////////////////////
+
+    match /users/{userId} {
+      allow read: if isMasterOf(resource.data.entityId)
+                  || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
+                  // Allow self read
+                  || request.auth.uid == userId;
+                  
+      // Write is handled primarily by Cloud Functions (Admin SDK), 
+      // but if we ever needed direct write (not recommended):
+      allow write: if false; 
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 16. Coleção SUPPORT_TICKETS (Root)
+    ///////////////////////////////////////////
+
+    match /support_tickets/{ticketId} {
+      // Create: Authenticated users can open tickets
+      allow create: if request.auth != null;
+      
+      // Read/Update: Admins OR the creator
+      allow read, update: if isAdmin() 
+                          || (request.auth != null && resource.data.userId == request.auth.uid)
+                          || (request.auth != null && resource.data.userEmail == request.auth.token.email);
+    }
+    
+    ///////////////////////////////////////////
+    // 🔐 17. Coleção LOGS (Collection Group & Nested)
+    ///////////////////////////////////////////
+    
+    match /{path=**}/logs/{logId} {
+        // ADMIN
+        allow read, write: if isAdmin();
+
+        // MASTER
+        allow create: if isMasterOf(request.resource.data.entityId);
+        allow read: if isMasterOf(resource.data.entityId);
+
+        // COORDENAÇÃO
+        allow create: if isCoordinationOf(request.resource.data.entityId);
+        allow read: if isCoordinationOf(resource.data.entityId);
+
+        // SUBSEDE
+        allow create: if isSubsedeOf(request.resource.data.entityId);
+        allow read: if isSubsedeOf(resource.data.entityId) 
+                    && (resource.data.municipalityId == null || resource.data.municipalityId == request.auth.token.municipalityId);
+
+        // PROFESSIONAL
+        // Professionals can log actions they perform (Create)
+        allow create: if request.auth.token.role == "PROFESSIONAL" 
+                      && request.resource.data.entityId == request.auth.token.entityId;
+        
+        // Professionals can Read? Generally logs are for managers. 
+        // If we want Professionals to see THEIR actions, we can add that.
+        // But for now, Requirements imply Entity Panel usage (Managers).
+        // Let's allow Professionals to Log (Create) but maybe not read all.
+        // However, if the UI is exposed to them, they need read. 
+        // Assuming Logs page is protected by Role in UI?
+        // Layout shows Logs for everyone in private. 
+        // Let's allow read if Professional matches entity.
+        allow read: if request.auth.token.role == "PROFESSIONAL" 
+                    && resource.data.entityId == request.auth.token.entityId;
+
+        // PUBLIC REGISTRATION: Allow create log
+        allow create: if true;
+
+        // AUTH users (Generic Fallback for Login/Logout which might not imply role yet?)
+        // Login logs happen AFTER auth, so token exists.
+        // We can allow any authenticated user to create a log if they provide valid context.
+        allow create: if request.auth != null && request.resource.data.entityId == request.auth.token.entityId;
+    }
+    
+    ///////////////////////////////////////////
+    // 🔐 18. Coleção EXTRACTED_PRODUCTION (Dados do Conector)
+    ///////////////////////////////////////////
+
+    match /extracted_production/{docId} {
+      // Helper to fetch municipality and check ownership
+      function checkMunicipalityAccess() {
+        let munId = resource.data.municipalityId;
+        let munDoc = get(/databases/$(database)/documents/municipalities/$(munId));
+        return isMasterOf(munDoc.data.linkedEntityId) 
+            || isCoordinationOf(munDoc.data.linkedEntityId)
+            || (isSubsedeOf(munDoc.data.linkedEntityId) && request.auth.token.municipalityId == munId);
+      }
+
+      allow read: if isAdmin() || checkMunicipalityAccess();
+      // Write is restricted to Cloud Functions (Admin SDK) usually, or authenticated ingestion if via Client SDK (but we use REST API)
+      // So no write rules needed for client.
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
