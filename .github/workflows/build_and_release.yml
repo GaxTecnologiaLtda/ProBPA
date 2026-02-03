@@ -8,6 +8,8 @@ on:
 jobs:
     build-windows:
         runs-on: windows-latest
+        permissions:
+            contents: write
 
         steps:
             - name: Checkout code
@@ -35,6 +37,7 @@ jobs:
             - name: Build Installer (Inno Setup)
               run: |
                   iscc "connector_app/packaging/setup_script.iss"
+                  ls connector_app/packaging/Output
 
             - name: Install Node.js
               uses: actions/setup-node@v3
@@ -55,14 +58,25 @@ jobs:
               run: |
                   import json
                   import os
+                  import shutil
 
                   # Get tag name (v3.3.0)
                   tag = os.environ.get('GITHUB_REF_NAME', 'v0.0.0')
                   version = tag.replace('v', '')
 
-                  # Define URL (Assuming GitHub Release or Firebase Storage)
-                  # For simplicity, we point to the GitHub Release asset
-                  download_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/ProBPA_Connector_Setup_{tag}.exe"
+                  # Rename installer to include version
+                  installer_path = 'connector_app/packaging/Output/ProBPA_Connector_Setup.exe'
+                  new_installer_name = f'ProBPA_Connector_Setup_{tag}.exe'
+                  new_installer_path = f'connector_app/packaging/Output/{new_installer_name}'
+
+                  if os.path.exists(installer_path):
+                      os.rename(installer_path, new_installer_path)
+                      print(f"Renamed installer to {new_installer_path}")
+                  else:
+                      print(f"Installer not found at {installer_path}")
+
+                  # Define URL
+                  download_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{new_installer_name}"
 
                   data = {
                       "version": version,
@@ -74,8 +88,12 @@ jobs:
                   dist_dir = 'src/apps/website/dist'
                   os.makedirs(dist_dir, exist_ok=True)
 
+                  # Write JSON to website dist
                   with open(f'{dist_dir}/connector_version.json', 'w') as f:
                       json.dump(data, f, indent=4)
+
+                  # Also copy to root for easier artifact upload if needed (optional)
+                  # shutil.copy(f'{dist_dir}/connector_version.json', 'connector_version.json')
 
             - name: Deploy Version JSON to Firebase Hosting
               run: |
@@ -88,5 +106,5 @@ jobs:
               if: startsWith(github.ref, 'refs/tags/')
               with:
                   files: |
-                      connector_app/packaging/Output/ProBPA_Connector_Setup.exe
-                      connector_version.json
+                      connector_app/packaging/Output/ProBPA_Connector_Setup_*.exe
+                      src/apps/website/dist/connector_version.json
