@@ -26,7 +26,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 ; done in "64-bit mode" on x64, meaning it should use the native
 ; 64-bit Program Files directory and the 64-bit view of the registry.
 ArchitecturesInstallIn64BitMode=x64
-OutputBaseFilename=Setup_Conector_ProBPA_v3.2
+OutputBaseFilename=ProBPA_Connector_Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
