@@ -216,16 +216,75 @@ class DashboardScreen(ctk.CTkFrame):
         else:
             self.log("Tentativa de acesso não autorizado nas configs.")
 
+    # --- UPDATE LOGIC ---
     def check_for_updates(self):
-        # Placeholder for version check logic
-        # In the future: call API, compare versions, prompt user.
-        # For now: Just open the website or show a message.
-        import webbrowser
-        if self.notify_callback:
-            self.notify_callback("Atualização", "Verificando online...")
+        self.btn_check_update.configure(state="disabled", text="Verificando...")
+        self.log("Verificando atualizações online...")
         
-        # Simulating check
-        self.log("Verificando atualizações...")
-        # Open download page
-        webbrowser.open("https://probpa.com.br/download")
-        self.log("Página de download aberta.")
+        # Run check in background to avoid freezing UI
+        threading.Thread(target=self._run_update_check, daemon=True).start()
+
+    def _run_update_check(self):
+        try:
+            from core.updater import Updater
+            updater = Updater()
+            available, info = updater.check_for_updates()
+            
+            if available:
+                version = info.get("version")
+                notes = info.get("notes", "")
+                url = info.get("url")
+                
+                self.after(0, self.log, f"Nova versão encontrada: {version}")
+                self.after(0, lambda: self._prompt_update(version, notes, url, updater))
+            else:
+                self.after(0, self.log, "Você já está na versão mais recente.")
+                self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
+                if self.notify_callback:
+                    self.notify_callback("Atualização", "Sistema atualizado!")
+                    
+        except Exception as e:
+            self.after(0, self.log, f"Erro ao verificar updates: {e}")
+            self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
+
+    def _prompt_update(self, version, notes, url, updater):
+        # Create a simple top-level dialog since CTk doesn't have a native Yes/No MsgBox easily accessible without external libs sometimes
+        # Or better, just use a Toplevel window
+        
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Atualização Disponível")
+        dialog.geometry("400x250")
+        dialog.attributes("-topmost", True)
+        
+        ctk.CTkLabel(dialog, text=f"Nova Versão Disponível: v{version}", font=("Roboto", 16, "bold")).pack(pady=20)
+        ctk.CTkLabel(dialog, text=f"Notas: {notes}", wraplength=350).pack(pady=10)
+        
+        def on_yes():
+            dialog.destroy()
+            self._start_download(url, updater)
+            
+        def on_no():
+            dialog.destroy()
+            self.btn_check_update.configure(state="normal", text="Verificar Atualizações")
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        ctk.CTkButton(btn_frame, text="Atualizar Agora", command=on_yes, fg_color="green").pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="Cancelar", command=on_no, fg_color="red").pack(side="left", padx=10)
+
+    def _start_download(self, url, updater):
+        self.log("Iniciando download da atualização...")
+        self.btn_check_update.configure(text="Baixando...")
+        
+        def download_task():
+            try:
+                # Progress callback could be added here
+                updater.download_and_install(url)
+                # The app will exit inside download_and_install
+            except Exception as e:
+                self.after(0, self.log, f"Erro no download: {e}")
+                self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
+
+        threading.Thread(target=download_task, daemon=True).start()
+
