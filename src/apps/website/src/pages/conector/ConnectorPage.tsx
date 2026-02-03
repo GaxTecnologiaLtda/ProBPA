@@ -1,10 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Download, Shield, Zap, TrendingUp, Users, FileCheck, BarChart3, Database, Lock, CheckCircle2, Terminal, Server, RefreshCw, Settings, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function ConnectorPage() {
     const [isDocsOpen, setIsDocsOpen] = useState(false);
-    const downloadLink = "https://firebasestorage.googleapis.com/v0/b/probpa-025.firebasestorage.app/o/connector%2FSetup_Conector_ProBPA_v3.2.exe?alt=media&token=8817bda8-a507-4139-b146-bf9785fbc1c2";
+    const [downloadInfo, setDownloadInfo] = useState({
+        version: "3.3",
+        url: "https://github.com/GaxTecnologiaLtda/ProBPA/releases/latest"
+    });
+
+    useEffect(() => {
+        fetch('/connector_version.json')
+            .then(res => {
+                if (!res.ok) throw new Error("Version manifest not found");
+                return res.json();
+            })
+            .then(data => {
+                if (data.url && data.version) {
+                    setDownloadInfo({
+                        version: data.version,
+                        url: data.url
+                    });
+                }
+            })
+            .catch(err => console.warn("Failed to load latest version info, using default.", err));
+    }, []);
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-emerald-500/30">
@@ -22,7 +42,7 @@ export default function ConnectorPage() {
                         <a href="#seguranca" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Segurança & LGPD</a>
                         <a href="#como-funciona" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Instalação</a>
                         <a
-                            href={downloadLink}
+                            href={downloadInfo.url}
                             className="px-5 py-2.5 bg-emerald-600 text-white font-bold rounded-full text-sm hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-500/20"
                         >
                             Baixar Agora
@@ -42,7 +62,7 @@ export default function ConnectorPage() {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                         </span>
-                        Nova Versão 3.2 Disponível
+                        Nova Versão {downloadInfo.version} Disponível
                     </div>
 
                     <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8 bg-gradient-to-b from-white via-slate-100 to-slate-400 bg-clip-text text-transparent leading-tight">
@@ -57,7 +77,7 @@ export default function ConnectorPage() {
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                         <a
-                            href={downloadLink}
+                            href={downloadInfo.url}
                             className="w-full sm:w-auto px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-lg transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 group"
                         >
                             <Download className="w-5 h-5 group-hover:-translate-y-1 transition-transform" />
@@ -204,7 +224,7 @@ export default function ConnectorPage() {
                         </div>
 
                         <a
-                            href={downloadLink}
+                            href={downloadInfo.url}
                             className="inline-flex items-center gap-3 px-8 py-4 bg-white text-slate-950 hover:bg-emerald-50 rounded-xl font-bold text-lg transition-colors shadow-lg shadow-white/5"
                         >
                             <Download className="w-5 h-5" />
