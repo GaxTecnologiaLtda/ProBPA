@@ -97,15 +97,27 @@ class MainWindow(ctk.CTk):
         self.quit()
         sys.exit()
 
-    def check_initial_state(self):
+    def check_initial_state(self, skip_welcome=False):
         # Clear container
         for widget in self.container.winfo_children():
             widget.destroy()
 
-        if self.config_manager.is_configured():
-            DashboardScreen(self.container, self.check_initial_state, self.show_notification).pack(fill="both", expand=True)
+        if not skip_welcome:
+            # Show Welcome First
+            WelcomeScreen(self.container, self._post_welcome_loading).pack(fill="both", expand=True)
         else:
-            ActivationScreen(self.container, self.check_initial_state).pack(fill="both", expand=True)
+            self._post_welcome_loading()
+
+    def _post_welcome_loading(self):
+        # Clear container again (remove welcome)
+        for widget in self.container.winfo_children():
+            widget.destroy()
+            
+        if self.config_manager.is_configured():
+            # Pass check_initial_state (without args) as reset callback
+            DashboardScreen(self.container, lambda: self.check_initial_state(skip_welcome=True), self.show_notification).pack(fill="both", expand=True)
+        else:
+            ActivationScreen(self.container, lambda: self.check_initial_state(skip_welcome=True)).pack(fill="both", expand=True)
 
 def main():
     app = MainWindow()
