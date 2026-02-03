@@ -29,8 +29,8 @@ jobs:
                   cd connector_app
                   pyinstaller --noconfirm --log-level=WARN --clean packaging/windows.spec
 
-            - name: Setup Inno Setup
-              uses: crazy-max/ghaction-setup-inno-setup@v5.0.0
+            - name: Install Inno Setup (via Chocolatey)
+              run: choco install innosetup --no-progress
 
             - name: Build Installer (Inno Setup)
               run: |
