@@ -76,6 +76,7 @@ class DashboardScreen(ctk.CTkFrame):
         try:
             self.log_box._textbox.tag_config("highlight", foreground="yellow")
             self.log_box._textbox.tag_config("error", foreground="#FF5252")
+            self.log_box._textbox.tag_config("update", foreground="#00E5FF") # Cyan for updates
         except:
             pass
 
@@ -131,6 +132,8 @@ class DashboardScreen(ctk.CTkFrame):
             self.log_box.insert("end", full_msg, "highlight")
         elif level == "error":
             self.log_box.insert("end", full_msg, "error")
+        elif level == "update":
+            self.log_box.insert("end", full_msg, "update")
         else:
             self.log_box.insert("end", full_msg)
             
@@ -253,7 +256,7 @@ class DashboardScreen(ctk.CTkFrame):
     # --- UPDATE LOGIC ---
     def check_for_updates(self):
         self.btn_check_update.configure(state="disabled", text="Verificando...")
-        self.log("Verificando atualizações online...")
+        self.log("Verificando atualizações online...", "update")
         
         # Run check in background to avoid freezing UI
         threading.Thread(target=self._run_update_check, daemon=True).start()
@@ -269,10 +272,10 @@ class DashboardScreen(ctk.CTkFrame):
                 notes = info.get("notes", "")
                 url = info.get("url")
                 
-                self.after(0, self.log, f"Nova versão encontrada: {version}", "highlight")
+                self.after(0, self.log, f"Nova versão encontrada: {version}", "update")
                 self.after(0, lambda: self._prompt_update(version, notes, url, updater))
             else:
-                self.after(0, self.log, "Você já está na versão mais recente.", "info")
+                self.after(0, self.log, "Você já está na versão mais recente.", "update")
                 self.after(0, lambda: self.btn_check_update.configure(state="normal", text="Verificar Atualizações"))
                 if self.notify_callback:
                     # Only notify if manually triggered or relevant? 
