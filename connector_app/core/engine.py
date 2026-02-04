@@ -433,8 +433,26 @@ class PecConnectorEngine:
             row_type = row[13]
             
             final_id = row_id
+            
+            # UNIQUE ID LOGIC TO PREVENT OVERWRITES
+            # 1. Procedures / Odonto: UUID + Code
             if row_type in ['PROCEDURE', 'ODONTO_PROCEDURE'] and proc_code:
                  final_id = f"{row_id}_{proc_code}"
+            
+            # 2. Collective Activity: UUID + Patient CNS (since multiple participants per sheet)
+            elif row_type == 'COLLECTIVE_ACTIVITY':
+                 pat_cns = row[5] or 'NOCNS'
+                 final_id = f"{row_id}_{pat_cns}"
+            
+            # 3. Home Visit: UUID + CID + CIAP (if multiple conditions joined)
+            elif row_type == 'HOME_VISIT':
+                 # Use CID/CIAP suffix if present to distinguish multiple conditions
+                 cid = row[14] if len(row) > 14 else None
+                 ciap = row[15] if len(row) > 15 else None
+                 suffix = ""
+                 if cid: suffix += f"_{cid}"
+                 if ciap: suffix += f"_{ciap}"
+                 if suffix: final_id = f"{row_id}{suffix}"
 
             record = {
                 "externalId": final_id,

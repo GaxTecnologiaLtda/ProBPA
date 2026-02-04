@@ -7,6 +7,10 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.3.3] - 2026-02-04
+### Fixed
+- **Critical Data Loss**: Correção na geração de IDs para Atividade Coletiva e Visita Domiciliar. Anteriormente, registros da mesma ficha (vários participantes ou condições) estavam se sobrescrevendo. Agora geram IDs únicos (`UUID_PARTICIPANTE` ou `UUID_CID_CIAP`).
+
 ## [v3.3.2] - 2026-02-04
 ### Fixed
 - **Hotfix**: Correção urgente de erro de sintaxe nos logs (`{{e}}`) que causava falha na extração.
