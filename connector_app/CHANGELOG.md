@@ -7,6 +7,12 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.3.0] - 2026-02-04
+### Added
+- **Release**: Versão Estável Oficial (Promovida da Beta 19).
+- **Auto-Update**: Sistema completo de atualização automática zero-touch.
+- **UX**: Nova tela de boas-vindas, trava de instância única e logs coloridos.
+
 ## [v3.3.0-beta.19] - 2026-02-04
 ### Fixed
 - **Auto-Restart**: Removida flag `skipifsilent` do instalador que impedia o reinício automático após update.

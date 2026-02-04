@@ -274,7 +274,11 @@ export interface ProcedureFormItem {
         localAplicacao?: string;
         especialidadeProfissionalPrescritor?: string;
         motivoIndicacao?: string;
+        especialidadeProfissionalPrescritor?: string;
+        motivoIndicacao?: string;
     };
+    // Edit Support
+    id?: string;
 }
 
 // Helper to remove undefined values recursively
@@ -382,8 +386,13 @@ export const saveMultipleBpaRecords = async (
         const ids: string[] = [];
         const batch = writeBatch(db);
 
+        const batch = writeBatch(db);
+
         for (const proc of procedures) {
-            const newDoc = doc(proceduresCol);
+            // Edit Logic: Use existing ID if provided, otherwise auto-gen
+            const newDoc = proc.id ? doc(proceduresCol, proc.id) : doc(proceduresCol);
+
+            // For scoped path, we normally use the same ID.
             const duplicateDoc = doc(newPathRef, newDoc.id);
 
             const sanitizedBase = deepRemoveUndefined(dataBase);
