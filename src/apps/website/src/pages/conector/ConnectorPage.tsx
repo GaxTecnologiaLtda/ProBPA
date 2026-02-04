@@ -10,7 +10,7 @@ export default function ConnectorPage() {
     });
 
     useEffect(() => {
-        fetch('/connector_version.json')
+        fetch('/connector_version.json?t=' + new Date().getTime())
             .then(res => {
                 if (!res.ok) throw new Error("Version manifest not found");
                 return res.json();
