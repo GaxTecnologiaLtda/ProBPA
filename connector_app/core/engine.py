@@ -301,12 +301,18 @@ class PecConnectorEngine:
                 # Only try to join adpc and its dimensions if adpc exists
                 if adpc_cols:
                     # Try to find the FK in adpc that points to parent
-                    # Usually co_fat_atd_dom
-                    adpc_join = f"""
-                        LEFT JOIN tb_fat_atend_dom_prob_cond adpc ON fad.{dom_pk} = adpc.co_fat_atd_dom
-                        LEFT JOIN tb_dim_cid dim_cid ON adpc.co_dim_cid = dim_cid.co_seq_dim_cid
-                        LEFT JOIN tb_dim_ciap dim_ciap ON adpc.co_dim_ciap = dim_ciap.co_seq_dim_ciap
-                    """
+                    fk_candidates = ['co_fat_atendimento_domiciliar', 'co_fat_atd_dom', 'co_fat_atd_domiciliar']
+                    adpc_fk = next((c for c in fk_candidates if c in adpc_cols), None)
+                    
+                    if adpc_fk:
+                        adpc_join = f"""
+                            LEFT JOIN tb_fat_atend_dom_prob_cond adpc ON fad.{dom_pk} = adpc.{adpc_fk}
+                            LEFT JOIN tb_dim_cid dim_cid ON adpc.co_dim_cid = dim_cid.co_seq_dim_cid
+                            LEFT JOIN tb_dim_ciap dim_ciap ON adpc.co_dim_ciap = dim_ciap.co_seq_dim_ciap
+                        """
+                    else:
+                         yield ('WARNING', "Skipping Home Visit Details: Could not find FK in adpc table.")
+                         adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
                 else:
                     # If adpc tables are missing (older versions?), allow nulls
                     adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
@@ -357,13 +363,12 @@ class PecConnectorEngine:
                     if not prof_col:
                          yield ('WARNING', "Skipping Collective: Could not find professional column.")
                     else:
-                        # FIX: dt_nascimento does not exist in part table, fetching from cid table.
-                        # Also ensuring sex comes from cid or dim_sexo via cid.
+                        # FIX: Join dim_tempo for birth date (dt_nascimento not in cid_pec)
                         
                         sql_collective = f"""
                             SELECT fac.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, NULL,
                                    cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
-                                   cid.dt_nascimento, NULL, 'ATIV_COLETIVA', 'ATIVIDADE COLETIVA',
+                                   tempo_nasc.dt_registro, NULL, 'ATIV_COLETIVA', 'ATIVIDADE COLETIVA',
                                    tempo.dt_registro, 'COLLECTIVE_ACTIVITY', NULL, NULL
                             FROM tb_fat_atividade_coletiva fac
                             JOIN tb_fat_atvdd_coletiva_part part ON fac.{fac_pk} = part.{part_fk}
@@ -371,6 +376,9 @@ class PecConnectorEngine:
                             LEFT JOIN tb_fat_cidadao_pec cid ON part.co_fat_cidadao_pec = cid.co_seq_fat_cidadao_pec
                             LEFT JOIN tb_dim_tempo tempo ON fac.co_dim_tempo = tempo.co_seq_dim_tempo
                             LEFT JOIN tb_dim_sexo sex ON cid.co_dim_sexo = sex.co_seq_dim_sexo
+                            
+                            -- Fix Birth Date
+                            LEFT JOIN tb_dim_tempo tempo_nasc ON cid.co_dim_tempo_nascimento = tempo_nasc.co_seq_dim_tempo
                             
                             WHERE tempo.dt_registro >= %s
                         """
