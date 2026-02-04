@@ -7,6 +7,12 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.3.1-beta.1] - 2026-02-04
+### Fixed
+- **Extraction**: Correção crítica na extração de **Atividade Coletiva** (Detecção de colunas).
+- **Extraction**: Correção na extração de **Visita Domiciliar** (Join condicional para Schema antigo).
+- **Logs**: Correção de bug que ocultava mensagens de erro reais (`{e}`).
+
 ## [v3.3.0] - 2026-02-04
 ### Added
 - **Release**: Versão Estável Oficial (Promovida da Beta 19).
