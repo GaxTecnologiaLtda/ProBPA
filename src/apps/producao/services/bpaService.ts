@@ -524,7 +524,7 @@ export const saveOrUpdatePatient = async (
                 docRef = doc(db, 'patients', existingDocId);
             }
 
-            await safeWrite(updateDoc(docRef, sanitizedData), "Update Patient");
+            await safeWrite(setDoc(docRef, sanitizedData, { merge: true }), "Update/Upsert Patient");
             return existingDocId;
         } else {
             sanitizedData.createdAt = serverTimestamp();
@@ -864,5 +864,71 @@ export const getPendingExams = async (patientCns: string, entityId: string): Pro
     } catch (error) {
         console.error("Erro ao buscar exames pendentes:", error);
         return [];
+    }
+};
+
+export const softDeleteBpaRecord = async (
+    recordId: string,
+    justification: string,
+    contextData: {
+        date: string;
+        competenceMonth: string;
+        patientId?: string;
+        municipalityId: string;
+        entityId: string;
+        entityType: string;
+        unitId: string;
+        professionalId: string;
+    }
+) => {
+    try {
+        const {
+            date,
+            competenceMonth,
+            patientId,
+            municipalityId,
+            entityId,
+            entityType,
+            unitId,
+            professionalId
+        } = contextData;
+
+        const [yyyy, mm, dd] = date.split("-");
+        const dayKey = `${dd}-${mm}-${yyyy}`;
+
+        // 1. Identify Paths
+        const type = (entityType === 'Privada' || entityType === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
+
+        // This is the new standard path
+        // Note: For 'no-patient', the ID is usually literally 'no-patient' or similar in valid logic,
+        // but here we rely on patientId being correct from the record we fetched.
+        // If patientId is missing (Collective?), it might be different. 
+        // But for History (Individual/Odonto), patientId is usually present or handled.
+
+        const recordRef = doc(
+            db,
+            "municipalities", type, entityId, municipalityId,
+            "bpai_records", unitId,
+            "professionals", professionalId,
+            "competencias", competenceMonth,
+            "dates", dayKey,
+            "pacientes", patientId || 'no-patient',
+            "procedures", recordId
+        );
+
+        // Update Payload
+        const updateData = {
+            status: 'canceled',
+            cancellationReason: justification,
+            canceledAt: serverTimestamp()
+        };
+
+        await safeWrite(updateDoc(recordRef, updateData), "Soft Delete BPA Record");
+
+        return true;
+
+    } catch (error) {
+        console.error("Erro ao cancelar registro BPA:", error);
+        throw error;
     }
 };
