@@ -7,6 +7,11 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.3.1-beta.2] - 2026-02-04
+### Fixed
+- **Home Visit**: Detecção dinâmica de FK (`adpc` join) para compatibilidade entre versões do PEC.
+- **Collective**: Correção de `dt_nascimento` usando `tb_dim_tempo` (já que a coluna não existe na tabela fato).
+
 ## [v3.3.1-beta.1] - 2026-02-04
 ### Fixed
 - **Extraction**: Correção crítica na extração de **Atividade Coletiva** (Detecção de colunas).
