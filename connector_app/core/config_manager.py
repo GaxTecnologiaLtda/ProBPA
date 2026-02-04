@@ -100,9 +100,30 @@ class ConfigManager:
         if self.config_cache is None:
             self.config_cache = self._load_config_internal()
         
-        if self.config_cache:
-            return self.config_cache.get(key, default)
-        return default
+        if self.config_cache is None:
+            self._load_config_internal()
+        return self.config_cache.get(key, default)
+
+    def set_last_run_success(self, timestamp_iso: str):
+        """Update the last successful run timestamp."""
+        if self.config_cache is None:
+            self._load_config_internal()
+            if self.config_cache is None: self.config_cache = {}
+            
+        self.config_cache["last_run_success"] = timestamp_iso
+        
+        # Save back to file (encrypted)
+        # We need to preserve all other keys, so we just re-encrypt the cache
+        try:
+            json_str = json.dumps(self.config_cache)
+            encrypted_data = self.cipher.encrypt(json_str.encode())
+            with open(self.config_file, "wb") as f:
+                f.write(encrypted_data)
+        except Exception as e:
+            print(f"Error saving last run: {e}")
+
+    def get_last_run_success(self) -> str:
+        return self.get("last_run_success")
 
     def _load_config_internal(self):
         if not self.config_file.exists():

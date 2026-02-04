@@ -7,6 +7,13 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.4.0] - 2026-02-04
+### Added
+- **UI Safety**: Botão "PARAR" adicionado para interromper extrações a qualquer momento.
+- **UI Safety**: Mascaramento da senha de administrador (`***`) nas telas de configuração.
+- **Performance**: Modo de Extração Incremental ("12 hours", "24 hours") que busca apenas novos registros baseados na última execução com sucesso.
+- **Frontend**: Aumento do limite de visualização no painel para 10.000 registros (anteriormente 2.000).
+
 ## [v3.3.3] - 2026-02-04
 ### Fixed
 - **Critical Data Loss**: Correção na geração de IDs para Atividade Coletiva e Visita Domiciliar. Anteriormente, registros da mesma ficha (vários participantes ou condições) estavam se sobrescrevendo. Agora geram IDs únicos (`UUID_PARTICIPANTE` ou `UUID_CID_CIAP`).

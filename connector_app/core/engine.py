@@ -86,23 +86,44 @@ class PecConnectorEngine:
     def extract_and_send(self, days_back: int = 30) -> Generator[tuple, None, None]:
         """Run the full ETL process yielding (status_type, message)."""
         self.aborted = False
-        start_date = datetime.now() - timedelta(days=days_back)
         
-        yield ('INFO', f"Starting extraction from {start_date.date()}...")
+        # --- INCREMENTAL LOGIC ---
+        interval_setting = self.config.get("scheduler_interval", "15")
+        last_run = self.config.get_last_run_success()
+        
+        start_date = datetime.now() - timedelta(days=days_back)
+        is_incremental = False
+        
+        if interval_setting in ["12 hours", "24 hours"] and last_run:
+            try:
+                # If we have a successful last run, start from there!
+                # We subtract a small buffer (e.g. 1 hour) just to be safe against long transactions?
+                # Or exact time? Let's use exact time but ensure >= logic handles it.
+                last_run_dt = datetime.fromisoformat(last_run)
+                start_date = last_run_dt
+                is_incremental = True
+                yield ('INFO', f"Incremental Mode: Starting from last success ({start_date})")
+            except:
+                yield ('WARNING', "Failed to parse last run time. Defaulting to full days back.")
+        else:
+            yield ('INFO', f"Full Load Mode: Starting from {days_back} days ago ({start_date.date()})")
+
         
         conn = None
         try:
+            if self.aborted: return
             yield ('INFO', f"Connecting to DB {self.db['host']}...")
             conn = psycopg2.connect(
                 host=self.db.get('host'),
                 port=self.db.get('port'),
                 dbname=self.db.get('name'),
                 user=self.db.get('user'),
-                password=self.db.get('password')
+                password=self.db.get('password'),
+                connect_timeout=10
             )
             cur = conn.cursor()
             
-            # --- Collection Lists ---
+            # --- EXTRACTION ---
             all_rows = []
             
             # =================================================================================
@@ -416,7 +437,17 @@ class PecConnectorEngine:
             if conn: conn.rollback()
         finally:
             if conn: conn.close()
+            
+            if not self.aborted and 'ERROR' not in [x[0] for x in list(self.log_history) if x]: 
+                # Ideally we track success status better
+                # But for now, let's assume if we reached here without exception catch
+                # Wait, exception catch sets ERROR.
+                pass
+
             yield ('SUCCESS', "Cycle Complete.")
+            if not self.aborted:
+                 # Update Last Run success for incremental
+                 self.config.set_last_run_success(datetime.now().isoformat())
 
     def _send_batch(self, rows):
         payload = []

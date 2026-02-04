@@ -66,7 +66,11 @@ class DashboardScreen(ctk.CTkFrame):
         self.lbl_timer.pack(pady=10)
 
         self.btn_run_now = ctk.CTkButton(self.tab_status, text="EXECUTAR AGORA", command=self.start_extraction_thread, width=200, height=50, fg_color="#2962FF")
-        self.btn_run_now.pack(pady=20)
+        self.btn_run_now.pack(pady=10)
+
+        # Stop Button (New in v3.4.0)
+        self.btn_stop = ctk.CTkButton(self.tab_status, text="PARAR", command=self.stop_extraction, width=200, height=40, fg_color="#C62828", state="disabled")
+        self.btn_stop.pack(pady=5)
         
         # Live Log Box
         self.log_box = ctk.CTkTextbox(self.tab_status, height=200, state="disabled")
@@ -145,12 +149,18 @@ class DashboardScreen(ctk.CTkFrame):
             try:
                 interval_str = self.config_manager.get("scheduler_interval", "15")
                 
-                if interval_str == "Manual Only" or not interval_str.isdigit():
+                # Handle extended intervals
+                if interval_str == "12 hours":
+                    interval_min = 720
+                elif interval_str == "24 hours":
+                    interval_min = 1440
+                elif interval_str == "Manual Only" or not interval_str.isdigit():
                     self.lbl_timer.configure(text="Agendamento: Manual")
                     time.sleep(10)
                     continue
+                else:
+                    interval_min = int(interval_str)
 
-                interval_min = int(interval_str)
                 now = datetime.now()
 
                 if self.last_run_time:
@@ -178,9 +188,16 @@ class DashboardScreen(ctk.CTkFrame):
         if self.is_running: return
         self.is_running = True
         self.btn_run_now.configure(state="disabled")
+        self.btn_stop.configure(state="normal") # Enable STOP
         self.lbl_big_status.configure(text="EXECUTANDO...", text_color="yellow")
         
         threading.Thread(target=self.run_process, daemon=True).start()
+
+    def stop_extraction(self):
+        """Signal abort to engine."""
+        self.engine.abort()
+        self.log(">>> Solicitando PARADAAAA... <<<", "error")
+        self.btn_stop.configure(state="disabled", text="Parando...")
 
     def run_process(self):
         records_processed = 0
@@ -195,18 +212,24 @@ class DashboardScreen(ctk.CTkFrame):
                 if "Found" in message and "records" in message:
                      # Attempt to parse simple count logic if needed, or Engine yields it
                      pass
-                if status_type == 'ERROR':
+                if status_type == 'ERROR': # Error or Abort
                     success = False
             
-            final_status = "SUCCESS" if success else "ERROR" # Simplified logic
-            if success:
-                 self.after(0, lambda: self.lbl_big_status.configure(text="ONLINE (AGUARDANDO)", text_color="green"))
-                 if self.notify_callback:
-                    self.notify_callback("Conector ProBPA", "Extração realizada com sucesso!")
+            if self.engine.aborted:
+                 success = False
+                 final_status = "ABORTED"
+                 self.after(0, lambda: self.lbl_big_status.configure(text="CANCELADO", text_color="orange"))
+                 self.after(0, self.log, "Processo abortado pelo usuário.", "error")
             else:
-                 self.after(0, lambda: self.lbl_big_status.configure(text="ERRO NA EXTRAÇÃO", text_color="red"))
-                 if self.notify_callback:
-                    self.notify_callback("Conector ProBPA", "Erro durante a extração. Verifique o app.")
+                final_status = "SUCCESS" if success else "ERROR"
+                if success:
+                     self.after(0, lambda: self.lbl_big_status.configure(text="ONLINE (AGUARDANDO)", text_color="green"))
+                     if self.notify_callback:
+                        self.notify_callback("Conector ProBPA", "Extração realizada com sucesso!")
+                else:
+                     self.after(0, lambda: self.lbl_big_status.configure(text="ERRO NA EXTRAÇÃO", text_color="red"))
+                     if self.notify_callback:
+                        self.notify_callback("Conector ProBPA", "Erro durante a extração. Verifique o app.")
 
         except Exception as e:
             self.after(0, self.log, f"CRITICAL: {e}")
@@ -216,6 +239,7 @@ class DashboardScreen(ctk.CTkFrame):
             self.last_run_time = datetime.now()
             self.history_manager.add_entry(final_status, "Ciclo finalizado", records_processed)
             self.after(0, lambda: self.btn_run_now.configure(state="normal"))
+            self.after(0, lambda: self.btn_stop.configure(state="disabled", text="PARAR")) # Reset STOP button
             self.after(0, self.refresh_history)
 
     def refresh_history(self):
@@ -234,10 +258,40 @@ class DashboardScreen(ctk.CTkFrame):
             
         self.history_text.configure(state="disabled")
 
-    def request_admin_action(self, action_type):
-        dialog = ctk.CTkInputDialog(text="Digite a Senha de Administrador:", title="Autenticação")
-        pwd = dialog.get_input()
+    def _ask_password(self):
+        """Secure password prompt."""
+        input_value = {"val": None}
         
+        pop = ctk.CTkToplevel(self)
+        pop.title("Autenticação")
+        pop.geometry("300x150")
+        pop.attributes("-topmost", True)
+        
+        # Center
+        pop.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (150)
+        y = (self.winfo_screenheight() // 2) - (75)
+        pop.geometry(f"+{x}+{y}")
+
+        ctk.CTkLabel(pop, text="Digite a senha de admin:").pack(pady=10)
+        entry = ctk.CTkEntry(pop, show="*", width=200)
+        entry.pack(pady=5)
+        entry.focus()
+        
+        def on_ok():
+            input_value["val"] = entry.get()
+            pop.destroy()
+            
+        ctk.CTkButton(pop, text="Confirmar", command=on_ok).pack(pady=10)
+        
+        self.wait_window(pop)
+        return input_value["val"]
+
+    def request_admin_action(self, action_type):
+        pwd = self._ask_password()
+        
+        if not pwd: return
+
         real_pass = self.config_manager.get("admin_password")
         
         if pwd == real_pass:

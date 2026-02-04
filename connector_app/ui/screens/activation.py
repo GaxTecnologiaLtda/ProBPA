@@ -41,7 +41,7 @@ class ActivationScreen(ctk.CTkScrollableFrame):
         self.lbl_interval = ctk.CTkLabel(self, text="Intervalo de Extração (Minutos):")
         self.lbl_interval.grid(row=6, column=0, padx=20, sticky="w")
         
-        self.combo_interval = ctk.CTkComboBox(self, values=["15", "30", "60", "120", "Manual Only"], width=300)
+        self.combo_interval = ctk.CTkComboBox(self, values=["15", "30", "60", "120", "12 hours", "24 hours", "Manual Only"], width=300)
         self.combo_interval.grid(row=7, column=0, padx=20, pady=5)
         self.combo_interval.set("15")
 

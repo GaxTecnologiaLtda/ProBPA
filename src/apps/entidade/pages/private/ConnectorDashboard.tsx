@@ -83,7 +83,7 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                 where('productionDate', '>=', startDate),
                 where('productionDate', '<=', endDate),
                 orderBy('productionDate', 'desc'),
-                limit(2000) // Limit to avoid massive reads, but enough for "View"
+                limit(10000) // Increased limit for v3.4.0
             );
 
             const snapshot = await getDocs(q);
