@@ -293,20 +293,37 @@ class PecConnectorEngine:
                 dom_pk = next((c for c in dom_cols if c.startswith('co_seq_')), 'co_seq_fat_atendimento_domiciliar')
                 
                 # Dynamic Deep Map Join
-                # If we can't find the exact PK, we might fail joining adpc, but we'll try.
                 adpc_join = ""
+                adpc_selects = "dim_cid.nu_cid, dim_ciap.nu_ciap" # Default selects
                 adpc_cols = self.get_table_columns(cur, 'tb_fat_atend_dom_prob_cond')
                 
                 if adpc_cols:
                     # Try to find the FK in adpc that points to parent
-                    # Usually co_fat_atd_dom
-                    adpc_join = f"LEFT JOIN tb_fat_atend_dom_prob_cond adpc ON fad.{dom_pk} = adpc.co_fat_atd_dom"
+                    fk_candidates = ['co_fat_atendimento_domiciliar', 'co_fat_atd_dom', 'co_fat_atd_domiciliar']
+                    adpc_fk = next((c for c in fk_candidates if c in adpc_cols), None)
+                    
+                    # Fallback: Fuzzy Match (any column with 'fat' and ('dom' or 'atd') that is not PK)
+                    if not adpc_fk:
+                         adpc_pk_guess = next((c for c in adpc_cols if c.startswith('co_seq_')), None)
+                         adpc_fk = next((c for c in adpc_cols if 'fat' in c and ('dom' in c or 'atd' in c) and c != adpc_pk_guess), None)
+
+                    if adpc_fk:
+                        adpc_join = f"""
+                            LEFT JOIN tb_fat_atend_dom_prob_cond adpc ON fad.{dom_pk} = adpc.{adpc_fk}
+                            LEFT JOIN tb_dim_cid dim_cid ON adpc.co_dim_cid = dim_cid.co_seq_dim_cid
+                            LEFT JOIN tb_dim_ciap dim_ciap ON adpc.co_dim_ciap = dim_ciap.co_seq_dim_ciap
+                        """
+                    else:
+                         yield ('WARNING', f"Skipping Home Visit Details: FK not found. Avail: {str(list(adpc_cols))}")
+                         adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
+                else:
+                    adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
 
                 sql_domiciliar = f"""
                     SELECT fad.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, cbo.nu_cbo,
                            cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
                            fad.dt_nascimento, unid.nu_cnes, 'DOMICILIAR', 'VISITA DOMICILIAR',
-                           tempo.dt_registro, 'HOME_VISIT', dim_cid.nu_cid, dim_ciap.nu_ciap
+                           tempo.dt_registro, 'HOME_VISIT', {adpc_selects}
                     FROM tb_fat_atendimento_domiciliar fad
                     LEFT JOIN tb_dim_profissional prof ON fad.co_dim_profissional_1 = prof.co_seq_dim_profissional
                     LEFT JOIN tb_dim_cbo cbo ON fad.co_dim_cbo_1 = cbo.co_seq_dim_cbo
@@ -318,17 +335,15 @@ class PecConnectorEngine:
                     -- DEEP MAP JOIN (Diagnósticos Domiciliares)
                     {adpc_join}
                     
-                    LEFT JOIN tb_dim_cid dim_cid ON adpc.co_dim_cid = dim_cid.co_seq_dim_cid
-                    LEFT JOIN tb_dim_ciap dim_ciap ON adpc.co_dim_ciap = dim_ciap.co_seq_dim_ciap
                     WHERE tempo.dt_registro >= %s
                 """
                 cur.execute(sql_domiciliar, (start_date.date(),))
                 rows = cur.fetchall()
-                yield ('INFO', f"   -> Found {{len(rows)}} home visits.")
+                yield ('INFO', f"   -> Found {len(rows)} home visits.")
                 all_rows.extend(rows)
             except Exception as e:
                 conn.rollback()
-                yield ('WARNING', f"Skipping Home Visits (Error): {{e}}")
+                yield ('WARNING', f"Skipping Home Visits (Error): {e}")
 
             # =================================================================================
             # QUERY 7: ATIVIDADE COLETIVA
@@ -342,33 +357,51 @@ class PecConnectorEngine:
                 if fac_cols and part_cols:
                     fac_pk = 'co_seq_fat_atvdd_coletiva' if 'co_seq_fat_atvdd_coletiva' in fac_cols else 'co_seq_fat_atividade_coletiva'
                     part_fk = 'co_fat_atvdd_coletiva' if 'co_fat_atvdd_coletiva' in part_cols else 'co_fat_atividade_coletiva'
-                    prof_col = 'co_dim_profissional_responsavel' if 'co_dim_profissional_responsavel' in fac_cols else 'co_dim_profissional'
-                    if prof_col not in fac_cols and 'co_dim_profissional_1' in fac_cols: prof_col = 'co_dim_profissional_1'
-
-                    # FIX: dt_nascimento does not exist in part table, fetching from cid table.
-                    # Also ensuring sex comes from cid or dim_sexo via cid.
                     
-                    sql_collective = f"""
-                        SELECT fac.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, NULL,
-                               cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
-                               cid.dt_nascimento, NULL, 'ATIV_COLETIVA', 'ATIVIDADE COLETIVA',
-                               tempo.dt_registro, 'COLLECTIVE_ACTIVITY', NULL, NULL
-                        FROM tb_fat_atividade_coletiva fac
-                        JOIN tb_fat_atvdd_coletiva_part part ON fac.{fac_pk} = part.{part_fk}
-                        LEFT JOIN tb_dim_profissional prof ON fac.{prof_col} = prof.co_seq_dim_profissional
-                        LEFT JOIN tb_fat_cidadao_pec cid ON part.co_fat_cidadao_pec = cid.co_seq_fat_cidadao_pec
-                        LEFT JOIN tb_dim_tempo tempo ON fac.co_dim_tempo = tempo.co_seq_dim_tempo
-                        LEFT JOIN tb_dim_sexo sex ON cid.co_dim_sexo = sex.co_seq_dim_sexo
-                        
-                        WHERE tempo.dt_registro >= %s
-                    """
-                    cur.execute(sql_collective, (start_date.date(),))
-                    rows = cur.fetchall()
-                    yield ('INFO', f"   -> Found {{len(rows)}} collective participants.")
-                    all_rows.extend(rows)
+                    # Robust Professional Column Detection
+                    possible_prof_cols = ['co_dim_profissional_responsavel', 'co_dim_profissional_1', 'co_dim_profissional']
+                    prof_col = next((c for c in possible_prof_cols if c in fac_cols), None)
+                    
+                    # Robust Procedure Column Detection
+                    proc_col = 'co_dim_procedimento' if 'co_dim_procedimento' in fac_cols else None
+                    proc_join = ""
+                    proc_select_code = "'ATIV_COLETIVA'"
+                    proc_select_name = "'ATIVIDADE COLETIVA'"
+                    
+                    if proc_col:
+                        proc_join = f"LEFT JOIN tb_dim_procedimento proc ON fac.{proc_col} = proc.co_seq_dim_procedimento"
+                        proc_select_code = "COALESCE(proc.co_proced, 'ATIV_COLETIVA')"
+                        proc_select_name = "COALESCE(proc.ds_proced, 'ATIVIDADE COLETIVA')"
+                    
+                    if not prof_col:
+                         yield ('WARNING', "Skipping Collective: Could not find professional column.")
+                    else:
+                        sql_collective = f"""
+                            SELECT fac.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, NULL,
+                                   cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
+                                   tempo_nasc.dt_registro, NULL, {proc_select_code}, {proc_select_name},
+                                   tempo.dt_registro, 'COLLECTIVE_ACTIVITY', NULL, NULL
+                            FROM tb_fat_atividade_coletiva fac
+                            JOIN tb_fat_atvdd_coletiva_part part ON fac.{fac_pk} = part.{part_fk}
+                            LEFT JOIN tb_dim_profissional prof ON fac.{prof_col} = prof.co_seq_dim_profissional
+                            LEFT JOIN tb_fat_cidadao_pec cid ON part.co_fat_cidadao_pec = cid.co_seq_fat_cidadao_pec
+                            LEFT JOIN tb_dim_tempo tempo ON fac.co_dim_tempo = tempo.co_seq_dim_tempo
+                            LEFT JOIN tb_dim_sexo sex ON cid.co_dim_sexo = sex.co_seq_dim_sexo
+                            
+                            -- Fix Birth Date via dim_tempo
+                            LEFT JOIN tb_dim_tempo tempo_nasc ON cid.co_dim_tempo_nascimento = tempo_nasc.co_seq_dim_tempo
+                            
+                            {proc_join}
+                            
+                            WHERE tempo.dt_registro >= %s
+                        """
+                        cur.execute(sql_collective, (start_date.date(),))
+                        rows = cur.fetchall()
+                        yield ('INFO', f"   -> Found {len(rows)} collective participants.")
+                        all_rows.extend(rows)
             except Exception as e:
                 conn.rollback()
-                yield ('WARNING', f"Skipping Collective Activity (Error/Schema): {{e}}")
+                yield ('WARNING', f"Skipping Collective Activity (Error/Schema): {e}")
 
             # --- SENDING ---
             if self.aborted: return

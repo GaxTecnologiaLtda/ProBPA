@@ -7,6 +7,11 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.3.2] - 2026-02-04
+### Fixed
+- **Hotfix**: Correção urgente de erro de sintaxe nos logs (`{{e}}`) que causava falha na extração.
+- **Hotfix**: Restauração da detecção "Fuzzy" para Visita Domiciliar e "Smart Code" para Atividade Coletiva que haviam sido revertidos acidentalmente.
+
 ## [v3.3.1] - 2026-02-04
 ### Fixed
 - **Home Visit**: Algoritmo de busca "fuzzy" para encontrar a chave estrangeira (`co_fat_...`) quando o nome exato não é conhecido.
