@@ -162,6 +162,11 @@ const ProfessionalRegistration: React.FC = () => {
             return;
         }
 
+        if (!formData.cns || formData.cns.length < 5) {
+            alert("O CNS é obrigatório.");
+            return;
+        }
+
         setSubmitting(true);
         try {
             // GENERATE DETERMINISTIC ID
@@ -446,6 +451,7 @@ const ProfessionalRegistration: React.FC = () => {
                                     label="CNS (Cartão Nacional de Saúde)"
                                     value={formData.cns}
                                     onChange={(e) => setFormData({ ...formData, cns: e.target.value })}
+                                    required
                                     placeholder="700 0000 0000 0000"
                                 />
                             </div>
@@ -478,7 +484,7 @@ const ProfessionalRegistration: React.FC = () => {
                         {/* Assinatura */}
                         <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                             <h3 className="text-sm font-bold text-blue-800 mb-2 flex items-center">
-                                <FileSignature className="w-4 h-4 mr-2" /> Assinatura Digitalizada
+                                <FileSignature className="w-4 h-4 mr-2" /> Assinatura Digitalizada <span className="text-red-500 ml-1" title="Obrigatório">*</span>
                             </h3>
                             <p className="text-xs text-blue-600 mb-4">
                                 Anexe uma foto ou escaneamento da sua assinatura em papel branco.

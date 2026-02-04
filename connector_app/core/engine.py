@@ -86,6 +86,7 @@ class PecConnectorEngine:
     def extract_and_send(self, days_back: int = 30) -> Generator[tuple, None, None]:
         """Run the full ETL process yielding (status_type, message)."""
         self.aborted = False
+        has_error = False
         
         # --- INCREMENTAL LOGIC ---
         interval_setting = self.config.get("scheduler_interval", "15")
@@ -430,22 +431,24 @@ class PecConnectorEngine:
             
             # We need to yield from _send_batch
             for msg in self._send_batch(all_rows):
+                if msg[0] == 'ERROR': has_error = True
                 yield msg
             
         except Exception as e:
+            has_error = True
             yield ('ERROR', f"Process Error: {e}")
             if conn: conn.rollback()
         finally:
             if conn: conn.close()
             
-            if not self.aborted and 'ERROR' not in [x[0] for x in list(self.log_history) if x]: 
+            if not self.aborted and not has_error: 
                 # Ideally we track success status better
                 # But for now, let's assume if we reached here without exception catch
                 # Wait, exception catch sets ERROR.
                 pass
 
             yield ('SUCCESS', "Cycle Complete.")
-            if not self.aborted:
+            if not self.aborted and not has_error:
                  # Update Last Run success for incremental
                  self.config.set_last_run_success(datetime.now().isoformat())
 

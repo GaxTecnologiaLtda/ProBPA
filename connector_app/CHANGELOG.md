@@ -7,6 +7,11 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.4.1] - 2026-02-04
+### Fixed
+- **CRITICAL HOTFIX**: Correção de crash (`AttributeError: log_history`) ao finalizar o ciclo de extração com sucesso.
+- **Odonto Query**: Correção de typo (`fai` -> `fao`) na consulta de atendimentos odontológicos que causava erro de execução.
+
 ## [v3.4.0] - 2026-02-04
 ### Added
 - **UI Safety**: Botão "PARAR" adicionado para interromper extrações a qualquer momento.
