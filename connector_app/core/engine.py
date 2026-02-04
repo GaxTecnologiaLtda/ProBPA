@@ -304,6 +304,11 @@ class PecConnectorEngine:
                     fk_candidates = ['co_fat_atendimento_domiciliar', 'co_fat_atd_dom', 'co_fat_atd_domiciliar']
                     adpc_fk = next((c for c in fk_candidates if c in adpc_cols), None)
                     
+                    # Fallback: Fuzzy Match (any column with 'fat' and ('dom' or 'atd') that is not PK)
+                    if not adpc_fk:
+                         adpc_pk_guess = next((c for c in adpc_cols if c.startswith('co_seq_')), None)
+                         adpc_fk = next((c for c in adpc_cols if 'fat' in c and ('dom' in c or 'atd' in c) and c != adpc_pk_guess), None)
+
                     if adpc_fk:
                         adpc_join = f"""
                             LEFT JOIN tb_fat_atend_dom_prob_cond adpc ON fad.{dom_pk} = adpc.{adpc_fk}
@@ -311,7 +316,7 @@ class PecConnectorEngine:
                             LEFT JOIN tb_dim_ciap dim_ciap ON adpc.co_dim_ciap = dim_ciap.co_seq_dim_ciap
                         """
                     else:
-                         yield ('WARNING', "Skipping Home Visit Details: Could not find FK in adpc table.")
+                         yield ('WARNING', f"Skipping Home Visit Details: FK not found. Avail: {str(list(adpc_cols))}")
                          adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
                 else:
                     # If adpc tables are missing (older versions?), allow nulls
