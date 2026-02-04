@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, Button, Input, Select } from '../components/ui/BaseComponents';
 import { LISTA_SEXO, LISTA_RACA_COR, LISTA_CARATER_ATENDIMENTO } from '../constants';
-import { Search, Plus, MapPin, AlertCircle, CheckCircle, FileText, UserCheck, Stethoscope, Hammer, ClipboardList, Syringe, User, Layout, Activity, ChevronUp, ChevronDown, Calendar, LayoutTemplate, WifiOff } from 'lucide-react';
+import { Search, Plus, MapPin, AlertCircle, CheckCircle, FileText, UserCheck, Stethoscope, Hammer, ClipboardList, Syringe, User, Layout, Activity, ChevronUp, ChevronDown, Calendar, LayoutTemplate, WifiOff, Unlock } from 'lucide-react';
 
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -477,6 +477,13 @@ export const Register: React.FC = () => {
         }
     }, [currentUnit]);
 
+    // EFFECT: Auto-select unit if user has only one assignment
+    useEffect(() => {
+        if (!currentUnit && user?.units?.length === 1) {
+            selectUnit(user.units[0]);
+        }
+    }, [currentUnit, user?.units, selectUnit]);
+
     // Determine if unit is subject to LEDI/APS integration
     const isLediTarget = useMemo(() => {
         // 0. Simplified Configuration Check
@@ -921,9 +928,9 @@ export const Register: React.FC = () => {
 
         // LEDI/APS Validation
         if (isLediTarget) {
-            // 1. CNS Validation (Modulo 11)
-            if (!formData.patientCns) {
-                setError('Para unidades APS (e-SUS), o CNS do paciente é obrigatório.');
+            // 1. CNS Validation (Modulo 11) - NOW CNS OR CPF
+            if (!formData.patientCns && !formData.patientCpf) {
+                setError('Para unidades APS (e-SUS), é obrigatório informar o CNS ou o CPF do paciente.');
                 return;
             }
             if (formData.patientCns.length > 0 && !validateCNS(formData.patientCns)) {
@@ -1500,12 +1507,7 @@ export const Register: React.FC = () => {
         );
     }
 
-    // EFFECT: Auto-select unit if user has only one assignment
-    useEffect(() => {
-        if (!currentUnit && user?.units?.length === 1) {
-            selectUnit(user.units[0]);
-        }
-    }, [currentUnit, user?.units, selectUnit]);
+
 
     // BLOCKING RENDER: Unit Selection for Multi-Link Professionals
     // If no unit is selected and user has multiple units, force selection before showing form.
@@ -1832,6 +1834,18 @@ export const Register: React.FC = () => {
                                     <Button type="button" variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="gap-2">
                                         <Activity size={16} />
                                         Ver Histórico
+                                    </Button>
+                                )}
+                                {patientFound && isReadOnlyPatient && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setIsReadOnlyPatient(false)}
+                                        className="gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                    >
+                                        <Unlock size={16} />
+                                        Editar
                                     </Button>
                                 )}
                                 <Button variant="outline" size="sm" type="button" disabled title="Em breve: Integração DataSUS">

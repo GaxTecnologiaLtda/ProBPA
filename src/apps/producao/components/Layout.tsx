@@ -29,7 +29,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const mainNavItems = [
         { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
         { to: "/registrar", icon: PlusCircle, label: "Registrar Atendimento" },
-        { to: "/cidadao", icon: UserCircle, label: "Cadastro do Cidadão" },
+
         { to: "/historico", icon: History, label: "Histórico" },
         { to: "/unidades", icon: Building2, label: "Unidades" },
         { to: "/tutoriais", icon: BookOpen, label: "Tutoriais" },
