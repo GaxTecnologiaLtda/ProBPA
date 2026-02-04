@@ -435,9 +435,30 @@ export const municipalityReportService = {
 
             // 3. Normalize Extracted Records
             const normalizedExtracted = extractedRecords.map(rec => {
-                // Map CNS -> Professional ID
-                const profCns = rec.professional?.cns;
-                const matchedProf = professionalsMap?.find(p => p.cns === profCns);
+                // --- SMART MATCHING LOGIC ---
+                // Priority: 1. CNS, 2. CPF (if avail), 3. Name (Normalized)
+                let matchedProf = null;
+
+                const recCns = onlyNumbers(rec.professional?.cns || '');
+                const recCpf = onlyNumbers(rec.professional?.cpf || '');
+                const recName = normalize(rec.professional?.name || '');
+
+                if (professionalsMap && professionalsMap.length > 0) {
+                    // 1. Try CNS
+                    if (recCns.length > 5) { // minimal validity check
+                        matchedProf = professionalsMap.find(p => onlyNumbers(p.cns) === recCns);
+                    }
+
+                    // 2. Try CPF (if not found yet)
+                    if (!matchedProf && recCpf.length > 5) {
+                        matchedProf = professionalsMap.find(p => onlyNumbers(p.cpf) === recCpf);
+                    }
+
+                    // 3. Try Name (if not found yet)
+                    if (!matchedProf && recName.length > 3) {
+                        matchedProf = professionalsMap.find(p => normalize(p.name) === recName);
+                    }
+                }
 
                 // Clean CBO
                 const cbo = String(rec.professional?.cbo || '').replace(/\D/g, '');
@@ -458,7 +479,7 @@ export const municipalityReportService = {
                     source: 'connector',
 
                     // Linkage
-                    professionalId: matchedProf?.id || `ext_${profCns}`, // Fallback ID
+                    professionalId: matchedProf?.id || `ext_${recCns || 'unknown'}`, // Fallback ID
                     professionalName: matchedProf?.name || rec.professional?.name || 'Profissional Externo',
                     unitId: rec.unit?.cnes || 'EXT', // Placeholder
                     municipalityId,

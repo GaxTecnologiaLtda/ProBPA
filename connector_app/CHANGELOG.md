@@ -7,6 +7,13 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.3.1] - 2026-02-04
+### Fixed
+- **Home Visit**: Algoritmo de busca "fuzzy" para encontrar a chave estrangeira (`co_fat_...`) quando o nome exato não é conhecido.
+- **Collective**: Extração dinâmica do código do procedimento (ex: '0101010010') ao invés do genérico 'ATIV_COLETIVA'.
+- **Collective**: Detecção robusta da coluna de procedimento na tabela principal.
+- **Debug**: Logs detalhados com as colunas disponíveis caso a tabela exista mas a FK não seja encontrada.
+
 ## [v3.3.0] - 2026-02-04
 ### Added
 - **Release**: Versão Estável Oficial (Promovida da Beta 19).
