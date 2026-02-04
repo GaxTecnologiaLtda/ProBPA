@@ -363,7 +363,10 @@ export const municipalityReportService = {
                     const matchesComp = docComp === compFilter;
                     const matchesUnit = unitIds.length > 0 ? unitIds.includes(d.unitId) : true;
                     const matchesMun = municipalityId ? d.municipalityId === municipalityId : true;
-                    return matchesComp && matchesUnit && matchesMun;
+                    // FILTER: Ignore canceled/excluded records
+                    const isCanceled = d.status === 'canceled';
+
+                    return matchesComp && matchesUnit && matchesMun && !isCanceled;
                 });
             })();
 
@@ -517,7 +520,29 @@ export const municipalityReportService = {
             return a.professionalName.localeCompare(b.professionalName) || a.procedureCode.localeCompare(b.procedureCode);
         });
         rows.forEach((r, i) => r.seq = i + 1);
+        rows.forEach((r, i) => r.seq = i + 1);
         return rows;
+    },
+
+    prepareBpaIData: (records: any[]): any[] => {
+        // Reuse aggregation or just map for BPA-I export context
+        // BPA-I is individual, but we normalized rows in step 3. 
+        // So we can just return strict formatted data if needed, or pass through.
+        // The Goals.tsx uses this to show a preview table.
+        return records.map(r => ({
+            source: r.source,
+            professionalName: r.professionalName,
+            patientName: r.patientName,
+            patientCns: r.patientCns,
+            attendanceDate: r.attendanceDate,
+            procedureCode: r.procedureCode,
+            procedureName: r.procedureName,
+            cbo: r.cbo,
+            cid: r.cid || '-',
+            quantity: r.quantity,
+            age: r.patientAge,
+            professionalId: r.professionalId
+        }));
     },
 
     generatePdfBpaC: (rows: BpaCReportRow[], meta: any) => {

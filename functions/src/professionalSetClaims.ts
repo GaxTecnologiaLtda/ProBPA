@@ -20,10 +20,6 @@ export const professionalSetClaims = functions
             email,
             entityId,
             entityName,
-            municipalityId,
-            municipalityName,
-            unitId,
-            unitName,
             name
         } = data;
 
@@ -87,22 +83,27 @@ export const professionalSetClaims = functions
                 }
             }
 
-            // 3. Definir Custom Claims
+            // 5. Atualizar documento do profissional com os assignments (GARANTIA para o frontend)
+            await db.collection("professionals").doc(professionalId).update({
+                accessGranted: true,
+                assignments: data.assignments || [], // Persistir no banco para o frontend ler
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            // 3. Definir Custom Claims (MINIMALISTA para evitar erro de 1000 bytes)
+            // Removemos 'assignments' e campos legados do token. 
+            // O frontend obtém os detalhes via Firestore (context.tsx).
             const claims = {
                 role: "PROFESSIONAL",
                 professionalId,
                 entityId,
                 entityName,
-                // Legacy fields for backward compatibility
-                municipalityId: data.assignments?.[0]?.municipalityId || municipalityId,
-                municipalityName: data.assignments?.[0]?.municipalityName || municipalityName,
-                unitId: data.assignments?.[0]?.unitId || unitId,
-                unitName: data.assignments?.[0]?.unitName || unitName,
                 name,
                 email,
                 active: true,
-                access: "PRODUCTION",
-                assignments: data.assignments || []
+                access: "PRODUCTION"
+                // assignments: REMOVIDO para economizar espaço
+                // legacy fields: REMOVIDOS
             };
 
             await auth.setCustomUserClaims(uid, claims);
@@ -113,13 +114,7 @@ export const professionalSetClaims = functions
                 email,
                 grantedAt: admin.firestore.FieldValue.serverTimestamp(),
                 grantedBy: callerUid,
-                claims
-            });
-
-            // 5. Atualizar flag no documento do profissional (redundância útil)
-            await db.collection("professionals").doc(professionalId).update({
-                accessGranted: true,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                claims // Logamos as claims geradas (simplificadas)
             });
 
             // 6. [NEW] Enviar e-mail com as credenciais (Simulado se SMTP off)

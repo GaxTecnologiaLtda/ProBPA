@@ -360,15 +360,24 @@ class PecConnectorEngine:
                     possible_prof_cols = ['co_dim_profissional_responsavel', 'co_dim_profissional_1', 'co_dim_profissional']
                     prof_col = next((c for c in possible_prof_cols if c in fac_cols), None)
                     
+                    # Robust Procedure Column Detection
+                    proc_col = 'co_dim_procedimento' if 'co_dim_procedimento' in fac_cols else None
+                    proc_join = ""
+                    proc_select_code = "'ATIV_COLETIVA'"
+                    proc_select_name = "'ATIVIDADE COLETIVA'"
+                    
+                    if proc_col:
+                        proc_join = f"LEFT JOIN tb_dim_procedimento proc ON fac.{proc_col} = proc.co_seq_dim_procedimento"
+                        proc_select_code = "COALESCE(proc.co_proced, 'ATIV_COLETIVA')"
+                        proc_select_name = "COALESCE(proc.ds_proced, 'ATIVIDADE COLETIVA')"
+                    
                     if not prof_col:
                          yield ('WARNING', "Skipping Collective: Could not find professional column.")
                     else:
-                        # FIX: Join dim_tempo for birth date (dt_nascimento not in cid_pec)
-                        
                         sql_collective = f"""
                             SELECT fac.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, NULL,
                                    cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
-                                   tempo_nasc.dt_registro, NULL, 'ATIV_COLETIVA', 'ATIVIDADE COLETIVA',
+                                   tempo_nasc.dt_registro, NULL, {proc_select_code}, {proc_select_name},
                                    tempo.dt_registro, 'COLLECTIVE_ACTIVITY', NULL, NULL
                             FROM tb_fat_atividade_coletiva fac
                             JOIN tb_fat_atvdd_coletiva_part part ON fac.{fac_pk} = part.{part_fk}
@@ -377,8 +386,10 @@ class PecConnectorEngine:
                             LEFT JOIN tb_dim_tempo tempo ON fac.co_dim_tempo = tempo.co_seq_dim_tempo
                             LEFT JOIN tb_dim_sexo sex ON cid.co_dim_sexo = sex.co_seq_dim_sexo
                             
-                            -- Fix Birth Date
+                            -- Fix Birth Date via dim_tempo
                             LEFT JOIN tb_dim_tempo tempo_nasc ON cid.co_dim_tempo_nascimento = tempo_nasc.co_seq_dim_tempo
+                            
+                            {proc_join}
                             
                             WHERE tempo.dt_registro >= %s
                         """
