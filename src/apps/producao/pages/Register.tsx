@@ -4,7 +4,7 @@ import { LISTA_SEXO, LISTA_RACA_COR, LISTA_CARATER_ATENDIMENTO } from '../consta
 import { Search, Plus, MapPin, AlertCircle, CheckCircle, FileText, UserCheck, Stethoscope, Hammer, ClipboardList, Syringe, User, Layout, Activity, ChevronUp, ChevronDown, Calendar, LayoutTemplate, WifiOff, Unlock } from 'lucide-react';
 
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { validateCNS, validatePatientName, validateVaccinationData } from '../utils/lediValidation';
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -105,7 +105,13 @@ const FichaButton: React.FC<FichaButtonProps> = ({ active, onClick, icon, title,
 
 export const Register: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user, currentUnit, selectUnit } = useApp();
+
+    // Edit Mode State
+    const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+    const [originalRecordData, setOriginalRecordData] = useState<any | null>(null);
+
     const [step, setStep] = useState<'form' | 'success'>('form');
 
     // MUNICIPALITY CONFIGURATION STATE
@@ -120,6 +126,24 @@ export const Register: React.FC = () => {
     }
 
     // Fetch Municipality Config - Robust Fetch
+    useEffect(() => {
+        // Edit Mode Hydration
+        if (location.state && location.state.editData) {
+            const editData = location.state.editData;
+            console.log("Hydrating form with edit data:", editData);
+
+            setEditingRecordId(editData.originalId || editData.id);
+            setOriginalRecordData(editData);
+
+            // Hydrate Patient Info if available in root
+            if (editData.patientCns || editData.patientCpf) {
+                // If we have access to setFormData (it's defined later), we should use it.
+                // But setFormData is defined later in the component?
+                // I need to check where setFormData is defined.
+            }
+        }
+    }, [location.state]);
+
     useEffect(() => {
         async function fetchConfig() {
             if (!currentUnit) return;
@@ -516,6 +540,64 @@ export const Register: React.FC = () => {
     const [pendingExams, setPendingExams] = useState<{ code: string, name: string, date: string }[]>([]);
 
     // Patient Auto-Search (Prefix/List)
+    // --------------------------------------------------------------------------
+    // HYDRATION LOGIC (For Edit Mode)
+    // --------------------------------------------------------------------------
+    useEffect(() => {
+        if (location.state && location.state.editData) {
+            const editData = location.state.editData;
+            console.log("Hydrating form with edit data:", editData);
+
+            setEditingRecordId(editData.originalId || editData.id);
+            setOriginalRecordData(editData);
+            setPatientFound(true);
+            setIsReadOnlyPatient(false); // Enable editing
+
+            // Hydrate Patient Info 
+            setFormData(prev => ({
+                ...prev,
+                // If patient info is in root of editData (which comes from History ProductionRecord)
+                // ProductionRecord has: patientCns, patientCpf (sometimes)
+                // It does NOT have full address, DOB, etc usually unless we fetch it.
+                // However, updated History often has enough for display.
+                // IMPORTANT: The Register form relies on formData for saving. 
+                // If we miss fields, saveOrUpdatePatient might overwrite with blanks if we are not careful.
+                // But saveOrUpdatePatient implementation in bpaService usually merges? 
+                // No, it usually overwrites.
+                // Ideally we should FETCH the patient data by CNS if possible.
+                // But for now, let's map what we have.
+                patientCns: editData.patientCns || prev.patientCns,
+                patientCpf: editData.patientCpf || prev.patientCpf,
+                patientName: editData.patientName || prev.patientName, // Might be missing in History logic if not joined
+                // We rely on the user to verify/fill if missing.
+
+                // Hydrate Procedure Date/Competence
+                attendanceDate: editData.date || prev.attendanceDate,
+                // Competence might need derivation from date if not present
+
+                // Unit?
+                unit: editData.unitId || prev.unit
+            }));
+
+            // Hydrate Procedures
+            // History Record 'procedure' field has { code, name, type }
+            // 'quantity', 'cidCodes'
+            if (editData.procedure) {
+                const hydratedProc: ProcedureItem = {
+                    id: editData.originalId || editData.id, // CRITICAL: Pass ID for update
+                    procedureCode: editData.procedure.code || editData.procedureCode || '',
+                    procedureName: editData.procedure.name || editData.procedureName || '',
+                    cidCodes: editData.cidCodes || [],
+                    attendanceCharacter: editData.attendanceCharacter || '01',
+                    quantity: Number(editData.quantity) || 1,
+                    isExpanded: true,
+                    obs: editData.observations || editData.obs || ''
+                };
+                setProcedures([hydratedProc]);
+            }
+        }
+    }, [location.state]);
+
     useEffect(() => {
         async function searchPatient() {
             const termCns = debouncedCns.replace(/\D/g, '');

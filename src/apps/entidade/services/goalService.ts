@@ -365,6 +365,9 @@ export const goalService = {
             const uniqueMap = new Map();
             snap.docs.forEach(d => {
                 const data = d.data();
+                // IN-MEMORY FILTER: Exclude canceled records (can't do in query with range)
+                if (data.status === 'canceled') return;
+
                 const id = data.id || d.id;
                 const pathParts = d.ref.path.split('/');
                 const isNewPath = pathParts[0] === 'municipalities';
@@ -488,18 +491,21 @@ export const goalService = {
                 productionQuery = query(
                     collectionGroup(db, 'procedures'),
                     where('entityId', '==', entityId),
-                    where('professionalId', '==', userClaims.professionalId)
+                    where('professionalId', '==', userClaims.professionalId),
+                    where('status', '!=', 'canceled') // EXCLUDE CANCELED
                 );
             } else if (userClaims.role === 'MASTER' && userClaims.municipalityId) {
                 productionQuery = query(
                     collectionGroup(db, 'procedures'),
                     where('entityId', '==', entityId),
-                    where('municipalityId', '==', userClaims.municipalityId)
+                    where('municipalityId', '==', userClaims.municipalityId),
+                    where('status', '!=', 'canceled') // EXCLUDE CANCELED
                 );
             } else {
                 productionQuery = query(
                     collectionGroup(db, 'procedures'),
-                    where('entityId', '==', entityId)
+                    where('entityId', '==', entityId),
+                    where('status', '!=', 'canceled') // EXCLUDE CANCELED
                 );
             }
 

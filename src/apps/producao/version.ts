@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.10.1';
+export const APP_VERSION = '1.11.2';
 
 export const getVersionString = () => {
     return APP_VERSION;
@@ -19,6 +19,33 @@ export interface ReleaseParams {
 }
 
 export const LATEST_CHANGES: ReleaseParams[] = [
+    {
+        version: '1.11.2',
+        date: '04/02/2026',
+        title: 'Hotfix: Exclusão Definitiva',
+        changes: [
+            { text: 'Correção: Exclusão agora utiliza referência direta do documento (Path), resolvendo erros de "Documento não encontrado".', scope: 'GLOBAL' }
+        ]
+    },
+    {
+        version: '1.11.1',
+        date: '04/02/2026',
+        title: 'Hotfix: Exclusão de Registros',
+        changes: [
+            { text: 'Correção Crítica: Ajuste na referência de documentos para exclusão (Soft Delete).', scope: 'GLOBAL' },
+            { text: 'Histórico: Ajuste no rótulo de registros cancelados para "EXCLUÍDO".', scope: 'GLOBAL' }
+        ]
+    },
+    {
+        version: '1.11.0',
+        date: '04/02/2026',
+        title: 'Gestão de Histórico e Cadastro',
+        changes: [
+            { text: 'Cancelamento de Registros: Exclusão com justificativa (Soft Delete) e visualização de itens cancelados.', scope: 'GLOBAL' },
+            { text: 'Validação Híbrida: Registro aceita CPF e/ou CNS, facilitando o atendimento.', scope: 'GLOBAL' },
+            { text: 'Otimização de Menu: Interface simplificada com remoção de itens redundantes.', scope: 'GLOBAL' }
+        ]
+    },
     {
         version: '1.10.1',
         date: '03/02/2026',

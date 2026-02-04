@@ -1,6 +1,28 @@
 # Changelog
 
-## [1.10.1] - 2026-02-03
+
+## [1.11.2] - 2026-02-04
+### Hotfix (Path Ref)
+
+#### Correções
+- **[GERAL] Exclusão:** Implementada lógica de exclusão por caminho absoluto (Firestore Path) para garantir que o registro correto seja deletado, independente do contexto.
+
+### Hotfix
+
+#### Correções
+- **[GERAL] Exclusão de Registros:** Correção de bug que impedia a exclusão (erro "No document to update").
+- **[UX] Badge:** Alterado texto de "CANCELADO" para "EXCLUÍDO".
+
+### Gestão de Histórico e Cadastro
+
+#### Histórico e Auditoria
+- **[GERAL] Cancelamento de Registros:** Nova funcionalidade para excluir atendimentos, exigindo justificativa obrigatória (Soft Delete).
+- **[GERAL] Rastreabilidade:** Itens cancelados ganham destaque visual "CANCELADO", mantendo o histórico auditável.
+
+#### Registro de Atendimento
+- **[GERAL] Validação Híbrida:** Flexibilidade total para registrar pacientes usando CPF e/ou CNS.
+- **[UX] Otimização de Menu:** Remoção de itens redundantes ("Cadastro de Cidadão") para simplificar a navegação.
+
 ### Correções de Interface
 
 #### Interface Simplificada (Correções)

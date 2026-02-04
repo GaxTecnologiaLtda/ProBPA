@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.3] - 2026-02-04
+### Correção de Limite de Vínculos
+- **Gestão de Profissionais:** Resolvido bug crítico que impedia a liberação de acesso para profissionais com muitos vínculos (erro de limite de 1000 caracteres no token).
+- **Escalabilidade:** Implementada nova arquitetura de autenticação que remove o limite prático de unidades por profissional, garantindo suporte a vínculos ilimitados.
+
 ## [1.6.2] - 2026-01-30
 ### Melhorias na Importação e Cadastro
 - **Importação de Profissionais:** 

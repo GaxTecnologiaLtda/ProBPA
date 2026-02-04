@@ -1,10 +1,19 @@
-export const APP_VERSION = '1.6.2';
+export const APP_VERSION = '1.6.3';
 
 export const getVersionString = () => {
     return APP_VERSION;
 };
 
 export const LATEST_CHANGES = [
+    {
+        version: '1.6.3',
+        date: '04/02/2026',
+        title: 'Correção de Limite de Vínculos',
+        changes: [
+            'Gestão de Profissionais: Resolvido erro de limite de caracteres ao liberar acesso para profissionais com múltiplos vínculos (9+ unidades).',
+            'Backend: Otimização da estrutura de autenticação para suportar número ilimitado de lotações por usuário.'
+        ]
+    },
     {
         version: '1.6.2',
         date: '30/01/2026',
