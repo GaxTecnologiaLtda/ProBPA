@@ -358,9 +358,11 @@ const ProfessionalRegistration: React.FC = () => {
                             <h3 className="text-sm font-bold text-gray-700 mb-1 flex items-center justify-between">
                                 <span className="flex items-center"><Building2 className="w-4 h-4 mr-2" /> Vínculos (Lotação)</span>
                             </h3>
-                            <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                                Adicione <strong>todas</strong> as unidades em que você possui vínculo de atuação e atende por esta entidade no município.
-                            </p>
+                            Adicione <strong>todas</strong> as unidades em que você possui vínculo de atuação e atende por esta entidade no município.
+                            <span className="block mt-1 text-red-600 font-bold uppercase tracking-tight bg-red-50 p-1 rounded inline-block">
+                                <AlertTriangle className="w-3 h-3 inline mr-1 mb-0.5" />
+                                É NECESSÁRIO ESTAR DEVIDAMENTE VINCULADO AO CNES DA UNIDADE EM QUE ATUA.
+                            </span>
 
                             {/* List Added Assignments */}
                             <div className="space-y-2 mb-4">
@@ -482,16 +484,34 @@ const ProfessionalRegistration: React.FC = () => {
                         </div>
 
                         {/* Assinatura */}
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <h3 className="text-sm font-bold text-blue-800 mb-2 flex items-center">
+                        <div className="bg-blue-50 p-6 rounded-lg border border-blue-100">
+                            <h3 className="text-sm font-bold text-blue-800 mb-3 flex items-center">
                                 <FileSignature className="w-4 h-4 mr-2" /> Assinatura Digitalizada <span className="text-red-500 ml-1" title="Obrigatório">*</span>
                             </h3>
-                            <p className="text-xs text-blue-600 mb-4">
-                                Anexe uma foto ou escaneamento da sua assinatura em papel branco.
-                                Isso será usado para gerar os relatórios de produção.
-                            </p>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-col md:flex-row gap-6 mb-4">
+                                <div className="flex-1 text-sm text-blue-700 space-y-2">
+                                    <p>Para garantir a validade dos seus documentos, siga o padrão abaixo:</p>
+                                    <ul className="list-disc list-inside space-y-1 ml-1 text-blue-800 font-medium">
+                                        <li>Use <strong>papel branco</strong> (sem pautas/linhas).</li>
+                                        <li>Carimbe e assine (ou escreva seu nome/registro legível).</li>
+                                        <li>Tire uma foto bem iluminada e <strong>focada apenas na assinatura</strong>.</li>
+                                        <li className="text-red-600">Não envie selfies ou fotos pessoais.</li>
+                                    </ul>
+                                </div>
+                                <div className="flex-shrink-0">
+                                    <p className="text-xs text-blue-500 mb-1 font-semibold uppercase tracking-wider">Exemplo Ideal:</p>
+                                    <div className="border-2 border-dashed border-blue-300 rounded bg-white p-2">
+                                        <img
+                                            src="/signature-example.png"
+                                            alt="Exemplo de Assinatura"
+                                            className="h-24 w-auto object-contain"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-4 bg-white p-3 rounded-lg border border-blue-200">
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -501,25 +521,30 @@ const ProfessionalRegistration: React.FC = () => {
                                 />
                                 <Button
                                     type="button"
-                                    variant="outline"
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="bg-white"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
                                 >
                                     <Upload className="w-4 h-4 mr-2" />
-                                    Escolher Arquivo
+                                    Selecionar Imagem
                                 </Button>
 
-                                {signatureFile && (
-                                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-gray-200">
-                                        <span className="text-xs font-medium truncate max-w-[150px]">{signatureFile.name}</span>
+                                {signatureFile ? (
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <span className="text-sm font-medium text-gray-700 truncate">{signatureFile.name}</span>
                                         <button
                                             type="button"
                                             onClick={() => { setSignatureFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                                            className="text-red-500 hover:text-red-700"
+                                            className="text-red-500 hover:text-red-700 p-1"
+                                            title="Remover arquivo"
                                         >
-                                            <X className="w-3 h-3" />
+                                            <X className="w-4 h-4" />
                                         </button>
+                                        <span className="ml-auto text-xs text-emerald-600 font-bold flex items-center">
+                                            <CheckCircle className="w-3 h-3 mr-1" /> OK
+                                        </span>
                                     </div>
+                                ) : (
+                                    <span className="text-xs text-gray-400 italic">Nenhum arquivo selecionado</span>
                                 )}
                             </div>
                         </div>

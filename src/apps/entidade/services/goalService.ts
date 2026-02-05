@@ -365,6 +365,9 @@ export const goalService = {
             const uniqueMap = new Map();
             snap.docs.forEach(d => {
                 const data = d.data();
+                // IN-MEMORY FILTER: Exclude canceled records (can't do in query with range)
+                if (data.status === 'canceled') return;
+
                 const id = data.id || d.id;
                 const pathParts = d.ref.path.split('/');
                 const isNewPath = pathParts[0] === 'municipalities';

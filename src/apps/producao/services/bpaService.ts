@@ -16,6 +16,7 @@ export interface BpaSharedData {
     // Patient Data
     patientId?: string;
     patientCns: string;
+    patientCpf?: string; // Added back
     patientName: string;
     patientDob: string;
     patientAge?: string; // Added
@@ -274,8 +275,6 @@ export interface ProcedureFormItem {
         localAplicacao?: string;
         especialidadeProfissionalPrescritor?: string;
         motivoIndicacao?: string;
-        especialidadeProfissionalPrescritor?: string;
-        motivoIndicacao?: string;
     };
     // Edit Support
     id?: string;
@@ -384,8 +383,6 @@ export const saveMultipleBpaRecords = async (
         );
 
         const ids: string[] = [];
-        const batch = writeBatch(db);
-
         const batch = writeBatch(db);
 
         for (const proc of procedures) {
@@ -706,7 +703,8 @@ export const getProfessionalHistory = async (professionalId: string, entityId?: 
                     unitId: data.unitId,
                     patientCns: data.patientCns,
                     status: data.status || 'pending',
-                    observations: data.obs
+                    observations: data.obs,
+                    firestorePath: doc.ref.path // Store exact path
                 };
             });
     } catch (error) {
@@ -888,6 +886,7 @@ export const softDeleteBpaRecord = async (
         entityType: string;
         unitId: string;
         professionalId: string;
+        firestorePath?: string; // Added for direct deletion
     }
 ) => {
     try {
@@ -906,24 +905,24 @@ export const softDeleteBpaRecord = async (
         const dayKey = `${dd}-${mm}-${yyyy}`;
 
         // 1. Identify Paths
-        const type = (entityType === 'Privada' || entityType === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
-
-        // This is the new standard path
-        // Note: For 'no-patient', the ID is usually literally 'no-patient' or similar in valid logic,
-        // but here we rely on patientId being correct from the record we fetched.
-        // If patientId is missing (Collective?), it might be different. 
-        // But for History (Individual/Odonto), patientId is usually present or handled.
-
-        const recordRef = doc(
-            db,
-            "municipalities", type, entityId, municipalityId,
-            "bpai_records", unitId,
-            "professionals", professionalId,
-            "competencias", competenceMonth,
-            "dates", dayKey,
-            "pacientes", patientId || 'no-patient',
-            "procedures", recordId
-        );
+        let recordRef;
+        // Check if direct path is provided in context (casted from history item)
+        if ((contextData as any).firestorePath) {
+            console.log("Using direct firestore path for deletion:", (contextData as any).firestorePath);
+            recordRef = doc(db, (contextData as any).firestorePath);
+        } else {
+            const type = (entityType === 'Privada' || entityType === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
+            recordRef = doc(
+                db,
+                "municipalities", type, entityId, municipalityId,
+                "bpai_records", unitId,
+                "professionals", professionalId,
+                "competencias", competenceMonth,
+                "dates", dayKey,
+                "pacientes", patientId || 'no-patient',
+                "procedures", recordId
+            );
+        }
 
         // Update Payload
         const updateData = {
