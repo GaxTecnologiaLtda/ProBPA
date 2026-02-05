@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Badge, Button, Modal, Input, Select } from '../../components/ui/Components';
 import { Plus, Search, User, Stethoscope, MapPin, Edit2, Trash2, Filter, Building2, ChevronDown, Briefcase, RefreshCw, Key, Mail, CheckCircle, Send, X, Upload, Link, Copy } from 'lucide-react';
 import { ImportProfessionalsModal } from './components/ImportProfessionalsModal';
+import { SigtapBrowserModal } from './components/SigtapBrowserModal';
 import { Professional, Unit, Municipality, ProfessionalAssignment } from '../../types';
 import { CBO_LIST } from '../../constants';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,6 +38,7 @@ const Professionals: React.FC = () => {
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isSigtapModalOpen, setIsSigtapModalOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedProfForAccess, setSelectedProfForAccess] = useState<Professional | null>(null);
@@ -341,6 +343,13 @@ const Professionals: React.FC = () => {
             <Button
               variant="outline"
               className="flex items-center gap-2"
+              onClick={() => setIsSigtapModalOpen(true)}
+            >
+              <Search className="w-4 h-4" /> SIGTAP
+            </Button>
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
               onClick={() => setIsLinkModalOpen(true)}
             >
               <Link className="w-4 h-4" /> Link Cadastro
@@ -567,6 +576,11 @@ const Professionals: React.FC = () => {
           </div>
         )}
       </div>
+
+      <SigtapBrowserModal
+        isOpen={isSigtapModalOpen}
+        onClose={() => setIsSigtapModalOpen(false)}
+      />
 
       {/* Modal de Links de Cadastro */}
       <Modal

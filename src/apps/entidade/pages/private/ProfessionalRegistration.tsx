@@ -162,8 +162,8 @@ const ProfessionalRegistration: React.FC = () => {
             return;
         }
 
-        if (!formData.cns || formData.cns.length < 5) {
-            alert("O CNS é obrigatório.");
+        if (!formData.cns || formData.cns.length !== 15) {
+            alert("O CNS é obrigatório e deve conter exatamente 15 dígitos numéricos.");
             return;
         }
 
@@ -452,9 +452,13 @@ const ProfessionalRegistration: React.FC = () => {
                                 <Input
                                     label="CNS (Cartão Nacional de Saúde)"
                                     value={formData.cns}
-                                    onChange={(e) => setFormData({ ...formData, cns: e.target.value })}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 15);
+                                        setFormData({ ...formData, cns: val });
+                                    }}
                                     required
-                                    placeholder="700 0000 0000 0000"
+                                    maxLength={15}
+                                    placeholder="700000000000000 (Apenas números)"
                                 />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

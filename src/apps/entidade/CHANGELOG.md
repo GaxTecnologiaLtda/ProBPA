@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.7.0] - 2026-02-04
+### Oficialização do Conector ProBPA e Performance
+- **Dashboard Conector:** 
+    - Oficialização da aba "Conector" e ativação completa dos fluxos de importação automatizada.
+    - **Performance Extrema:** Implementada paginação recursiva e cache em memória (local) para carregamento instantâneo de dados, eliminando o tempo de espera na navegação entre competências.
+    - **Correção de Discrepâncias:** Nova lógica de "Smart Matching" (reconciliação inteligente) que garante a contagem correta da produção mesmo quado o profissional possui divergências cadastrais (ex: CNS informado com CPF).
+    - **Estabilidade:** Eliminação definitiva de erros de requisição ("400 Bad Request") em visualizações com grande volume de dados.
+- **Segurança de Dados:**
+    - **Validação de CNS:** Implementada trava de segurança nos formulários de cadastro (Público e Administrativo) exigindo estritamente 15 dígitos numéricos, prevenindo erros de digitação e inconsistências futuras.
+
+## [1.6.3] - 2026-02-04
+### Correção na Busca SIGTAP e Estabilidade
+- **Busca SIGTAP:** 
+    - Corrigido bug crítico onde a busca rápida na tabela unificada retornava "Nenhum resultado".
+    - Implementada nova lógica de "Deep Search" que localiza procedimentos em todas as coleções do banco de dados, independente da estrutura de importação.
+- **Estabilidade:** Resolvido erro que travava a aplicação ao tentar visualizar os detalhes (botão "i") de um procedimento.
+- **Cadastro Profissional:**
+    - CNS: Implementada validação obrigatória de 15 dígitos numéricos.
+    - Alerta: Adicionado aviso visual sobre a obrigatoriedade do vínculo CNES.
+
 ## [1.6.2] - 2026-01-30
 ### Melhorias na Importação e Cadastro
 - **Importação de Profissionais:** 

@@ -226,6 +226,13 @@ const Professionals: React.FC = () => {
       return;
     }
 
+    // Validate CNS (Must be exactly 15 digits)
+    const cns = formData.cns || '';
+    if (cns.length !== 15) {
+      alert("O CNS deve conter exatamente 15 dígitos numéricos.");
+      return;
+    }
+
     // Use the first assignment for legacy fields
     const primaryAssignment = formAssignments[0];
 
@@ -630,8 +637,12 @@ const Professionals: React.FC = () => {
               <Input
                 label="CNS (Cartão Nacional de Saúde)"
                 value={formData.cns || ''}
-                onChange={e => setFormData({ ...formData, cns: e.target.value })}
-                placeholder="700000000000000"
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 15);
+                  setFormData({ ...formData, cns: val });
+                }}
+                placeholder="700000000000000 (Apenas números)"
+                maxLength={15}
                 required
               />
             </div>

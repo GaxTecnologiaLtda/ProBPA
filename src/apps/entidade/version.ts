@@ -1,10 +1,30 @@
-export const APP_VERSION = '1.6.2';
+export const APP_VERSION = '1.7.0';
 
 export const getVersionString = () => {
     return APP_VERSION;
 };
 
 export const LATEST_CHANGES = [
+    {
+        version: '1.7.0',
+        date: '04/02/2026',
+        title: 'Conector ProBPA & Performance',
+        changes: [
+            'Conector Oficial: Lançamento da central de importação e dashboard com performance extrema (carregamento instantâneo via cache).',
+            'Correção Inteligente: O sistema agora corrige automaticamente discrepâncias de produção causadas por erros no cadastro do CNS.',
+            'Segurança: Travas de validação rigorosas para garantir que novos cadastros respeitem o padrão CNS (15 dígitos).'
+        ]
+    },
+    {
+        version: '1.6.3',
+        date: '04/02/2026',
+        title: 'Correção na Busca SIGTAP e Estabilidade',
+        changes: [
+            'Busca SIGTAP: Corrigido problema onde a busca rápida não retornava resultados; implementado mecanismo de busca profundo.',
+            'Estabilidade: Corrigido travamento ao abrir detalhes do procedimento (botão "i").',
+            'Cadastro Profissional: Validação estrita de 15 dígitos para o CNS e alerta visual sobre vínculo CNES.'
+        ]
+    },
     {
         version: '1.6.2',
         date: '30/01/2026',

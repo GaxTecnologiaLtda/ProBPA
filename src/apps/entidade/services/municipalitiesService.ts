@@ -47,7 +47,11 @@ export async function fetchMunicipalitiesByEntity(entityId: string, municipality
     return querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...(doc.data() as any),
-        entityType: collectionName // Inject for service usage
+        entityType: collectionName, // Inject for service usage
+        _pathContext: {
+            entityType: type,
+            entityId: entityId
+        }
     } as Municipality));
 }
 
