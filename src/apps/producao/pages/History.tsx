@@ -294,236 +294,234 @@ export const History: React.FC = () => {
                                                                         </span>
                                                                     )}
                                                                 </div>
-                                                                    )}
-                                                            </div>
 
-                                                                {/* Helper Status for Canceled */ }
+                                                                {/* Helper Status for Canceled */}
                                                                 {
-                                                                item.status === 'canceled' && (
-                                                                    <div className="absolute top-2 right-2">
-                                                                        <span className="text-[10px] font-bold text-red-500 border border-red-200 bg-red-50 px-1.5 py-0.5 rounded">
-                                                                            CANCELADO
-                                                                        </span>
-                                                                    </div>
-                                                                )
-                                                            }
+                                                                    item.status === 'canceled' && (
+                                                                        <div className="absolute top-2 right-2">
+                                                                            <span className="text-[10px] font-bold text-red-500 border border-red-200 bg-red-50 px-1.5 py-0.5 rounded">
+                                                                                CANCELADO
+                                                                            </span>
+                                                                        </div>
+                                                                    )
+                                                                }
                                                             </div>
                                                         ))}
+                                                    </div>
                                                 </div>
-                                                </div>
-                                );
+                                            );
                                         })}
-                        </motion.div>
-                    )
-                }
+                                    </motion.div>
+                                )
+                                }
                             </AnimatePresence>
                         </motion.div >
                     );
                 })
             )}
 
-{/* Details Modal */ }
-<AnimatePresence>
-    {selectedRecord && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setSelectedRecord(null)}
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            />
-            <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg relative overflow-hidden z-10 flex flex-col max-h-[90vh]"
-            >
-                <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start gap-4 bg-gray-50/50 dark:bg-gray-800/50">
-                    <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <span className="font-mono text-xs font-bold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded">
-                                {selectedRecord.procedure.code}
-                            </span>
-                            <Badge variant={selectedRecord.procedure.type === 'BPA-I' ? 'warning' : 'neutral'}>
-                                {selectedRecord.procedure.type}
-                            </Badge>
-                        </div>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-snug">
-                            {selectedRecord.procedure.name}
-                        </h3>
-                    </div>
-                    <button
-                        onClick={() => setSelectedRecord(null)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                    >
-                        <ChevronDown size={24} className="rotate-180" /> {/* Close icon lookalike or specific X icon if imported */}
-                    </button>
-                </div>
+            {/* Details Modal */}
+            <AnimatePresence>
+                {selectedRecord && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelectedRecord(null)}
+                            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                            className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg relative overflow-hidden z-10 flex flex-col max-h-[90vh]"
+                        >
+                            <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start gap-4 bg-gray-50/50 dark:bg-gray-800/50">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="font-mono text-xs font-bold bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded">
+                                            {selectedRecord.procedure.code}
+                                        </span>
+                                        <Badge variant={selectedRecord.procedure.type === 'BPA-I' ? 'warning' : 'neutral'}>
+                                            {selectedRecord.procedure.type}
+                                        </Badge>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-snug">
+                                        {selectedRecord.procedure.name}
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedRecord(null)}
+                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                    <ChevronDown size={24} className="rotate-180" /> {/* Close icon lookalike or specific X icon if imported */}
+                                </button>
+                            </div>
 
-                <div className="p-6 overflow-y-auto space-y-6">
-                    {/* Actions Toolbar */}
-                    {selectedRecord.status !== 'canceled' && (
-                        <div className="flex gap-3 mb-2">
-                            <Button
-                                onClick={() => handleEdit(selectedRecord)}
-                                variant="outline"
-                                className="flex-1 gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                            >
-                                <Edit size={16} />
-                                Editar Registro
-                            </Button>
-                            <Button
-                                onClick={() => handleDeleteClick(selectedRecord)}
-                                variant="outline"
-                                className="flex-1 gap-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
-                            >
-                                <Trash2 size={16} />
-                                Excluir
-                            </Button>
-                        </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700/50">
-                            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Data</span>
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                {selectedRecord.date.split('-').reverse().join('/')}
-                            </span>
-                        </div>
-                        <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700/50">
-                            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Quantidade</span>
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                {selectedRecord.quantity} procedimento(s)
-                            </span>
-                        </div>
-                    </div>
-
-                    {(selectedRecord.patientCns || selectedRecord.patientCpf) && (
-                        <div className="p-4 border border-blue-100 dark:border-blue-900/30 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl">
-                            <h4 className="text-sm font-bold text-blue-900 dark:text-blue-100 mb-3 flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                Dados do Paciente
-                            </h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
-                                {selectedRecord.patientCns && (
-                                    <div>
-                                        <span className="text-xs text-gray-500 block">CNS</span>
-                                        <span className="font-mono text-sm font-medium text-gray-700 dark:text-gray-300">{selectedRecord.patientCns}</span>
+                            <div className="p-6 overflow-y-auto space-y-6">
+                                {/* Actions Toolbar */}
+                                {selectedRecord.status !== 'canceled' && (
+                                    <div className="flex gap-3 mb-2">
+                                        <Button
+                                            onClick={() => handleEdit(selectedRecord)}
+                                            variant="outline"
+                                            className="flex-1 gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                                        >
+                                            <Edit size={16} />
+                                            Editar Registro
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleDeleteClick(selectedRecord)}
+                                            variant="outline"
+                                            className="flex-1 gap-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300"
+                                        >
+                                            <Trash2 size={16} />
+                                            Excluir
+                                        </Button>
                                     </div>
                                 )}
-                                {selectedRecord.patientCpf && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                                        <span className="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Data</span>
+                                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                            {selectedRecord.date.split('-').reverse().join('/')}
+                                        </span>
+                                    </div>
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border border-gray-100 dark:border-gray-700/50">
+                                        <span className="text-xs text-gray-500 uppercase font-bold tracking-wider block mb-1">Quantidade</span>
+                                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                            {selectedRecord.quantity} procedimento(s)
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {(selectedRecord.patientCns || selectedRecord.patientCpf) && (
+                                    <div className="p-4 border border-blue-100 dark:border-blue-900/30 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl">
+                                        <h4 className="text-sm font-bold text-blue-900 dark:text-blue-100 mb-3 flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                            Dados do Paciente
+                                        </h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+                                            {selectedRecord.patientCns && (
+                                                <div>
+                                                    <span className="text-xs text-gray-500 block">CNS</span>
+                                                    <span className="font-mono text-sm font-medium text-gray-700 dark:text-gray-300">{selectedRecord.patientCns}</span>
+                                                </div>
+                                            )}
+                                            {selectedRecord.patientCpf && (
+                                                <div>
+                                                    <span className="text-xs text-gray-500 block">CPF</span>
+                                                    <span className="font-mono text-sm font-medium text-gray-700 dark:text-gray-300">{selectedRecord.patientCpf}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedRecord.cidCodes && selectedRecord.cidCodes.length > 0 && (
                                     <div>
-                                        <span className="text-xs text-gray-500 block">CPF</span>
-                                        <span className="font-mono text-sm font-medium text-gray-700 dark:text-gray-300">{selectedRecord.patientCpf}</span>
+                                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CIDs Registrados</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedRecord.cidCodes.map(cid => (
+                                                <span key={cid} className="px-2 py-1 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-md text-xs font-bold border border-orange-100 dark:border-orange-800/30">
+                                                    {cid}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {selectedRecord.observations && (
+                                    <div>
+                                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Observações</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg italic">
+                                            "{selectedRecord.observations}"
+                                        </p>
                                     </div>
                                 )}
                             </div>
-                        </div>
-                    )}
 
-                    {selectedRecord.cidCodes && selectedRecord.cidCodes.length > 0 && (
-                        <div>
-                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">CIDs Registrados</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {selectedRecord.cidCodes.map(cid => (
-                                    <span key={cid} className="px-2 py-1 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-md text-xs font-bold border border-orange-100 dark:border-orange-800/30">
-                                        {cid}
-                                    </span>
-                                ))}
+                            <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end">
+                                <button
+                                    onClick={() => setSelectedRecord(null)}
+                                    className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors shadow-sm"
+                                >
+                                    Fechar Detalhes
+                                </button>
                             </div>
-                        </div>
-                    )}
-
-                    {selectedRecord.observations && (
-                        <div>
-                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Observações</h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg italic">
-                                "{selectedRecord.observations}"
-                            </p>
-                        </div>
-                    )}
-                </div>
-
-                <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end">
-                    <button
-                        onClick={() => setSelectedRecord(null)}
-                        className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors shadow-sm"
-                    >
-                        Fechar Detalhes
-                    </button>
-                </div>
-            </motion.div>
-        </div>
-    )}
-</AnimatePresence>
-
-
-{/* DELETE MODAL */ }
-<AnimatePresence>
-    {
-        isDeleteModalOpen && (
-            <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setIsDeleteModalOpen(false)}
-                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                />
-                <motion.div
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.95, opacity: 0 }}
-                    className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md relative z-10 p-6"
-                >
-                    <div className="flex flex-col items-center text-center mb-6">
-                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mb-4">
-                            <AlertTriangle size={24} />
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Confirmar Exclusão</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                            Você está prestes a cancelar este registro. Esta ação não pode ser desfeita facilmente.
-                        </p>
+                        </motion.div>
                     </div>
+                )}
+            </AnimatePresence>
 
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Justificativa (Obrigatório)
-                            </label>
-                            <textarea
-                                className="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm p-3 focus:ring-2 focus:ring-red-500 outline-none"
-                                rows={3}
-                                placeholder="Por que este registro está sendo excluído?"
-                                value={deleteJustification}
-                                onChange={e => setDeleteJustification(e.target.value)}
-                            />
-                        </div>
 
-                        <div className="flex gap-3 pt-2">
-                            <Button
-                                variant="outline"
-                                className="flex-1"
+            {/* DELETE MODAL */}
+            <AnimatePresence>
+                {
+                    isDeleteModalOpen && (
+                        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
                                 onClick={() => setIsDeleteModalOpen(false)}
-                                disabled={isDeleting}
+                                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                            />
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.95, opacity: 0 }}
+                                className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md relative z-10 p-6"
                             >
-                                Cancelar
-                            </Button>
-                            <Button
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white border-transparent"
-                                onClick={confirmDelete}
-                                disabled={!deleteJustification.trim() || isDeleting}
-                                isLoading={isDeleting}
-                            >
-                                Confirmar Exclusão
-                            </Button>
+                                <div className="flex flex-col items-center text-center mb-6">
+                                    <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mb-4">
+                                        <AlertTriangle size={24} />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">Confirmar Exclusão</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                                        Você está prestes a cancelar este registro. Esta ação não pode ser desfeita facilmente.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                            Justificativa (Obrigatório)
+                                        </label>
+                                        <textarea
+                                            className="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm p-3 focus:ring-2 focus:ring-red-500 outline-none"
+                                            rows={3}
+                                            placeholder="Por que este registro está sendo excluído?"
+                                            value={deleteJustification}
+                                            onChange={e => setDeleteJustification(e.target.value)}
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-3 pt-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => setIsDeleteModalOpen(false)}
+                                            disabled={isDeleting}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button
+                                            className="flex-1 bg-red-600 hover:bg-red-700 text-white border-transparent"
+                                            onClick={confirmDelete}
+                                            disabled={!deleteJustification.trim() || isDeleting}
+                                            isLoading={isDeleting}
+                                        >
+                                            Confirmar Exclusão
+                                        </Button>
+                                    </div>
+                                </div>
+                            </motion.div>
                         </div>
-                    </div>
-                </motion.div>
-            </div>
-        )
-    }
-</AnimatePresence >
+                    )
+                }
+            </AnimatePresence >
         </motion.div >
     );
 };
