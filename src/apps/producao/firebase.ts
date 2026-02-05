@@ -5,13 +5,13 @@ import { getFunctions } from "firebase/functions";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-    apiKey: "REDACTED_SECRET",
-    authDomain: "probpa-025.firebaseapp.com",
-    databaseURL: "https://probpa-025-default-rtdb.firebaseio.com",
-    projectId: "probpa-025",
-    storageBucket: "probpa-025.firebasestorage.app",
-    messagingSenderId: "948625316088",
-    appId: "1:948625316088:web:714ab517df52a77060430d"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
