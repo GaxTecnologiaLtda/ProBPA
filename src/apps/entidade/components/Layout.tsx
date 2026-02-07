@@ -16,7 +16,8 @@ import {
   Sun,
   Map,
   LifeBuoy,
-  AlertTriangle
+  AlertTriangle,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EntityType } from '../types';
@@ -118,6 +119,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
     { icon: Map, label: 'Municípios', path: '/privado/municipios' },
     { icon: Building2, label: 'Rede de Unidades', path: '/privado/unidades' },
     { icon: Users, label: 'Corpo Clínico', path: '/privado/profissionais' },
+    { icon: Calendar, label: 'Ações e Programas', path: '/privado/acoes' },
     { icon: Target, label: 'Metas Globais', path: '/privado/metas' },
     { icon: Activity, label: 'Produção Global', path: '/privado/producao' },
     { icon: FileText, label: 'Logs de Uso', path: '/privado/logs' },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MOCK_ENTITIES, BRAZILIAN_STATES } from '../constants';
 import { Card, Button, Input, Badge, Modal, Select, Tooltip, CollapsibleSection } from '../components/Common';
-import { Plus, Search, Link2, MapPin, Users, Building2, Hash, UserCircle, Phone, Mail, Trash2, Edit, Briefcase, AlertTriangle, LayoutTemplate, Database, Key, Copy, RefreshCw } from 'lucide-react';
+import { Plus, Search, Link2, MapPin, Users, Building2, Hash, UserCircle, Phone, Mail, Trash2, Edit, Briefcase, AlertTriangle, LayoutTemplate, Database, Key, Copy, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { LicenseStatus, Municipality, EntityType, MunicipalityInput } from '../types';
 import { fetchAllMunicipalities, createMunicipality, updateMunicipality, deleteMunicipality, fetchLediStatusStats } from '../services/municipalitiesService';
 import { fetchEntitiesByType } from '../services/entitiesService';
@@ -361,6 +361,63 @@ const Municipalities: React.FC = () => {
         </div >
     );
 
+    const EntityGroupCard: React.FC<{ entityName: string, municipalities: Municipality[] }> = ({ entityName, municipalities }) => {
+        const [isOpen, setIsOpen] = useState(false);
+
+        return (
+            <div className="bg-slate-50/50 dark:bg-slate-800/20 rounded-xl border border-slate-100 dark:border-slate-800 transition-all duration-200">
+                <div
+                    className="flex items-center gap-2 p-4 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-t-xl"
+                    onClick={() => setIsOpen(!isOpen)}
+                >
+                    <Building2 className="w-4 h-4 text-slate-400" />
+                    <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-sm uppercase tracking-wide select-none">
+                        {entityName}
+                    </h3>
+                    <div className="ml-auto flex items-center gap-3">
+                        <Badge variant="neutral" className="text-xs">{municipalities.length}</Badge>
+                        {isOpen ? (
+                            <ChevronUp className="w-4 h-4 text-slate-400" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                        )}
+                    </div>
+                </div>
+
+                {isOpen && (
+                    <div className="p-4 pt-0 animate-fade-in-down border-t border-slate-100 dark:border-slate-700/50">
+                        <div className="mt-4">
+                            {renderMunicipalityGrid(municipalities)}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderGroupedList = (list: Municipality[]) => {
+        const groups: Record<string, Municipality[]> = {};
+        list.forEach(m => {
+            const key = m.linkedEntityName || 'Outros / Sem Vínculo';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(m);
+        });
+
+        const sortedKeys = Object.keys(groups).sort();
+
+        return (
+            <div className="space-y-4">
+                {sortedKeys.map(entityName => (
+                    <EntityGroupCard
+                        key={entityName}
+                        entityName={entityName}
+                        municipalities={groups[entityName]}
+                    />
+                ))}
+            </div>
+        );
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -419,7 +476,7 @@ const Municipalities: React.FC = () => {
                         maxHeight="max-h-[60vh]"
                     >
                         {publicMunicipalities.length > 0 ? (
-                            renderMunicipalityGrid(publicMunicipalities)
+                            renderGroupedList(publicMunicipalities)
                         ) : (
                             <p className="text-sm text-slate-500 italic">Nenhum município vinculado a entidades públicas.</p>
                         )}
@@ -436,7 +493,7 @@ const Municipalities: React.FC = () => {
                         maxHeight="max-h-[60vh]"
                     >
                         {privateMunicipalities.length > 0 ? (
-                            renderMunicipalityGrid(privateMunicipalities)
+                            renderGroupedList(privateMunicipalities)
                         ) : (
                             <p className="text-sm text-slate-500 italic">Nenhum município vinculado a entidades privadas.</p>
                         )}

@@ -1,10 +1,31 @@
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.7.2';
 
 export const getVersionString = () => {
     return APP_VERSION;
 };
 
 export const LATEST_CHANGES = [
+    {
+        version: '1.7.2',
+        date: '06/02/2026',
+        title: 'Otimizações em Ações e Programas',
+        changes: [
+            'Cadastro de Produção: Adicionado campo CPF e lógica condicional (exige CNS ou CPF).',
+            'Interface: Remoção do campo Gênero e expansão dos dados do paciente na lista de histórico (Nome, CNS, CPF, Nasc).',
+            'Refinamentos: Ajustes finos de layout e correção de contraste para o Modo Escuro no modal de produção.'
+        ]
+    },
+    {
+        version: '1.7.1',
+        date: '05/02/2026',
+        title: 'Novo Módulo: Ações e Programas',
+        changes: [
+            'Implantação: Lançamento da nova aba "Ações e Programas" para gestão oficial de campanhas e atividades coletivas.',
+            'Sincronização (Dual Write): Ações criadas na entidade são automaticamente replicadas no painel do município vinculado.',
+            'Interface Premium: Cards com visual modernizado, contadores de produção e suporte completo a modo escuro.',
+            'Correções: Ajustes de permissões de escrita e correção nos seletores de cadastro (Município/Profissional).'
+        ]
+    },
     {
         version: '1.7.0',
         date: '04/02/2026',

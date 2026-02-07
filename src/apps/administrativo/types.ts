@@ -73,6 +73,8 @@ export interface Installment {
   paid: boolean;
   paidAt?: string;
   receiptUrl?: string;
+  municipalityId?: string; // Linked to a specific municipality (optional)
+  municipalityName?: string; // Denormalized name for display
 }
 
 export interface Entity {

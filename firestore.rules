@@ -55,6 +55,37 @@ service cloud.firestore {
       
       // PUBLIC REGISTRATION: Allow read of minimal entity info
       allow read: if true; 
+
+      // 🔐 ACTIONS (Subcollection)
+      match /actions/{actionId} {
+        // Master: Full Access
+        allow read, write: if isMasterOf(entityId);
+        
+        // Coordenação: Read/Write (if delegated? Requirement says "Apenas MASTER cria", so Read Only for others?)
+        // Requirement: "Apenas MASTER cria Acoes e Programas"
+        allow read: if isCoordinationOf(entityId);
+        
+        // Subsede: Read Only (Everything or just linked? Usually all entity actions are visible if global, 
+        // but if we want to restrict to municipalityId... User didn't specify strict read restriction, just create restriction. 
+        // Let's allow read for all entity actions for now to be safe, or scope it if issues arise.)
+        allow read: if isSubsedeOf(entityId);
+
+        // Professional: Read Only
+        allow read: if request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId;
+
+        // Subcollection: PRODUCTION
+        match /production/{prodId} {
+            // Who can register production? 
+            // Usually any professional or coordination/master.
+            allow read, write: if isMasterOf(entityId)
+                               || isCoordinationOf(entityId)
+                               || isSubsedeOf(entityId)
+                               // Professional can register their own production or generally add?
+                               // Production form has "Patient" and "Procedure". Doesn't strictly link to "Professional" field in doc?
+                               // Let's allow Professionals to read/write.
+                               || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+        }
+      }
     }
 
 
@@ -104,6 +135,32 @@ service cloud.firestore {
 
       // PUBLIC REGISTRATION: Allow read to resolve names (risk: scraping)
       allow read: if true;
+
+      // 🔐 ACTIONS (Subcollection for Dual Write)
+      match /actions/{actionId} {
+        // Master: Allow if they manage the Entity linked to this Action
+        allow read, write: if isMasterOf(resource.data.entityId) 
+                           || isMasterOf(request.resource.data.entityId);
+
+        // Coordenação: Read
+        allow read: if isCoordinationOf(resource.data.entityId);
+        
+        // Subsede: Read restricted to this Municipality
+        allow read: if isSubsedeOf(resource.data.entityId) && municipalityId == request.auth.token.municipalityId;
+
+        // Professional: Read
+        allow read: if request.auth.token.role == "PROFESSIONAL" 
+                    && request.auth.token.entityId == resource.data.entityId;
+
+        // 🔐 PRODUCTION (Sub-subcollection)
+        match /production/{prodId} {
+             allow read, write: if isMasterOf(request.resource.data.entityId) 
+                                || isMasterOf(resource.data.entityId)
+                                || isCoordinationOf(resource.data.entityId)
+                                || (isSubsedeOf(resource.data.entityId) && municipalityId == request.auth.token.municipalityId)
+                                || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == (resource.data.entityId || request.resource.data.entityId));
+        }
+      }
     }
 
     ///////////////////////////////////////////
@@ -427,6 +484,9 @@ service cloud.firestore {
     ///////////////////////////////////////////
     // 🔐 12. Collection Group: PROCEDURES (New) & REGISTROS (Legacy)
     ///////////////////////////////////////////
+    match /{path=**}/installments/{installmentId} {
+      allow read: if isAdmin();
+    }
     
     match /{path=**}/procedures/{recordId} {
       allow read: if isAdmin() 
@@ -550,7 +610,8 @@ service cloud.firestore {
     ///////////////////////////////////////////
 
     match /users/{userId} {
-      allow read: if isMasterOf(resource.data.entityId)
+      allow read: if isAdmin()
+                  || isMasterOf(resource.data.entityId)
                   || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
                   // Allow self read
                   || request.auth.uid == userId;

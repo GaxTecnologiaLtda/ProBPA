@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.7.2] - 2026-02-06
+### Otimizações em Ações e Programas
+- **Produção e Cadastro:**
+    - **Identificação Flexível:** Adicionado campo CPF ao formulário de registro de produção. O sistema agora aceita tanto CNS quanto CPF (pelo menos um é obrigatório).
+    - **Simplificação:** O campo "Gênero" foi removido do formulário de produção para agilizar o preenchimento.
+    - **Histórico Detalhado:** A lista de últimos registros agora exibe dados completos do paciente (Nome, CNS, CPF e Data de Nascimento).
+- **Interface e Usabilidade:**
+    - **Modo Escuro:** Refinamento de cores e bordas no modal de produção para garantir legibilidade perfeita em temas escuros.
+
+## [1.7.1] - 2026-02-05
+### Novo Módulo: Ações e Programas
+- **Implantação (Nova Aba):**
+    - **Gestão de Campanhas:** Lançamento oficial do módulo para cadastro de Ações e Programas (Atividades Coletivas).
+    - **Dual Write Logic:** Implementada sincronização bidirecional onde ações criadas pela Entidade são espelhadas automaticamente no banco de dados do Município correspondente.
+    - **Registro de Produção:** Funcionalidade integrada para registrar procedimentos realizados dentro de cada ação.
+- **Melhorias de Interface (UI Premium):** 
+    - **Cards Interativos:** Reformulação visual dos cards de ações com efeitos de hover, sombras e contadores de equipe/produção.
+    - **Modo Escuro:** Revisão completa de contraste, garantindo legibilidade em textos e modais (especialmente busca SIGTAP).
+- **Correções:**
+    - **Seletores:** Resolvido problema de carregamento nos campos de "Município" e "Profissionais".
+    - **Permissões de Escrita:** Ajuste nas regras de segurança para permitir a replicação de dados nos municípios.
+
 ## [1.7.0] - 2026-02-04
 ### Oficialização do Conector ProBPA e Performance
 - **Dashboard Conector:** 

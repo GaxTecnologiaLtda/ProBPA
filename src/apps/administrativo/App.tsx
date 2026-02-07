@@ -25,13 +25,13 @@ const Reports = () => (
   </div>
 );
 const AppRoutes: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth(); // Destructure logout
 
   return (
     <Routes>
       <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
       <Route path="/*" element={user ? (
-        <Layout>
+        <Layout onLogout={logout}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/support-tickets" element={<SupportTickets />} />

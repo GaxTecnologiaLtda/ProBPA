@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Button, Badge, Modal, Select, Input, Tooltip, CollapsibleSection, Switch } from '../components/Common';
 import { FileText, AlertCircle, CheckCircle, Calendar, Users, Map, Clock, DollarSign, Info, Calculator, Plus, Receipt, Upload, AlertTriangle, Download, Building2, Briefcase, RefreshCw, Trash2, Edit2, X } from 'lucide-react';
-import { LicenseStatus, EntityType, License, PaymentStatus, Installment } from '../types';
+import { LicenseStatus, EntityType, License, PaymentStatus, Installment, Municipality } from '../types';
 import {
     fetchAllLicenses,
     createLicense,
@@ -29,6 +29,7 @@ const INITIAL_FORM_STATE = {
 const Licenses: React.FC = () => {
     const [licenses, setLicenses] = useState<License[]>([]);
     const [entities, setEntities] = useState<AdminEntity[]>([]);
+    const [allMunicipalities, setAllMunicipalities] = useState<Municipality[]>([]);
     const [municipalitiesCount, setMunicipalitiesCount] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
 
@@ -42,6 +43,7 @@ const Licenses: React.FC = () => {
                     fetchAllMunicipalities()
                 ]);
                 setLicenses(lics);
+                setAllMunicipalities(munis);
 
 
                 setEntities(ents);
@@ -89,6 +91,8 @@ const Licenses: React.FC = () => {
     // Financial Generation State
     const [genInstallmentsCount, setGenInstallmentsCount] = useState<number>(12);
     const [genFirstDueDate, setGenFirstDueDate] = useState<string>('');
+    const [genMunicipalityId, setGenMunicipalityId] = useState<string>(''); // For linking new installments
+    const [financialMunFilter, setFinancialMunFilter] = useState<string>(''); // For filtering list
 
     // --- HELPERS ---
     const formatDate = (dateString: string) => {
@@ -214,6 +218,8 @@ const Licenses: React.FC = () => {
         try {
             const installments = await fetchInstallments(lic.id);
             setSelectedLicense(prev => prev ? { ...prev, installments } : null);
+            setGenMunicipalityId(''); // Reset
+            setFinancialMunFilter(''); // Reset
         } catch (error) {
             console.error("Error fetching installments:", error);
         }
@@ -380,7 +386,14 @@ const Licenses: React.FC = () => {
         if (!selectedLicense) return;
 
         const annualTotal = (selectedLicense.annualValue || 0);
-        const installmentValue = annualTotal / genInstallmentsCount;
+        let installmentValue = annualTotal / genInstallmentsCount;
+
+        // If generating for a specific municipality, calculate proportional value
+        if (genMunicipalityId && selectedLicense.monthlyValue > 0) {
+            const ratio = (selectedLicense.valuePerMunicipality || 0) / selectedLicense.monthlyValue;
+            installmentValue = installmentValue * ratio;
+        }
+
         const newInstallments: Omit<Installment, 'id'>[] = [];
 
         // Fix date parsing to avoid timezone offset issues
@@ -398,11 +411,15 @@ const Licenses: React.FC = () => {
             const day = String(currentDate.getDate()).padStart(2, '0');
             const dueDateStr = `${year}-${month}-${day}`;
 
+            const linkedMuni = allMunicipalities.find(m => m.id === genMunicipalityId);
+
             newInstallments.push({
                 number: i,
                 dueDate: dueDateStr,
                 amount: installmentValue,
-                paid: false
+                paid: false,
+                municipalityId: genMunicipalityId || undefined,
+                municipalityName: linkedMuni?.name || undefined
             });
         }
 
@@ -880,8 +897,39 @@ const Licenses: React.FC = () => {
                             </Button>
                         </div>
                         <p className="text-xs text-slate-500 mt-2">
-                            * Gera parcelas baseadas no valor total anual do contrato ({formatCurrency(selectedLicense?.annualValue || 0)}).
+                            * Gera parcelas baseadas no valor anual (proporcional se vinculado a município).
                         </p>
+                    </div>
+
+                    {/* Filter Bar */}
+                    <div className="flex flex-col sm:flex-row gap-4 justify-between items-end">
+                        <div className="w-full sm:w-1/3">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Município</label>
+                            <Select
+                                value={financialMunFilter}
+                                onChange={(e) => setFinancialMunFilter(e.target.value)}
+                                options={[
+                                    { value: '', label: 'Todos os Municípios' },
+                                    ...allMunicipalities
+                                        .filter(m => m.linkedEntityId === selectedLicense?.entityId)
+                                        .map(m => ({ value: m.id, label: m.name }))
+                                ]}
+                            />
+                        </div>
+
+                        <div className="w-full sm:w-1/3">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Vincular Geração a:</label>
+                            <Select
+                                value={genMunicipalityId}
+                                onChange={(e) => setGenMunicipalityId(e.target.value)}
+                                options={[
+                                    { value: '', label: 'Geral (Sem Vínculo)' },
+                                    ...allMunicipalities
+                                        .filter(m => m.linkedEntityId === selectedLicense?.entityId)
+                                        .map(m => ({ value: m.id, label: m.name }))
+                                ]}
+                            />
+                        </div>
                     </div>
 
                     {/* Installments List */}
@@ -896,114 +944,123 @@ const Licenses: React.FC = () => {
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {selectedLicense.installments.map((inst) => {
-                                    const currentStatus = getDynamicStatus(inst);
-                                    const isEditing = editingInstallmentId === inst.id;
+                                {selectedLicense.installments
+                                    .filter(inst => !financialMunFilter || inst.municipalityId === financialMunFilter)
+                                    .map((inst) => {
+                                        const currentStatus = getDynamicStatus(inst);
+                                        const isEditing = editingInstallmentId === inst.id;
 
-                                    return (
-                                        <div key={inst.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-dark-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        return (
+                                            <div key={inst.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-dark-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
 
-                                            <div className="flex items-center gap-4 mb-3 sm:mb-0">
-                                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
-                                                    {inst.number}
-                                                </div>
-                                                <div>
-                                                    {isEditing ? (
-                                                        <div className="flex gap-2 items-center">
-                                                            <input
-                                                                type="date"
-                                                                className="text-sm border rounded px-2 py-1"
-                                                                value={editInstallmentData.dueDate}
-                                                                onChange={e => setEditInstallmentData({ ...editInstallmentData, dueDate: e.target.value })}
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                                                            Vencimento: {formatDate(inst.dueDate)}
-                                                        </p>
-                                                    )}
-
-                                                    {isEditing ? (
-                                                        <div className="flex gap-2 items-center mt-1">
-                                                            <input
-                                                                type="number"
-                                                                className="text-sm border rounded px-2 py-1 w-24"
-                                                                value={editInstallmentData.amount}
-                                                                onChange={e => setEditInstallmentData({ ...editInstallmentData, amount: e.target.value })}
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-lg font-bold text-slate-700 dark:text-slate-200">
-                                                            {formatCurrency(inst.amount)}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-3">
-                                                {isEditing ? (
-                                                    <div className="flex gap-2">
-                                                        <Button size="sm" onClick={() => handleSaveEditInstallment(inst.id)}>Salvar</Button>
-                                                        <Button size="sm" variant="outline" onClick={() => setEditingInstallmentId(null)}>Cancelar</Button>
+                                                <div className="flex items-center gap-4 mb-3 sm:mb-0">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
+                                                        {inst.number}
                                                     </div>
-                                                ) : (
-                                                    <>
-                                                        {currentStatus === PaymentStatus.PAID ? (
-                                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                                                                <CheckCircle className="w-3 h-3 mr-1" /> Pago
-                                                            </span>
-                                                        ) : currentStatus === PaymentStatus.OVERDUE ? (
-                                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
-                                                                <AlertTriangle className="w-3 h-3 mr-1" /> Vencido
-                                                            </span>
+                                                    <div>
+                                                        {isEditing ? (
+                                                            <div className="flex gap-2 items-center">
+                                                                <input
+                                                                    type="date"
+                                                                    className="text-sm border rounded px-2 py-1"
+                                                                    value={editInstallmentData.dueDate}
+                                                                    onChange={e => setEditInstallmentData({ ...editInstallmentData, dueDate: e.target.value })}
+                                                                />
+                                                            </div>
                                                         ) : (
-                                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
-                                                                <Clock className="w-3 h-3 mr-1" /> Pendente
-                                                            </span>
+                                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                                Vencimento: {formatDate(inst.dueDate)}
+                                                            </p>
                                                         )}
 
-                                                        {currentStatus !== PaymentStatus.PAID && (
-                                                            <>
-                                                                <Tooltip content="Anexar comprovante e marcar como pago">
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => handleUploadReceipt(inst.id)}
-                                                                    >
-                                                                        <Upload className="w-4 h-4 mr-2" /> Pagar
+                                                        {inst.municipalityName && (
+                                                            <div className="flex items-center gap-1 mt-0.5">
+                                                                <Map className="w-3 h-3 text-slate-400" />
+                                                                <span className="text-xs text-slate-500 font-medium">{inst.municipalityName}</span>
+                                                            </div>
+                                                        )}
+
+                                                        {isEditing ? (
+                                                            <div className="flex gap-2 items-center mt-1">
+                                                                <input
+                                                                    type="number"
+                                                                    className="text-sm border rounded px-2 py-1 w-24"
+                                                                    value={editInstallmentData.amount}
+                                                                    onChange={e => setEditInstallmentData({ ...editInstallmentData, amount: e.target.value })}
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-lg font-bold text-slate-700 dark:text-slate-200">
+                                                                {formatCurrency(inst.amount)}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-3">
+                                                    {isEditing ? (
+                                                        <div className="flex gap-2">
+                                                            <Button size="sm" onClick={() => handleSaveEditInstallment(inst.id)}>Salvar</Button>
+                                                            <Button size="sm" variant="outline" onClick={() => setEditingInstallmentId(null)}>Cancelar</Button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            {currentStatus === PaymentStatus.PAID ? (
+                                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                                                                    <CheckCircle className="w-3 h-3 mr-1" /> Pago
+                                                                </span>
+                                                            ) : currentStatus === PaymentStatus.OVERDUE ? (
+                                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                                                                    <AlertTriangle className="w-3 h-3 mr-1" /> Vencido
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
+                                                                    <Clock className="w-3 h-3 mr-1" /> Pendente
+                                                                </span>
+                                                            )}
+
+                                                            {currentStatus !== PaymentStatus.PAID && (
+                                                                <>
+                                                                    <Tooltip content="Anexar comprovante e marcar como pago">
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="outline"
+                                                                            onClick={() => handleUploadReceipt(inst.id)}
+                                                                        >
+                                                                            <Upload className="w-4 h-4 mr-2" /> Pagar
+                                                                        </Button>
+                                                                    </Tooltip>
+                                                                    <Tooltip content="Editar Parcela">
+                                                                        <button
+                                                                            onClick={() => handleStartEditInstallment(inst)}
+                                                                            className="p-2 text-slate-400 hover:text-blue-500 transition-colors"
+                                                                        >
+                                                                            <Edit2 className="w-4 h-4" />
+                                                                        </button>
+                                                                    </Tooltip>
+                                                                    <Tooltip content="Excluir Parcela">
+                                                                        <button
+                                                                            onClick={() => handleDeleteInstallment(inst.id)}
+                                                                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                                                        >
+                                                                            <Trash2 className="w-4 h-4" />
+                                                                        </button>
+                                                                    </Tooltip>
+                                                                </>
+                                                            )}
+                                                            {currentStatus === PaymentStatus.PAID && (
+                                                                <Tooltip content="Ver comprovante">
+                                                                    <Button size="sm" variant="ghost" className="text-corp-500">
+                                                                        <Download className="w-4 h-4" />
                                                                     </Button>
                                                                 </Tooltip>
-                                                                <Tooltip content="Editar Parcela">
-                                                                    <button
-                                                                        onClick={() => handleStartEditInstallment(inst)}
-                                                                        className="p-2 text-slate-400 hover:text-blue-500 transition-colors"
-                                                                    >
-                                                                        <Edit2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </Tooltip>
-                                                                <Tooltip content="Excluir Parcela">
-                                                                    <button
-                                                                        onClick={() => handleDeleteInstallment(inst.id)}
-                                                                        className="p-2 text-slate-400 hover:text-red-500 transition-colors"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </Tooltip>
-                                                            </>
-                                                        )}
-                                                        {currentStatus === PaymentStatus.PAID && (
-                                                            <Tooltip content="Ver comprovante">
-                                                                <Button size="sm" variant="ghost" className="text-corp-500">
-                                                                    <Download className="w-4 h-4" />
-                                                                </Button>
-                                                            </Tooltip>
-                                                        )}
-                                                    </>
-                                                )}
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
                             </div>
                         )}
                     </div>

@@ -10,6 +10,9 @@ Este workflow define o procedimento padrão para atualizações do `connector_ap
 1.  **Nunca commitar direto na MAIN**: Trabalhe sempre na branch de testes (padrão: `test/auto-update`).
 2.  **Versionamento Obrigatório**: Toda mudança de código requer alteração em `connector_app/version.py`.
 3.  **Tags Disparam Builds**: O GitHub Actions só gera release quando uma TAG é enviada.
+4.  **Validação Cruzada**: Antes de qualquer release, verifique se os procedimentos estão alinhados com:
+    -   [Master Guide](file:///Users/gabriel/GAX%20TECNOLOGIA/SYSTEMS/ProBPA/docs/CONNECTOR_MASTER_GUIDE.md)
+    -   [Maintenance Skill](file:///Users/gabriel/GAX%20TECNOLOGIA/SYSTEMS/ProBPA/.agent/skills/connector_maintenance/SKILL.md)
 
 ## 2. Fluxo de Desenvolvimento (Ciclo Beta)
 

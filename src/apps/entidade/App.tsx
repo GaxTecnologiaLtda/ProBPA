@@ -18,6 +18,7 @@ import ProfessionalRegistration from './pages/private/ProfessionalRegistration';
 // Private Pages
 import DashboardPrivate from './pages/private/Dashboard';
 import MunicipalitiesPrivate from './pages/private/Municipalities';
+import ActionsAndPrograms from './pages/private/ActionsAndPrograms';
 import UnitsPrivate from './pages/private/Units';
 import ProfessionalsPrivate from './pages/private/Professionals';
 import GoalsPrivate from './pages/private/Goals';
@@ -58,6 +59,7 @@ const App: React.FC = () => {
           <Route path="/privado" element={<Layout type="private" />}>
             <Route path="dashboard" element={<DashboardPrivate />} />
             <Route path="municipios" element={<MunicipalitiesPrivate />} />
+            <Route path="acoes" element={<ActionsAndPrograms />} />
             <Route path="unidades" element={<UnitsPrivate />} />
             <Route path="profissionais" element={<ProfessionalsPrivate />} />
             <Route path="metas" element={<GoalsPrivate />} />

@@ -8,9 +8,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface SigtapBrowserModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onSelect?: (procedure: SigtapProcedureRow) => void;
 }
 
-export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, onClose }) => {
+export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, onClose, onSelect }) => {
     const [activeTab, setActiveTab] = useState<'tree' | 'search'>('tree');
     const [loading, setLoading] = useState(false);
     const [competences, setCompetences] = useState<{ competence: string; label: string }[]>([]);
@@ -32,6 +33,13 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
 
     // Detail Modal
     const [viewProcedure, setViewProcedure] = useState<any | null>(null);
+
+    const handleSelectProcedure = (proc: SigtapProcedureRow) => {
+        if (onSelect) {
+            onSelect(proc);
+            onClose();
+        }
+    };
 
     // Load Competences
     useEffect(() => {
@@ -128,11 +136,10 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
             {list.map((proc) => (
                 <div
                     key={proc.code}
-                    className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all cursor-pointer group shadow-sm"
-                    onClick={() => setViewProcedure(proc)}
+                    className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all group shadow-sm"
                 >
                     <div className="flex justify-between items-start gap-4">
-                        <div className="flex-1">
+                        <div className="flex-1 cursor-pointer" onClick={() => setViewProcedure(proc)}>
                             <div className="flex items-center gap-2 mb-1">
                                 <span className="font-mono text-xs font-bold bg-gray-100 dark:bg-gray-900 px-2 py-0.5 rounded text-gray-700 dark:text-gray-300">
                                     {proc.code}
@@ -150,8 +157,22 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
                                 <span>Pontos: {proc.points}</span>
                             </div>
                         </div>
-                        <div className="self-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Info className="w-5 h-5 text-emerald-500" />
+                        <div className="flex flex-col gap-2 items-center">
+                            {onSelect && (
+                                <Button
+                                    size="sm"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSelectProcedure(proc);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1"
+                                >
+                                    Selecionar
+                                </Button>
+                            )}
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={() => setViewProcedure(proc)}>
+                                <Info className="w-5 h-5 text-gray-400 hover:text-emerald-500" />
+                            </div>
                         </div>
                     </div>
                 </div>
