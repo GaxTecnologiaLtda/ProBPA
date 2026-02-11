@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Badge, Modal } from '../../components/ui/Components';
+import { Card, Button, Badge, Modal, Input, Select, Table, Skeleton } from '../../components/ui/Components';
 import {
    CheckCircle, FileText, Users, Filter, ArrowUpRight,
    Download, BarChart2, PieChart, AlertTriangle, FileCode, Database,
-   Calendar, ChevronRight, TrendingUp, Activity, Eye, Target, Building2, DollarSign, FileSignature, Search, X
+   Calendar, ChevronRight, TrendingUp, Activity, Eye, Target, Building2, DollarSign, FileSignature, Search, X,
+   Loader2, Upload, ChevronDown
 } from 'lucide-react';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -13,16 +14,21 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { fetchProfessionalsByEntity, updateProfessional } from '../../services/professionalsService';
 import { municipalityReportService } from '../../services/municipalityReportService';
+import { susReportService } from '../../services/susReportService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { fetchUnitsByEntity } from '../../services/unitsService';
 import { Professional, Municipality, Unit } from '../../types';
-import { collection, query, where, getDocs, doc, collectionGroup, orderBy, limit, getDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, query, where, writeBatch, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import ConnectorDashboard from './ConnectorDashboard';
 // import LediDashboard from './LediDashboard';
 
-// --- Mock Data para Gráficos e Relatórios ---
+import { useDashboardData } from './useDashboardData';
+
+// ... (keep imports)
+
+// --- Mock Data para Gráficos e Relatórios (Mantidos para a aba Relatórios) ---
 
 const EVOLUTION_DATA = [
    { month: 'Jan', real: 12400, meta: 12000, valor: 124000 },
@@ -94,6 +100,45 @@ interface ReportType {
 
 const Production: React.FC = () => {
    const { claims } = useAuth();
+   const { production, professionals: dashboardProfessionals, municipalities: dashboardMunicipalities, goals: dashboardGoals, loading: dashboardLoading, rawRecords } = useDashboardData();
+
+
+   // --- Procedure Breakdown Modal State ---
+   const [selectedProcedure, setSelectedProcedure] = useState<string | null>(null);
+   const [isProcedureModalOpen, setIsProcedureModalOpen] = useState(false);
+
+   const handleProcedureClick = (procName: string) => {
+      setSelectedProcedure(procName);
+      setIsProcedureModalOpen(true);
+   };
+
+   // Helper to get breakdown data for selected procedure
+   const getProcedureBreakdown = () => {
+      // Safety check: ensure rawRecords is an array and selectedProcedure is valid
+      if (!selectedProcedure || !rawRecords || !Array.isArray(rawRecords)) return [];
+
+      const records = rawRecords.filter((r: any) => {
+         const rName = r.procedureName || `Código: ${r.procedureCode}`;
+         return rName === selectedProcedure;
+      });
+
+      // Aggregate by Professional
+      const agg: Record<string, { quantity: number, unit: string }> = {};
+      records.forEach((r: any) => {
+         const profName = r.professionalName || 'Não Identificado';
+         const unitName = r.unitId ? (allUnits.find(u => u.cnes === r.unitId || u.id === r.unitId)?.name || r.unitId) : 'N/A';
+
+         if (!agg[profName]) {
+            agg[profName] = { quantity: 0, unit: unitName };
+         }
+         agg[profName].quantity += (Number(r.quantity) || 1);
+      });
+
+      return Object.entries(agg)
+         .map(([name, data]) => ({ name, ...data }))
+         .sort((a, b) => b.quantity - a.quantity);
+   };
+
    const [activeTab, setActiveTab] = useState<TabType>('dashboard');
    // Defaulting to current month dynamically
    const [selectedCompetence, setSelectedCompetence] = useState(() => {
@@ -137,8 +182,15 @@ const Production: React.FC = () => {
    const [filterName, setFilterName] = useState('');
    const [filterMunicipality, setFilterMunicipality] = useState('');
    const [filterUnit, setFilterUnit] = useState('');
-   const [filterStartDate, setFilterStartDate] = useState('');
-   const [filterEndDate, setFilterEndDate] = useState('');
+
+   // Date Filter State: Input (what user types) vs Applied (what filters data)
+   const [inputStartDate, setInputStartDate] = useState('');
+   const [inputEndDate, setInputEndDate] = useState('');
+   const [appliedStartDate, setAppliedStartDate] = useState('');
+   const [appliedEndDate, setAppliedEndDate] = useState('');
+
+   // Data State
+   const [fetchedRecords, setFetchedRecords] = useState<any[]>([]); // Store raw fetched records
 
    // Filtered Professionals
    const filteredProfessionals = React.useMemo(() => {
@@ -147,17 +199,25 @@ const Production: React.FC = () => {
 
          // Check if ANY assignment matches the municipality filter
          const matchesMunicipality = filterMunicipality
-            ? prof.assignments?.some(a => (a.municipalityName || prof.municipality) === filterMunicipality)
+            ? prof.assignments?.some(a => normalize(a.municipalityName || prof.municipality) === normalize(filterMunicipality))
             : true;
 
          // Check if ANY assignment matches the unit filter
          const matchesUnit = filterUnit
-            ? prof.assignments?.some(a => (a.unitName || prof.unitName) === filterUnit)
+            ? prof.assignments?.some(a => normalize(a.unitName || prof.unitName) === normalize(filterUnit))
             : true;
 
-         return matchesName && matchesMunicipality && matchesUnit;
+         // Check if has production in filtered range (if date filter is applied)
+         // Only filter by production presence if a date filter is explicitly applied.
+         // This ensures that when browsing the full competence (no date filter), we see all professionals (even those with 0).
+         // But when drilling down to a date range, we likely only care about those who produced.
+         const matchesProduction = (appliedStartDate && appliedEndDate)
+            ? (productionStats[prof.id] || 0) > 0
+            : true;
+
+         return matchesName && matchesMunicipality && matchesUnit && matchesProduction;
       });
-   }, [professionals, filterName, filterMunicipality, filterUnit]);
+   }, [professionals, filterName, filterMunicipality, filterUnit, appliedStartDate, appliedEndDate, productionStats]);
 
    // Derive unique options for Selects - Using Fetched Data
    const uniqueMunicipalities = React.useMemo(() => {
@@ -186,8 +246,10 @@ const Production: React.FC = () => {
          setFilterName('');
          setFilterMunicipality('');
          setFilterUnit('');
-         setFilterStartDate('');
-         setFilterEndDate('');
+         setInputStartDate('');
+         setInputEndDate('');
+         setAppliedStartDate('');
+         setAppliedEndDate('');
       }
    }, [isReportModalOpen]);
 
@@ -197,6 +259,36 @@ const Production: React.FC = () => {
          loadManagementData();
       }
    }, [isReportModalOpen, selectedReport, selectedCompetence, claims?.entityId]);
+
+   // Re-calculate Production Stats when Applied Filter or Records change
+   useEffect(() => {
+      if (fetchedRecords.length === 0) {
+         setProductionStats({});
+         return;
+      }
+
+      let filtered = fetchedRecords;
+
+      // Apply Date Filter
+      if (appliedStartDate && appliedEndDate) {
+         filtered = fetchedRecords.filter(r => {
+            const rRaw = r.rawDate;
+            if (!rRaw) return false;
+            return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
+         });
+      }
+
+      // Aggregate Stats
+      const stats: Record<string, number> = {};
+      filtered.forEach((p: any) => {
+         const pId = p.professionalId;
+         if (pId) {
+            stats[pId] = (stats[pId] || 0) + (Number(p.quantity) || 0);
+         }
+      });
+      setProductionStats(stats);
+
+   }, [fetchedRecords, appliedStartDate, appliedEndDate]);
 
    // Carregar Municípios globalmente (necessário para filtros e LEDI)
    useEffect(() => {
@@ -230,15 +322,9 @@ const Production: React.FC = () => {
             munis  // Pass municipalities list
          );
 
-         // 3. Aggregate
-         const stats: Record<string, number> = {};
-         production.forEach((p: any) => {
-            const pId = p.professionalId;
-            if (pId) {
-               stats[pId] = (stats[pId] || 0) + (Number(p.quantity) || 0);
-            }
-         });
-         setProductionStats(stats);
+         setFetchedRecords(production); // Store raw records
+         // Stats calculation moved to useEffect
+
       } catch (error) {
          console.error("Error loading report data:", error);
       } finally {
@@ -267,11 +353,32 @@ const Production: React.FC = () => {
    const fileInputRef = React.useRef<HTMLInputElement>(null);
    const [selectedProfForSignature, setSelectedProfForSignature] = useState<Professional | null>(null);
 
+   const [viewingSignatureProf, setViewingSignatureProf] = useState<Professional | null>(null);
+
    const handleAttachSignature = (prof: Professional) => {
-      setSelectedProfForSignature(prof);
-      if (fileInputRef.current) {
-         fileInputRef.current.value = ''; // Reset value to ensure onChange triggers even for same file
-         fileInputRef.current.click();
+      if (prof.signatureUrl) {
+         setViewingSignatureProf(prof);
+      } else {
+         setSelectedProfForSignature(prof);
+         if (fileInputRef.current) {
+            fileInputRef.current.value = ''; // Reset value to ensure onChange triggers even for same file
+            fileInputRef.current.click();
+         }
+      }
+   };
+
+   const handleChangeSignature = () => {
+      if (viewingSignatureProf) {
+         const prof = viewingSignatureProf;
+         setViewingSignatureProf(null); // Close view modal
+         setSelectedProfForSignature(prof);
+         // Small timeout to allow modal to close before opening file picker
+         setTimeout(() => {
+            if (fileInputRef.current) {
+               fileInputRef.current.value = '';
+               fileInputRef.current.click();
+            }
+         }, 100);
       }
    };
 
@@ -313,10 +420,6 @@ const Production: React.FC = () => {
          };
          reader.onerror = () => {
             console.error("Error reading file:", reader.error);
-            alert("Erro ao ler arquivo de assinatura.");
-            setUploadingSignatureId(null);
-            setSelectedProfForSignature(null);
-            if (fileInputRef.current) fileInputRef.current.value = '';
          };
          reader.readAsDataURL(file);
 
@@ -328,13 +431,14 @@ const Production: React.FC = () => {
          if (fileInputRef.current) fileInputRef.current.value = '';
       }
    };
-
    // --- Export Logic ---
    const [exportingProfId, setExportingProfId] = useState<string | null>(null);
+   const [exportDropdownOpen, setExportDropdownOpen] = useState<string | null>(null); // Stores ID of prof with open dropdown
 
-   const handleExportProfessional = async (prof: Professional) => {
+   const handleExportProfessional = async (prof: Professional, layout: 'grouped' | 'sus' = 'grouped') => {
       if (!claims?.entityId) return;
       setExportingProfId(prof.id);
+      setExportDropdownOpen(null); // Close dropdown
 
       try {
          // 1. Fetch Entity Name and Logo
@@ -342,9 +446,12 @@ const Production: React.FC = () => {
          let entityLogoUrl: string | undefined = undefined;
          let entityLogoBase64: string | undefined = undefined;
 
+         let entityData: any = {};
+
          const entDoc = await getDoc(doc(db, 'entities', claims.entityId));
          if (entDoc.exists()) {
             const data = entDoc.data();
+            entityData = data;
             entityName = data.name || data.fantasyName || entityName;
             entityLogoUrl = data.logoUrl;
             entityLogoBase64 = data.logoBase64;
@@ -361,7 +468,16 @@ const Production: React.FC = () => {
          );
 
          // Filter in memory for this professional
-         const profRecords = records.filter((r: any) => r.professionalId === prof.id);
+         let profRecords = records.filter((r: any) => r.professionalId === prof.id);
+
+         // Apply Date Filter if active
+         if (appliedStartDate && appliedEndDate) {
+            profRecords = profRecords.filter((r: any) => {
+               const rRaw = r.rawDate;
+               if (!rRaw) return false;
+               return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
+            });
+         }
 
          if (profRecords.length === 0) {
             alert('Nenhuma produção encontrada para este profissional nesta competência.');
@@ -369,25 +485,61 @@ const Production: React.FC = () => {
             return;
          }
 
-         // 3. Generate PDF
-         await municipalityReportService.generateProfessionalProductionPdf(
-            profRecords,
-            {
-               competence: selectedCompetence,
-               municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
-               entityName: entityName,
-               logoUrl: entityLogoUrl,
-               logoBase64: entityLogoBase64,
-               signatureUrl: prof.signatureUrl,
-               signatureBase64: prof.signatureBase64,
-               professional: {
-                  name: prof.name,
-                  cns: prof.cns || '',
-                  role: prof.assignments?.[0]?.occupation || prof.occupation || '',
-                  unit: prof.assignments?.[0]?.unitName || prof.unitName || ''
+         // 3. Generate PDF based on Layout
+         if (layout === 'sus') {
+            await susReportService.generateSusProductionPdf(
+               profRecords,
+               {
+                  competence: selectedCompetence,
+                  municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
+                  entityName: entityName,
+                  logoUrl: entityLogoUrl,
+                  logoBase64: entityLogoBase64,
+                  professional: {
+                     name: prof.name,
+                     cns: prof.cns || '',
+                     role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                     cbo: prof.assignments?.[0]?.cbo || prof.cbo || '',
+                     unit: prof.assignments?.[0]?.unitName || prof.unitName || '',
+                     unitCnes: (() => {
+                        const uId = prof.assignments?.[0]?.unitId || prof.unitId;
+                        if (!uId) return '';
+                        // allUnits is already loaded in component state
+                        const unit = allUnits.find(u => u.id === uId || u.cnes === uId);
+                        return unit?.cnes || uId;
+                     })()
+                  },
+                  signatureUrl: prof.signatureUrl,
+                  signatureBase64: prof.signatureBase64,
+                  // Entity Details for Footer
+                  entityAddress: entityData.address,
+                  entityPhone: entityData.phone,
+                  entityCnpj: entityData.cnpj,
+                  entityCity: entityData.location || claims.municipalityName, // Fallback
+                  entityResponsible: entityData.responsible
                }
-            }
-         );
+            );
+         } else {
+            // Default Grouped
+            await municipalityReportService.generateProfessionalProductionPdf(
+               profRecords,
+               {
+                  competence: selectedCompetence,
+                  municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
+                  entityName: entityName,
+                  logoUrl: entityLogoUrl,
+                  logoBase64: entityLogoBase64,
+                  signatureUrl: prof.signatureUrl,
+                  signatureBase64: prof.signatureBase64,
+                  professional: {
+                     name: prof.name,
+                     cns: prof.cns || '',
+                     role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                     unit: prof.assignments?.[0]?.unitName || prof.unitName || ''
+                  }
+               }
+            );
+         }
 
       } catch (error) {
          console.error("Error exporting professional report:", error);
@@ -432,16 +584,16 @@ const Production: React.FC = () => {
          );
 
          // --- Apply Date Filtering ---
+         // --- Apply Date Filtering (Fixed: String Comparison) ---
          let filteredRecords = records;
-         if (filterStartDate && filterEndDate) {
-            const start = new Date(filterStartDate);
-            const end = new Date(filterEndDate);
-            end.setHours(23, 59, 59, 999); // Include full end day
-
+         // Use Applied Filter for Export, falling back to input if user forgot to click apply?
+         // No, simpler to use applied to match what they see.
+         // Or better: Use Applied. User explicitly asked for "Apply button".
+         if (appliedStartDate && appliedEndDate) {
             filteredRecords = records.filter((r: any) => {
-               if (!r.attendanceDate) return false;
-               const rDate = new Date(r.attendanceDate);
-               return rDate >= start && rDate <= end;
+               const rRaw = r.rawDate;
+               if (!rRaw) return false;
+               return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
             });
          }
 
@@ -489,9 +641,68 @@ const Production: React.FC = () => {
 
    // Ensure filters are cleared if competence changes
    useEffect(() => {
-      setFilterStartDate('');
-      setFilterEndDate('');
+      setInputStartDate('');
+      setInputEndDate('');
+      setAppliedStartDate('');
+      setAppliedEndDate('');
    }, [selectedCompetence]);
+
+
+
+   // --- Render Signature Modal ---
+   const renderSignatureModal = () => {
+      if (!viewingSignatureProf) return null;
+
+      return (
+         <Modal
+            isOpen={!!viewingSignatureProf}
+            onClose={() => setViewingSignatureProf(null)}
+            title={`Assinatura Digital - ${viewingSignatureProf.name}`}
+         >
+            <div className="flex flex-col items-center space-y-6">
+               <div className="w-full max-w-md p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg flex justify-center items-center min-h-[150px]">
+                  {viewingSignatureProf.signatureUrl ? (
+                     <img
+                        src={viewingSignatureProf.signatureUrl}
+                        alt="Assinatura"
+                        className="max-h-40 object-contain"
+                     />
+                  ) : (
+                     <span className="text-gray-400">Imagem indisponível</span>
+                  )}
+               </div>
+
+               <div className="flex gap-3 w-full justify-end">
+                  <Button
+                     variant="ghost"
+                     onClick={() => setViewingSignatureProf(null)}
+                  >
+                     Fechar
+                  </Button>
+
+                  <a
+                     href={viewingSignatureProf.signatureUrl}
+                     download={`assinatura_${viewingSignatureProf.cns || 'document'}.png`}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                     <Download className="w-4 h-4 mr-2" />
+                     Baixar
+                  </a>
+
+                  <Button
+                     variant="secondary"
+                     onClick={handleChangeSignature}
+                  >
+                     <FileSignature className="w-4 h-4 mr-2" />
+                     Alterar Assinatura
+                  </Button>
+               </div>
+            </div>
+         </Modal>
+      );
+   };
 
    // --- Renders de Conteúdo dos Modais ---
 
@@ -593,8 +804,8 @@ const Production: React.FC = () => {
                                  type="date"
                                  min={dateConstraints.min}
                                  max={dateConstraints.max}
-                                 value={filterStartDate}
-                                 onChange={(e) => setFilterStartDate(e.target.value)}
+                                 value={inputStartDate}
+                                 onChange={(e) => setInputStartDate(e.target.value)}
                                  className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700"
                               />
                            </div>
@@ -604,12 +815,26 @@ const Production: React.FC = () => {
                                  type="date"
                                  min={dateConstraints.min}
                                  max={dateConstraints.max}
-                                 value={filterEndDate}
-                                 onChange={(e) => setFilterEndDate(e.target.value)}
+                                 value={inputEndDate}
+                                 onChange={(e) => setInputEndDate(e.target.value)}
                                  className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700"
                               />
                            </div>
-                           {(filterName || filterUnit || filterMunicipality || filterStartDate || filterEndDate) && (
+
+                           {/* Actions */}
+                           <Button
+                              variant="primary"
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => {
+                                 setAppliedStartDate(inputStartDate);
+                                 setAppliedEndDate(inputEndDate);
+                              }}
+                              disabled={!inputStartDate || !inputEndDate}
+                           >
+                              <Filter className="w-4 h-4 mr-1" /> Aplicar
+                           </Button>
+
+                           {(filterName || filterUnit || filterMunicipality || inputStartDate || inputEndDate || appliedStartDate) && (
                               <Button
                                  variant="ghost"
                                  className="text-gray-500 hover:text-red-500"
@@ -617,8 +842,10 @@ const Production: React.FC = () => {
                                     setFilterName('');
                                     setFilterMunicipality('');
                                     setFilterUnit('');
-                                    setFilterStartDate('');
-                                    setFilterEndDate('');
+                                    setInputStartDate('');
+                                    setInputEndDate('');
+                                    setAppliedStartDate('');
+                                    setAppliedEndDate('');
                                  }}
                               >
                                  <X className="w-4 h-4 mr-1" /> Limpar
@@ -628,12 +855,12 @@ const Production: React.FC = () => {
                         <div className="flex items-end">
                            <Button
                               variant="secondary"
-                              className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white border-none shadow-sm shadow-blue-500/30"
+                              className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white border-none shadow-sm shadow-green-500/30"
                               onClick={handleExportUnifiedReport}
                               disabled={exportingUnified || filteredProfessionals.length === 0}
                            >
                               {exportingUnified ? <Activity className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-                              Baixar Agrupado ({filteredProfessionals.length})
+                              Baixar Agrupado ({Object.keys(productionStats).length})
                            </Button>
                         </div>
                      </div>
@@ -664,20 +891,48 @@ const Production: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 text-right">
                                  <div className="flex items-center justify-end gap-2">
-                                    <Button
-                                       size="sm"
-                                       variant="outline"
-                                       className="h-8 text-xs gap-1"
-                                       onClick={() => handleExportProfessional(prof)}
-                                       disabled={exportingProfId === prof.id}
-                                    >
-                                       {exportingProfId === prof.id ? (
-                                          <Activity className="w-3 h-3 animate-spin" />
-                                       ) : (
-                                          <Download className="w-3 h-3" />
+                                    <div className="relative">
+                                       <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-8 text-xs gap-1"
+                                          onClick={() => setExportDropdownOpen(exportDropdownOpen === prof.id ? null : prof.id)}
+                                          disabled={exportingProfId === prof.id}
+                                       >
+                                          {exportingProfId === prof.id ? (
+                                             <Activity className="w-3 h-3 animate-spin" />
+                                          ) : (
+                                             <Download className="w-3 h-3" />
+                                          )}
+                                          Exportar
+                                          <ChevronDown className="w-3 h-3 ml-1" />
+                                       </Button>
+
+                                       {exportDropdownOpen === prof.id && (
+                                          <>
+                                             <div
+                                                className="fixed inset-0 z-10"
+                                                onClick={() => setExportDropdownOpen(null)}
+                                             />
+                                             <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 z-20 py-1">
+                                                <button
+                                                   onClick={() => handleExportProfessional(prof, 'grouped')}
+                                                   className="w-full text-left px-4 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                                >
+                                                   <FileText className="w-3 h-3" />
+                                                   Relatório Agrupado
+                                                </button>
+                                                <button
+                                                   onClick={() => handleExportProfessional(prof, 'sus')}
+                                                   className="w-full text-left px-4 py-2 text-xs text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 font-medium"
+                                                >
+                                                   <Building2 className="w-3 h-3" />
+                                                   Boletim BDPA (SUS)
+                                                </button>
+                                             </div>
+                                          </>
                                        )}
-                                       Exportar
-                                    </Button>
+                                    </div>
 
                                     <Button
                                        size="sm"
@@ -685,14 +940,14 @@ const Production: React.FC = () => {
                                        className="h-8 text-xs gap-1 whitespace-nowrap"
                                        onClick={() => handleAttachSignature(prof)}
                                        disabled={uploadingSignatureId === prof.id}
-                                       title="Anexar Assinatura Digitalizada"
+                                       title={prof.signatureUrl ? "Ver/Alterar Assinatura" : "Anexar Assinatura Digitalizada"}
                                     >
                                        {uploadingSignatureId === prof.id ? (
                                           <Activity className="w-3 h-3 animate-spin" />
                                        ) : (
                                           <FileSignature className={`w-3 h-3 ${prof.signatureUrl ? 'text-green-600' : 'text-gray-400'}`} />
                                        )}
-                                       {prof.signatureUrl ? 'Alterar Assinatura' : 'Anexar Assinatura'}
+                                       {prof.signatureUrl ? 'Ver Assinatura' : 'Anexar Assinatura'}
                                     </Button>
                                  </div>
                               </td>
@@ -805,7 +1060,7 @@ const Production: React.FC = () => {
 
          case 'cobertura': // Indicadores de Cobertura
             return (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   <div className="flex flex-col items-center">
                      <h4 className="text-sm font-bold mb-4 text-gray-700 dark:text-gray-300">Distribuição por Faixa Etária</h4>
                      <div className="h-64 w-full">
@@ -864,30 +1119,66 @@ const Production: React.FC = () => {
       <div className="space-y-6 animate-in fade-in duration-500">
          {/* KPI Cards */}
          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="p-5 border-l-4 border-emerald-500">
-               <div className="text-sm text-gray-500 font-medium">Produção Total (Qtd)</div>
-               <div className="text-2xl font-bold text-gray-900 dark:text-white mt-2">71,900</div>
-               <div className="flex items-center mt-2 text-sm text-emerald-600 font-medium">
-                  <ArrowUpRight className="w-4 h-4 mr-1" /> +5.2% vs anterior
-               </div>
-            </Card>
             <Card className="p-5 border-l-4 border-blue-500">
-               <div className="text-sm text-gray-500 font-medium">Valor Aprovado (R$)</div>
-               <div className="text-2xl font-bold text-gray-900 dark:text-white mt-2">R$ 342.150,00</div>
+               <div className="text-sm text-gray-500 font-medium">Produção Total (Qtd)</div>
+               <div className="mt-2">
+                  {dashboardLoading ? (
+                     <Skeleton className="h-8 w-24" />
+                  ) : (
+                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {production.total.toLocaleString('pt-BR')}
+                     </div>
+                  )}
+               </div>
                <div className="flex items-center mt-2 text-sm text-blue-600 font-medium">
-                  <Activity className="w-4 h-4 mr-1" /> 98.5% Aprovado
+                  {production.trendUp ? <ArrowUpRight className="w-4 h-4 mr-1" /> : <Activity className="w-4 h-4 mr-1" />}
+                  {production.trend}% vs anterior
                </div>
             </Card>
-            <Card className="p-5 border-l-4 border-amber-500">
+
+            <Card className="p-5 border-l-4 border-emerald-500">
                <div className="text-sm text-gray-500 font-medium">Eficiência de Metas</div>
-               <div className="text-2xl font-bold text-gray-900 dark:text-white mt-2">89.4%</div>
+               <div className="mt-2">
+                  {dashboardLoading ? (
+                     <Skeleton className="h-8 w-16" />
+                  ) : (
+                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {dashboardGoals.value}
+                     </div>
+                  )}
+               </div>
                <div className="text-xs text-gray-500 mt-2">Média geral das unidades</div>
             </Card>
+
+            <Card className="p-5 border-l-4 border-orange-500">
+               <div className="text-sm text-gray-500 font-medium">Municípios Ativos</div>
+               <div className="mt-2">
+                  {dashboardLoading ? (
+                     <Skeleton className="h-8 w-12" />
+                  ) : (
+                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {dashboardMunicipalities.value}
+                     </div>
+                  )}
+               </div>
+               <div className="flex items-center mt-2 text-sm text-orange-600 font-medium">
+                  <Building2 className="w-4 h-4 mr-1" /> Monitorados
+               </div>
+            </Card>
+
             <Card className="p-5 border-l-4 border-purple-500">
-               <div className="text-sm text-gray-500 font-medium">Pacientes Únicos</div>
-               <div className="text-2xl font-bold text-gray-900 dark:text-white mt-2">12,450</div>
+               <div className="text-sm text-gray-500 font-medium">Profissionais Ativos</div>
+               <div className="mt-2">
+                  {dashboardLoading ? (
+                     <Skeleton className="h-8 w-12" />
+                  ) : (
+                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {dashboardProfessionals.value}
+                     </div>
+                  )}
+               </div>
                <div className="flex items-center mt-2 text-sm text-purple-600 font-medium">
-                  <Users className="w-4 h-4 mr-1" /> Cobertura Est: 68%
+                  <Users className="w-4 h-4 mr-1" /> Na competência
                </div>
             </Card>
          </div>
@@ -896,121 +1187,123 @@ const Production: React.FC = () => {
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Evolução Temporal */}
             <Card className="lg:col-span-2 p-6">
-               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 flex items-center">
-                  <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
-                  Evolução Temporal da Produção (Série Histórica)
-               </h3>
+               <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                     <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
+                     Evolução Temporal da Produção
+                  </h3>
+                  <div className="flex gap-2">
+                     <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Manual</span>
+                     <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full">Conector</span>
+                  </div>
+               </div>
                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                     <AreaChart data={EVOLUTION_DATA}>
-                        <defs>
-                           <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
-                              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                           </linearGradient>
-                           <linearGradient id="colorMeta" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                           </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                        <YAxis axisLine={false} tickLine={false} />
-                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                        <Legend />
-                        <Area type="monotone" dataKey="real" name="Realizado" stroke="#10b981" fillOpacity={1} fill="url(#colorReal)" strokeWidth={3} />
-                        <Area type="monotone" dataKey="meta" name="Meta Física" stroke="#3b82f6" fillOpacity={1} fill="url(#colorMeta)" strokeDasharray="5 5" />
-                     </AreaChart>
-                  </ResponsiveContainer>
+                  {dashboardLoading ? (
+                     <Skeleton className="w-full h-full rounded-lg" />
+                  ) : (
+                     <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={production.chartData}>
+                           <defs>
+                              <linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1">
+                                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                                 <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                              </linearGradient>
+                           </defs>
+                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                           <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                           <YAxis axisLine={false} tickLine={false} />
+                           <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                           <Legend />
+                           <Area type="monotone" dataKey="procedures" name="Produção Total" stroke="#3b82f6" fillOpacity={1} fill="url(#colorProd)" strokeWidth={3} />
+                        </AreaChart>
+                     </ResponsiveContainer>
+                  )}
                </div>
             </Card>
 
             {/* Top Procedimentos */}
             <Card className="p-6">
-               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Top 5 Procedimentos</h3>
-               <div className="space-y-5">
-                  {TOP_PROCEDURES.slice(0, 5).map((proc, idx) => (
-                     <div key={idx}>
-                        <div className="flex justify-between text-sm mb-1">
-                           <span className="text-gray-700 dark:text-gray-300 truncate max-w-[180px]" title={proc.name}>{proc.name}</span>
-                           <span className="font-bold text-gray-900 dark:text-white">{proc.qtd}</span>
+               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Top Procedimentos</h3>
+               <div className="space-y-4 max-h-[320px] overflow-y-auto pr-1">
+                  {dashboardLoading ? (
+                     Array(5).fill(0).map((_, i) => (
+                        <div key={i} className="flex flex-col gap-2">
+                           <div className="flex justify-between">
+                              <Skeleton className="h-4 w-3/4" />
+                              <Skeleton className="h-4 w-8" />
+                           </div>
+                           <Skeleton className="h-1.5 w-full" />
                         </div>
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                     ))
+                  ) : (
+                     <>
+                        {production.topProcedures?.map((proc, idx) => (
                            <div
-                              className="bg-blue-600 h-2 rounded-full"
-                              style={{ width: `${(proc.qtd / 4500) * 100}%` }}
-                           ></div>
-                        </div>
-                     </div>
-                  ))}
-               </div>
-               <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col h-56">
-                  <p className="text-sm font-semibold mb-2 text-center text-gray-600 dark:text-gray-400">Faixa Etária dos Pacientes</p>
-                  <div className="flex-1 min-h-0">
-                     <ResponsiveContainer width="100%" height="100%">
-                        <RechartsPieChart>
-                           <Pie
-                              data={DEMOGRAPHICS_AGE}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={40}
-                              outerRadius={70}
-                              paddingAngle={5}
-                              dataKey="value"
+                              key={idx}
+                              className="relative pt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded p-1 transition-colors group"
+                              onClick={() => handleProcedureClick(proc.name)}
+                              title="Clique para ver detalhamento"
                            >
-                              {DEMOGRAPHICS_AGE.map((entry, index) => (
-                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                           </Pie>
-                           <Tooltip />
-                           <Legend iconSize={8} layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px' }} />
-                        </RechartsPieChart>
-                     </ResponsiveContainer>
-                  </div>
+                              <div className="flex mb-1 items-center justify-between">
+                                 <div className="flex items-center overflow-hidden">
+                                    <span className="text-xs font-semibold inline-block py-0.5 px-2 uppercase rounded-full text-blue-600 bg-blue-100 mr-2 flex-shrink-0 group-hover:bg-blue-200">
+                                       #{idx + 1}
+                                    </span>
+                                    <span className="font-medium text-sm text-gray-700 dark:text-gray-200 truncate" title={proc.name}>
+                                       {proc.name}
+                                    </span>
+                                 </div>
+                                 <span className="text-xs font-bold text-gray-900 dark:text-white ml-2">
+                                    {proc.value}
+                                 </span>
+                              </div>
+                              <div className="overflow-hidden h-1.5 mb-2 text-xs flex rounded bg-gray-100 dark:bg-gray-700">
+                                 <div style={{ width: `${(proc.value / (production.topProcedures[0]?.value || 1)) * 100}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500"></div>
+                              </div>
+                           </div>
+                        ))}
+                        {(!production.topProcedures || production.topProcedures.length === 0) && (
+                           <div className="text-center py-8 text-gray-400 text-sm">
+                              Nenhum dado de procedimento disponível.
+                           </div>
+                        )}
+                     </>
+                  )}
                </div>
             </Card>
          </div>
 
-         {/* Ranking de Profissionais */}
-         <Card className="overflow-hidden">
-            <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Performance por Profissional</h3>
-               <Button variant="outline" className="text-xs" onClick={() => setActiveTab('reports')}>Ver Detalhes</Button>
-            </div>
-            <Table headers={['Profissional', 'Cargo/Unidade', 'Produção (Qtd)', 'Meta Atingida', 'Valor Produzido', 'Status']}>
-               {PROFESSIONAL_RANKING.slice(0, 4).map((prof) => (
-                  <tr key={prof.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                     <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{prof.name}</td>
-                     <td className="px-6 py-4 text-sm text-gray-500">
-                        {prof.role}<br />
-                        <span className="text-xs opacity-75">{prof.unit}</span>
-                     </td>
-                     <td className="px-6 py-4 font-mono">{prof.qtd}</td>
-                     <td className="px-6 py-4">
-                        <div className="flex items-center">
-                           <div className="w-16 bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 mr-2">
-                              <div className={`h-1.5 rounded-full ${prof.meta >= 100 ? 'bg-green-500' : prof.meta >= 80 ? 'bg-blue-500' : 'bg-red-500'}`} style={{ width: `${Math.min(prof.meta, 100)}%` }}></div>
-                           </div>
-                           <span className="text-xs font-bold">{prof.meta}%</span>
-                        </div>
-                     </td>
-                     <td className="px-6 py-4 font-mono text-sm">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prof.val)}
-                     </td>
-                     <td className="px-6 py-4">
-                        {prof.meta >= 90 ? (
-                           <Badge type="success">Alta Performance</Badge>
-                        ) : prof.meta >= 70 ? (
-                           <Badge type="neutral">Na Média</Badge>
-                        ) : (
-                           <Badge type="warning">Abaixo da Meta</Badge>
-                        )}
-                     </td>
-                  </tr>
-               ))}
-            </Table>
-         </Card>
-
+         {/* Performance por Profissional (Simplificado/Inteligente) */}
+         {(dashboardProfessionals.value > 0 || dashboardLoading) && (
+            <Card className="overflow-hidden">
+               <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                     <Users className="w-5 h-5 text-purple-600" />
+                     Performance por Profissional
+                  </h3>
+                  <Button variant="outline" className="text-xs" onClick={() => setActiveTab('reports')}>
+                     Ver Relatório Completo <ChevronRight className="w-3 h-3 ml-1" />
+                  </Button>
+               </div>
+               <div className="p-6 bg-gray-50 dark:bg-gray-800/50 text-center">
+                  {dashboardLoading ? (
+                     <div className="flex flex-col items-center justify-center py-4">
+                        <Skeleton className="h-4 w-1/2 mb-4" />
+                        <Skeleton className="h-10 w-40" />
+                     </div>
+                  ) : (
+                     <>
+                        <p className="text-sm text-gray-500 mb-4">
+                           A análise detalhada de performance individual, incluindo cumprimento de metas e faturamento, está disponível na aba <strong>Relatórios Gerenciais</strong>.
+                        </p>
+                        <Button onClick={() => handleOpenReport({ id: 'profissional', title: 'Produção por Profissional', desc: '', icon: Users, color: '' })} variant="secondary">
+                           Abrir Análise Detalhada
+                        </Button>
+                     </>
+                  )}
+               </div>
+            </Card>
+         )}
       </div>
    );
 
@@ -1195,6 +1488,57 @@ const Production: React.FC = () => {
 
 
 
+   // --- Procedure Breakdown Modal State ---
+
+
+
+   // --- Renderers ---
+
+   const renderProcedureModal = () => {
+      const data = getProcedureBreakdown() || [];
+      console.log('Rendering Procedure Modal:', { selectedProcedure, dataCount: data.length });
+
+
+      return (
+         <Modal
+            isOpen={isProcedureModalOpen}
+            onClose={() => setIsProcedureModalOpen(false)}
+            title={`Detalhamento: ${selectedProcedure}`}
+         >
+            <div className="max-h-[60vh] overflow-y-auto">
+               <Table>
+                  <thead className="bg-gray-50 dark:bg-gray-800">
+                     <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Profissional</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidade</th>
+                        <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd</th>
+                     </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                     {Array.isArray(data) && data.map((row, idx) => (
+                        <tr key={idx}>
+                           <td className="px-4 py-2 text-sm text-gray-900 dark:text-white">{row.name}</td>
+                           <td className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">{row.unit}</td>
+                           <td className="px-4 py-2 text-sm text-center font-bold text-gray-900 dark:text-white">{row.quantity}</td>
+                        </tr>
+                     ))}
+                     {data.length === 0 && (
+                        <tr>
+                           <td colSpan={3} className="px-4 py-4 text-center text-gray-500 text-sm">Nenhum registro encontrado.</td>
+                        </tr>
+                     )}
+                  </tbody>
+               </Table>
+            </div>
+            <div className="mt-4 flex justify-end">
+               <Button variant="outline" onClick={() => setIsProcedureModalOpen(false)}>Fechar</Button>
+            </div>
+         </Modal>
+      );
+   };
+
+   // ... (Rest of renders)
+
    return (
       <div className="space-y-6">
          {/* Header Principal */}
@@ -1202,29 +1546,31 @@ const Production: React.FC = () => {
             <div>
                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Produção Global</h1>
                <p className="text-gray-500 dark:text-gray-400 mt-1">Monitoramento, Auditoria e Exportação do BPA.</p>
-            </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-               {/* Seletor de Competência */}
-               <div className="relative">
-                  <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
-                  <select
-                     value={selectedCompetence}
-                     onChange={(e) => setSelectedCompetence(e.target.value)}
-                     className="pl-10 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50"
-                  >
-                     {competenceOptions.map(comp => (
-                        <option key={comp} value={comp}>{comp}</option>
-                     ))}
-                  </select>
-                  <ChevronRight className="absolute right-3 top-3 w-3 h-3 text-gray-500 transform rotate-90" />
-               </div>
-
-               <Button variant="outline" className="flex items-center gap-2">
-                  <Filter className="w-4 h-4" /> Filtros Avançados
-               </Button>
             </div>
          </div>
+
+         <div className="flex flex-col sm:flex-row gap-3">
+            {/* Seletor de Competência */}
+            <div className="relative">
+               <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+               <select
+                  value={selectedCompetence}
+                  onChange={(e) => setSelectedCompetence(e.target.value)}
+                  className="pl-10 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50"
+               >
+                  {competenceOptions.map(comp => (
+                     <option key={comp} value={comp}>{comp}</option>
+                  ))}
+               </select>
+               <ChevronRight className="absolute right-3 top-3 w-3 h-3 text-gray-500 transform rotate-90" />
+            </div>
+
+            <Button variant="outline" className="flex items-center gap-2">
+               <Filter className="w-4 h-4" /> Filtros Avançados
+            </Button>
+         </div>
+
 
          {/* Navegação por Abas */}
          <div className="border-b border-gray-200 dark:border-gray-700">
@@ -1288,6 +1634,9 @@ const Production: React.FC = () => {
             </div>
          </Modal>
 
+         {/* Procedure Breakdown Modal */}
+         {renderProcedureModal()}
+
          {/* Hidden File Input for Signature Upload - Moved to root to persist across tabs */}
          <input
             type="file"
@@ -1296,7 +1645,8 @@ const Production: React.FC = () => {
             accept="image/*"
             onChange={handleFileChange}
          />
-      </div>
+         {renderSignatureModal()}
+      </div >
    );
 };
 

@@ -3,6 +3,8 @@ import { collectionGroup, query, where, getDocs, collection } from 'firebase/fir
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { statsCache } from './statsCache';
+import { goalService } from './goalService';
 
 // Types
 export interface BpaCReportRow {
@@ -18,6 +20,52 @@ export interface BpaCReportRow {
 // Helpers
 const normalize = (str: string) => String(str || '').trim().toLowerCase();
 const onlyNumbers = (text: string) => String(text).replace(/\D/g, '');
+
+export const normalizeVaccine = (name: string, type: string) => {
+    if (type === 'VACCINATION' || name.toUpperCase().includes('VACINA')) {
+        const nameUpper = name.toUpperCase();
+
+        // 1. VIA ORAL (03.01.10.021-7)
+        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA')) {
+            return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
+        }
+
+        // 2. VIA INTRADÉRMICA (03.01.10.023-3)
+        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG')) {
+            return { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' };
+        }
+
+        // 3. VIA SUBCUTÂNEA (03.01.10.022-5)
+        if (nameUpper.includes('SUBCUTANEA') || nameUpper.includes('SUBCUTÂNEA') ||
+            nameUpper.includes('TRIPLICE') || nameUpper.includes('SARAMPO') || nameUpper.includes('CAXUMBA') || nameUpper.includes('RUBEOLA') ||
+            nameUpper.includes('FEBRE AMARELA') ||
+            nameUpper.includes('VARICELA') || nameUpper.includes('CATAPORA') ||
+            nameUpper.includes('TETRA VIRAL') || nameUpper.includes('SCR')) {
+            return { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' };
+        }
+
+        // 4. VIA INTRAMUSCULAR (03.01.10.020-9)
+        if (nameUpper.includes('INTRAMUSCULAR') ||
+            nameUpper.includes('HEPATITE') ||
+            nameUpper.includes('PENTA') || nameUpper.includes('DTP') || nameUpper.includes('HIB') ||
+            nameUpper.includes('VIP') ||
+            nameUpper.includes('PNEUMO') || nameUpper.includes('MENINGO') ||
+            nameUpper.includes('INFLUENZA') || nameUpper.includes('GRIPE') ||
+            nameUpper.includes('COVID') ||
+            nameUpper.includes('DUPLA') || nameUpper.includes('DT') ||
+            nameUpper.includes('HPV')) {
+            return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
+        }
+
+        if (nameUpper.includes('ENDOVENOSA')) {
+            return { code: '0301100195', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ENDOVENOSA' };
+        }
+
+        // Default Fallback for Vaccine
+        return { code: '0301100209', name: `${name} (ADMINISTRAÇÃO IM)` };
+    }
+    return null;
+};
 
 // Aggregation Helper (ITEM 4: Unify counts)
 const aggregateRows = (rows: any[]) => {
@@ -240,11 +288,12 @@ const drawProfessionalPage = async (
 };
 
 const resolveSigtapCode = (rec: any): { code: string, name: string } => {
+    // Robust check for code/name location
     const proc = rec.procedure || {};
-    let code = proc.code ? String(proc.code).replace(/\D/g, '') : '';
-    let name = proc.name || 'Procedimento Sem Nome';
-    const type = proc.type || '';
-    const profCbo = rec.professional?.cbo || '';
+    let code = proc.code ? String(proc.code).replace(/\D/g, '') : (rec.procedureCode ? String(rec.procedureCode).replace(/\D/g, '') : (rec.code ? String(rec.code).replace(/\D/g, '') : ''));
+    let name = proc.name || rec.procedureName || rec.name || 'Procedimento Sem Nome';
+    const type = proc.type || rec.type || '';
+    const profCbo = rec.professional?.cbo || rec.cbo || '';
 
     // If we already have a valid SIGTAP code (10 digits starting with 0), keep it.
     // Allow 2 digits (Vaccine) or other lengths if they seem valid, but if it's "CONSULTA" or "ODONTO", we map.
@@ -253,30 +302,11 @@ const resolveSigtapCode = (rec: any): { code: string, name: string } => {
 
     // --- MAPPING LOGIC ---
 
-    // 1. VACCINATION
-    if (type === 'VACCINATION' || name.toUpperCase().includes('VACINA')) {
-        const nameUpper = name.toUpperCase();
-
-        // Routes of Administration Mapping
-        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS')) {
-            return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
-        }
-        if (nameUpper.includes('INTRAMUSCULAR') || nameUpper.includes('PENTA') || nameUpper.includes('DTP') || nameUpper.includes('IPV') || nameUpper.includes('VIP')) {
-            return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
-        }
-        if (nameUpper.includes('SUBCUTANEA') || nameUpper.includes('SUBCUTÂNEA') || nameUpper.includes('TRIPLICE') || nameUpper.includes('SCR') || nameUpper.includes('FEBRE AMARELA')) {
-            return { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' };
-        }
-        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG')) {
-            // BCG usually Intradermal
-            return { code: '0301100233', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRADÉRMICA' };
-        }
-        if (nameUpper.includes('ENDOVENOSA')) {
-            return { code: '0301100195', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ENDOVENOSA' };
-        }
-
-        // Default Fallback for Vaccine
-        return { code: '0301100209', name: `${name} (ADMINISTRAÇÃO IM)` };
+    // 1. VACCINATION - Use shared helper
+    // RE-ENABLED: User requires consistency and correct codes for all records in the report.
+    const vaccineNormalization = normalizeVaccine(name, type);
+    if (vaccineNormalization) {
+        return vaccineNormalization;
     }
 
     // 2. CONSULTATION / ATTENDANCE / ODONTOLOGY
@@ -326,179 +356,91 @@ export const municipalityReportService = {
         municipalitiesList?: any[] // List of available municipalities with context
     ) => {
         try {
-            console.log(`[Report] Fetching for Mun ${municipalityId || 'ALL'}, Comp ${competence}`);
+            // console.log(`[Report] Fetching for Mun ${municipalityId || 'ALL'}, Comp ${competence} (via Cache)`);
 
-            // Normalize competence (YYYY-MM)
+            // 1. Determine Year for Cache Key
+            let year = new Date().getFullYear().toString();
             let compFilter = competence;
-            let startDt = '';
-            let endDt = '';
 
             if (competence.includes('/')) {
                 const [mm, yyyy] = competence.split('/');
+                year = yyyy;
                 compFilter = `${yyyy}-${mm}`;
-                startDt = `${yyyy}-${mm}-01`;
-                endDt = `${yyyy}-${mm}-31 23:59:59`;
+            } else if (competence.length === 6) {
+                year = competence.substring(0, 4);
+                compFilter = `${year}-${competence.substring(4, 6)}`;
+            } else if (competence.includes('-')) {
+                year = competence.split('-')[0];
+                compFilter = competence; // already YYYY-MM
             }
 
-            // 1. Fetch Manual Production (Existing Logic)
-            const manualPromise = (async () => {
-                const collectionRef = collectionGroup(db, 'procedures');
-                const q = query(collectionRef, where('entityId', '==', entityId));
-                const snapshot = await getDocs(q);
+            // 2. Get from Cache (Unifies with Dashboard)
+            const allRecords = await statsCache.getOrFetch(entityId, year, async () => {
+                return await goalService.getEntityProductionStats(
+                    entityId,
+                    year,
+                    undefined,
+                    municipalitiesList,
+                    professionalsMap
+                );
+            });
 
-                const uniqueDocsMap = new Map();
-                snapshot.docs.forEach(doc => {
-                    const data = doc.data();
-                    const pathSegments = doc.ref.path.split('/');
-                    const profIndex = pathSegments.indexOf('professionals');
-                    if (profIndex !== -1 && profIndex + 1 < pathSegments.length) {
-                        data.professionalId = pathSegments[profIndex + 1];
-                    }
-                    uniqueDocsMap.set(doc.id, { ...data, source: 'manual', id: doc.id });
-                });
+            // 3. Filter Locally
+            const filteredRecords = allRecords.filter(r => {
+                // Competence Match
+                const rComp = r.competenceMonth || r.competence || (r.productionDate ? r.productionDate.slice(0, 7) : '');
+                if (rComp !== compFilter) return false;
 
-                // Filter logic
-                return Array.from(uniqueDocsMap.values()).filter((d: any) => {
-                    const docComp = d.competenceMonth || d.competence;
-                    const matchesComp = docComp === compFilter;
-                    const matchesUnit = unitIds.length > 0 ? unitIds.includes(d.unitId) : true;
-                    const matchesMun = municipalityId ? d.municipalityId === municipalityId : true;
-                    return matchesComp && matchesUnit && matchesMun;
-                });
-            })();
+                // Municipality Match
+                if (municipalityId && r.municipalityId !== municipalityId) return false;
 
-            // 2. Fetch Extracted Production (Iterating if necessary)
-            const extractedPromise = (async () => {
-                if (!municipalitiesList || municipalitiesList.length === 0) return [];
+                // Unit Match
+                if (unitIds && unitIds.length > 0 && !unitIds.includes(r.unitId)) return false;
 
-                // Determine which municipalities to query
-                const targetMuns = municipalityId
-                    ? municipalitiesList.filter(m => m.id === municipalityId)
-                    : municipalitiesList;
+                return true;
+            });
 
-                const promises = targetMuns.map(async (mun) => {
-                    try {
-                        // We need entityType. If implicit in path, we need to know.
-                        // Assuming mun has _pathContext or we infer.
-                        // Standard Path: municipalities/{entityType}/{entityId}/{munId}
-                        // If we don't have _pathContext, we might try 'public_entities' or 'private_entities' based on Entity Claim?
-                        // But easier if passed. 
-                        // Fallback: If mun has _pathContext (from Dashboard fetching), use it.
-                        // IF NOT: We can't easily guess.
-
-                        // CAUTION: If we can't build the path, we skip.
-                        // Production.tsx passes 'allMunicipalities'.
-
-                        let entType = 'public_entities'; // Guess? Bad.
-                        if (mun._pathContext?.entityType) {
-                            entType = mun._pathContext.entityType;
-                        } else if (mun.entityType) {
-                            entType = mun.entityType;
-                        } else {
-                            // Try to derive from parent entityId? No.
-                            // If we skip, we miss data.
-                            // Let's assume 'private_entities' if not found, or check ID prefix? 
-                            // Entity IDs are UUID-like.
-
-                            // Let's rely on `_pathContext` being present. `fetchMunicipalitiesByEntity` MIGHT NOT set it.
-                            // I need to check `fetchMunicipalitiesByEntity`.
-                            // FOR NOW: Let's try to fetch from BOTH public and private if unknown? No.
-
-                            // Let's assume the user object passed `municipalitiesList` has the context.
-                            // In `ConnectorDashboard`, we saw `selectedMun._pathContext`.
-                            return [];
-                        }
-
-                        const extractRef = collection(db, 'municipalities', entType, entityId, mun.id, 'extractions');
-                        const q = query(
-                            extractRef,
-                            where('productionDate', '>=', startDt),
-                            where('productionDate', '<=', endDt)
-                        );
-                        const snap = await getDocs(q);
-                        return snap.docs.map(doc => {
-                            const data = doc.data() as any;
-                            // Inject municipalityId if missing
-                            return { id: doc.id, ...data, source: 'connector', municipalityId: mun.id };
-                        });
-                    } catch (e) {
-                        console.warn(`Failed to fetch extracted for mun ${mun.id}`, e);
-                        return [];
-                    }
-                });
-
-                const results = await Promise.all(promises);
-                return results.flat();
-            })();
-
-            const [manualRecords, extractedRecords] = await Promise.all([manualPromise, extractedPromise]);
-
-            // 3. Normalize Extracted Records
-            const normalizedExtracted = extractedRecords.map(rec => {
-                // --- SMART MATCHING LOGIC ---
-                // Priority: 1. CNS, 2. CPF (if avail), 3. Name (Normalized)
-                let matchedProf = null;
-
-                const recCns = onlyNumbers(rec.professional?.cns || '');
-                const recCpf = onlyNumbers(rec.professional?.cpf || '');
-                const recName = normalize(rec.professional?.name || '');
-
-                if (professionalsMap && professionalsMap.length > 0) {
-                    // 1. Try CNS
-                    if (recCns.length > 5) { // minimal validity check
-                        matchedProf = professionalsMap.find(p => onlyNumbers(p.cns) === recCns);
-                    }
-
-                    // 2. Try CPF (if not found yet)
-                    if (!matchedProf && recCpf.length > 5) {
-                        matchedProf = professionalsMap.find(p => onlyNumbers(p.cpf) === recCpf);
-                    }
-
-                    // 3. Try Name (if not found yet)
-                    if (!matchedProf && recName.length > 3) {
-                        matchedProf = professionalsMap.find(p => normalize(p.name) === recName);
-                    }
+            // 4. Enrich & Format (Map to Report Structure)
+            return filteredRecords.map(r => {
+                // Resolve Professional Name
+                let profName = r.professionalName;
+                if (!profName && r.professionalId && professionalsMap) {
+                    const found = professionalsMap.find(p => p.id === r.professionalId);
+                    if (found) profName = found.name;
                 }
 
-                // Clean CBO
-                const cbo = String(rec.professional?.cbo || '').replace(/\D/g, '');
+                // Resolve Sigtap
+                const { code, name } = resolveSigtapCode(r);
 
-                // Resolve SIGTAP
-                const { code, name } = resolveSigtapCode(rec);
-
-                // Age
-                let age = 0;
-                if (rec.patient?.birthDate && rec.productionDate) {
-                    const birth = new Date(rec.patient.birthDate);
-                    const prod = new Date(rec.productionDate);
+                // Calculate Age (if patient data available)
+                let age = r.patientAge;
+                if (age === undefined && r.patient?.birthDate && r.productionDate) {
+                    const birth = new Date(r.patient.birthDate);
+                    const prod = new Date(r.productionDate);
                     age = prod.getFullYear() - birth.getFullYear();
                 }
 
+                // Format Date
+                let attDate = r.attendanceDate;
+                if (!attDate && r.productionDate) {
+                    attDate = r.productionDate.split(' ')[0].split('-').reverse().join('/');
+                }
+
                 return {
-                    id: rec.id,
-                    source: 'connector',
-
-                    // Linkage
-                    professionalId: matchedProf?.id || `ext_${recCns || 'unknown'}`, // Fallback ID
-                    professionalName: matchedProf?.name || rec.professional?.name || 'Profissional Externo',
-                    unitId: rec.unit?.cnes || 'EXT', // Placeholder
-                    municipalityId,
-
-                    // Data
-                    attendanceDate: rec.productionDate?.split(' ')[0].split('-').reverse().join('/'),
-                    patientName: rec.patient?.name || 'NÃO IDENTIFICADO',
-                    patientCns: rec.patient?.cns || '',
-                    patientAge: age,
-
-                    cbo: cbo,
+                    ...r,
+                    professionalName: profName || 'Não Identificado',
                     procedureCode: code,
                     procedureName: name,
-
-                    quantity: 1 // Single record
+                    patientAge: age,
+                    attendanceDate: attDate,
+                    rawDate: r.productionDate ? r.productionDate.split(' ')[0] : (attDate ? attDate.split('/').reverse().join('-') : ''), // Normalizing to YYYY-MM-DD
+                    // Fix: Map Patient Info correctly (Connector/Manual)
+                    patientName: r.patientName || r.patient?.name || 'NÃO IDENTIFICADO',
+                    patientCns: r.patientCns || r.patient?.cns || r.patient?.cpf || '',
+                    // Ensure quantities are numbers
+                    quantity: Number(r.quantity) || 1
                 };
             });
-
-            return [...manualRecords, ...normalizedExtracted];
 
         } catch (error) {
             console.error('[Report] Error fetching production:', error);
@@ -539,6 +481,14 @@ export const municipalityReportService = {
         });
         rows.forEach((r, i) => r.seq = i + 1);
         return rows;
+    },
+
+    /**
+     * Prepare data for BPA-I (Identified)
+     * Currently a pass-through as fetchMunicipalityProduction normalizes data.
+     */
+    prepareBpaIData: (records: any[]) => {
+        return records;
     },
 
     generatePdfBpaC: (rows: BpaCReportRow[], meta: any) => {

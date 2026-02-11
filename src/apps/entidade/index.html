@@ -15,6 +15,14 @@
         return true;
       }
     }, true);
+    
+    // Backup suppression for older browsers or different contexts
+    window.onerror = function(msg, url, line, col, error) {
+      if (typeof msg === 'string' && (msg.includes('u[v]') || msg.includes('u[v] is not a function'))) {
+        return true;
+      }
+      return false;
+    };
   </script>
   <script>
     tailwind.config = {

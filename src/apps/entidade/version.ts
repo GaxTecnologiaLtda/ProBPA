@@ -1,10 +1,63 @@
-export const APP_VERSION = '1.7.2';
+export const APP_VERSION = '1.7.7';
 
 export const getVersionString = () => {
     return APP_VERSION;
 };
 
 export const LATEST_CHANGES = [
+    {
+        version: '1.7.7',
+        date: '10/02/2026',
+        title: 'Filtros Avançados & UI Dark Mode',
+        changes: [
+            'Filtros Avançados: Novo painel expansível permitindo filtrar profissionais por Período, Unidade e Cargo/CBO.',
+            'Refinamento de Busca: A busca por Nome/CPF agora pode ser combinada com os filtros de data e unidade.',
+            'Correções Visuais: Ajuste de legibilidade nos campos de entrada para o Modo Escuro (Dark Mode).',
+            'Lógica Temporal: O filtro de data agora respeita o fuso horário local, eliminando discrepâncias.'
+        ]
+    },
+    {
+        version: '1.7.6',
+        date: '09/02/2026',
+        title: 'Sistema de Notificações e Refinamentos',
+        changes: [
+            'Novo Sistema de Notificações (Sino no topo).',
+            'Cadastro de Profissionais agora usa lista fechada de CBOs.',
+            'Campos de contato (Email/Whatsapp) obrigatórios.',
+            'Nova imagem de exemplo para assinatura.'
+        ]
+    },
+    {
+        version: '1.7.5',
+        date: '08/02/2026',
+        title: 'Assinaturas e Refinamentos de Relatório',
+        changes: [
+            'Assinatura Digital: Novo recurso para ajuste e visualização e download da assinatura do profissional.',
+            'Produção Global: Otimização significativa no carregamento da aba de produção unificada.',
+            'Relatórios Precisos: Refinamento nos filtros de extração para eliminar duplicatas e normalizar códigos de vacinas (padrão SIGTAP).'
+        ]
+    },
+    {
+        version: '1.7.4',
+        date: '07/02/2026',
+        title: 'Otimização de Performance e UX',
+        changes: [
+            'Performance: Implementado cache em memória (RAM) para dados de produção, tornando a navegação entre abas instantânea.',
+            'Experiência do Usuário: Novo indicador visual de carregamento ("Blur + Mensagem") eliminando telas brancas e flashes durante a sincronização.',
+            'Feedback Visual: Mensagens de carregamento refinadas para melhor alinhar expectativas em grandes volumes de dados.'
+        ]
+    },
+    {
+        version: '1.7.3',
+        date: '07/02/2026',
+        title: 'Correção de Exibição no Painel',
+        changes: [
+            'Dashboard: Agora o painel principal exibe automaticamente a produção importada via Conector assim que o profissional é vinculado à entidade.',
+            'Correção de Totais: Os gráficos de evolução e cards de produção consolidada agora somam corretamente os dados digitados manualmente e os importados.',
+            'Sincronização: Ajuste para garantir que dados antigos apareçam assim que o médico for cadastrado, sem necessidade de reimportar.',
+            'Municípios: O card de cada cidade agora exibe a "Produção Realizada" real, somando dados manuais e do conector.'
+        ]
+    },
     {
         version: '1.7.2',
         date: '06/02/2026',

@@ -27,6 +27,7 @@ import LogsPrivate from './pages/private/Logs';
 import UsersPrivate from './pages/private/Users';
 import SettingsPrivate from './pages/private/Settings';
 import SupportPrivate from './pages/private/Support';
+import NotificationsPage from './pages/private/NotificationsPage';
 
 import { AuthProvider } from './context/AuthContext';
 
@@ -67,6 +68,7 @@ const App: React.FC = () => {
             <Route path="logs" element={<LogsPrivate />} />
             <Route path="usuarios" element={<UsersPrivate />} />
             <Route path="suporte" element={<SupportPrivate />} />
+            <Route path="notificacoes" element={<NotificationsPage />} />
             <Route path="configuracoes" element={<SettingsPrivate />} />
           </Route>
         </Routes>

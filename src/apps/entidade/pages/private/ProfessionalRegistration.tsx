@@ -36,7 +36,7 @@ const ProfessionalRegistration: React.FC = () => {
     });
 
     // Multiple Assignments State
-    const [assignments, setAssignments] = useState<{ unitId: string; occupation: string; registerClass: string }[]>([]);
+    const [assignments, setAssignments] = useState<{ unitId: string; occupation: string }[]>([]);
 
     const handleAddAssignment = () => {
         if (!formData.unitId || !formData.occupation) {
@@ -53,12 +53,11 @@ const ProfessionalRegistration: React.FC = () => {
 
         setAssignments([...assignments, {
             unitId: formData.unitId,
-            occupation: formData.occupation,
-            registerClass: formData.registerClass
+            occupation: formData.occupation
         }]);
 
         // Clear inputs
-        setFormData(prev => ({ ...prev, unitId: '', occupation: '', registerClass: '' }));
+        setFormData(prev => ({ ...prev, unitId: '', occupation: '' }));
     };
 
     const handleRemoveAssignment = (index: number) => {
@@ -167,6 +166,11 @@ const ProfessionalRegistration: React.FC = () => {
             return;
         }
 
+        if (!formData.registerClass) {
+            alert("O Registro de Classe (CRM, COREN, etc) é obrigatório.");
+            return;
+        }
+
         setSubmitting(true);
         try {
             // GENERATE DETERMINISTIC ID
@@ -203,7 +207,7 @@ const ProfessionalRegistration: React.FC = () => {
                     municipalityId,
                     municipalityName: municipalityName || 'Município',
                     occupation: a.occupation,
-                    registerClass: a.registerClass,
+                    registerClass: formData.registerClass, // Global register class
                     active: true
                 };
             });
@@ -273,11 +277,34 @@ const ProfessionalRegistration: React.FC = () => {
                 await logAction({
                     action: 'CREATE',
                     target: 'PROFESSIONAL',
-                    description: `Auto-cadastro do profissional ${formData.name}`,
+                    description: `Novo cadastro de profissional: ${formData.name} - ${primary.occupation}`,
                     entityId: entityId,
-                    municipalityId: municipalityId
+                    municipalityId: municipalityId,
+                    user: {
+                        uid: 'system',
+                        email: formData.email,
+                        name: formData.name
+                    }
                 });
-            } catch (e) { }
+
+                // 6. Notify
+                // @ts-ignore
+                const { addNotification } = await import('../../services/notificationsService');
+                await addNotification(entityId, {
+                    type: 'NEW_PROFESSIONAL',
+                    title: 'Novo Profissional Cadastrado',
+                    message: `${formData.name} realizou cadastro para atuar como ${primary.occupation} em ${primary.municipalityName}.`,
+                    data: {
+                        professionalId: customId,
+                        name: formData.name,
+                        cbo: primary.occupation,
+                        municipality: primary.municipalityName
+                    }
+                });
+
+            } catch (e) {
+                console.warn("Failed to log/notify", e);
+            }
 
             setSuccess(true);
         } catch (err: any) {
@@ -372,7 +399,7 @@ const ProfessionalRegistration: React.FC = () => {
                                         <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border border-emerald-100 shadow-sm">
                                             <div>
                                                 <p className="font-bold text-sm text-gray-800">{uName}</p>
-                                                <p className="text-xs text-gray-500">{assign.occupation} {assign.registerClass ? `(${assign.registerClass})` : ''}</p>
+                                                <p className="text-xs text-gray-500">{assign.occupation}</p>
                                             </div>
                                             <button type="button" onClick={() => handleRemoveAssignment(idx)} className="text-red-500 hover:text-red-700 p-1">
                                                 <Trash2 className="w-4 h-4" />
@@ -402,28 +429,23 @@ const ProfessionalRegistration: React.FC = () => {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Ocupação (CBO)
                                     </label>
-                                    <input
-                                        list="cbo-list-public"
+                                    <select
                                         value={formData.occupation}
                                         onChange={(e) => setFormData({ ...formData, occupation: e.target.value })}
-                                        className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:ring-emerald-500 focus:border-emerald-500 text-gray-900"
-                                        placeholder="Busque pelo cargo ou CBO..."
-                                    />
-                                    <datalist id="cbo-list-public">
-                                        {CBO_LIST.map((group) => (
-                                            group.options.map(opt => (
-                                                <option key={opt.value} value={opt.label} />
-                                            ))
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-100 bg-white text-gray-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all"
+                                    >
+                                        <option value="">Selecione o cargo...</option>
+                                        {CBO_LIST.map((group, idx) => (
+                                            <optgroup key={idx} label={group.group}>
+                                                {group.options.map(opt => (
+                                                    <option key={opt.value} value={opt.label}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
+                                            </optgroup>
                                         ))}
-                                    </datalist>
+                                    </select>
                                 </div>
-
-                                <Input
-                                    label="Registro de Classe (CRM, COREN...)"
-                                    value={formData.registerClass}
-                                    onChange={(e) => setFormData({ ...formData, registerClass: e.target.value })}
-                                    placeholder="Opcional"
-                                />
 
                                 <Button type="button" variant="secondary" onClick={handleAddAssignment} className="w-full flex items-center justify-center gap-2">
                                     <Plus className="w-4 h-4" /> Adicionar Vínculo
@@ -469,6 +491,7 @@ const ProfessionalRegistration: React.FC = () => {
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     required
                                     icon={<Mail className="w-4 h-4" />}
+                                    placeholder="exemplo@email.com"
                                 />
                                 <Input
                                     label="Whatsapp / Celular"
@@ -476,6 +499,7 @@ const ProfessionalRegistration: React.FC = () => {
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                     required
                                     icon={<Phone className="w-4 h-4" />}
+                                    placeholder="(00) 00000-0000"
                                 />
                             </div>
 
@@ -483,7 +507,8 @@ const ProfessionalRegistration: React.FC = () => {
                                 label="Registro de Classe (CRM, COREN, CRO...)"
                                 value={formData.registerClass}
                                 onChange={(e) => setFormData({ ...formData, registerClass: e.target.value })}
-                                placeholder="Opcional se não aplicável"
+                                required
+                                placeholder="Informe seu registro profissional"
                             />
                         </div>
 

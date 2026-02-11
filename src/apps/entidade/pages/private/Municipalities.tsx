@@ -8,6 +8,8 @@ import { useEntityData } from '../../hooks/useEntityData';
 import { fetchMunicipalitiesByEntity, createMunicipality, updateMunicipality, deleteMunicipality } from '../../services/municipalitiesService';
 import { fetchUnitsByEntity } from '../../services/unitsService';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
+import { goalService } from '../../services/goalService';
+import { statsCache } from '../../services/statsCache';
 import { Unit, Professional } from '../../types';
 
 const Municipalities: React.FC = () => {
@@ -18,7 +20,11 @@ const Municipalities: React.FC = () => {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [productionStats, setProductionStats] = useState<Record<string, number>>({});
+
+  const [loading, setLoading] = useState(true); // Structure loading
+  const [loadingStats, setLoadingStats] = useState(false); // Stats loading (background)
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
@@ -37,8 +43,8 @@ const Municipalities: React.FC = () => {
     // Access control is handled by Layout/AuthContext
   }, [claims]);
 
-  // Fetch Data
-  const loadData = async () => {
+  // 1. Load Structure (Blocking - Fast)
+  const loadStructure = async () => {
     if (!claims?.entityId) return;
     setLoading(true);
     try {
@@ -51,15 +57,61 @@ const Municipalities: React.FC = () => {
       setUnits(unitsData);
       setProfessionals(professionalsData);
     } catch (error) {
-      console.error("Error loading municipalities:", error);
+      console.error("Error loading municipalities structure:", error);
     } finally {
       setLoading(false);
     }
   };
 
+  // 2. Load Production (Non-Blocking - Heavy)
+  const loadProduction = async () => {
+    if (!claims?.entityId || municipalities.length === 0) return;
+
+    const currentYear = new Date().getFullYear().toString();
+
+    setLoadingStats(true);
+    try {
+      const rawProduction = await statsCache.getOrFetch(claims.entityId, currentYear, async () => {
+        return await goalService.getEntityProductionStats(
+          claims.entityId,
+          currentYear,
+          undefined,
+          municipalities,
+          professionals
+        );
+      });
+
+      processAndSetStats(rawProduction);
+
+    } catch (error) {
+      console.error("Error loading production stats:", error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const processAndSetStats = (rawProduction: any[]) => {
+    const statsByMun: Record<string, number> = {};
+    rawProduction.forEach(record => {
+      if (record.municipalityId) {
+        const qty = record.quantity || 1;
+        statsByMun[record.municipalityId] = (statsByMun[record.municipalityId] || 0) + qty;
+      }
+    });
+    setProductionStats(statsByMun);
+  };
+
+  // Initial Load (Structure)
   useEffect(() => {
-    loadData();
+    loadStructure();
   }, [claims?.entityId]);
+
+  // Secondary Load (Production) - Depends on Structure
+  useEffect(() => {
+    if (!loading && municipalities.length > 0) {
+      loadProduction();
+    }
+  }, [loading, municipalities]); // Triggered after structure loads
 
   const handleOpenModal = (municipality?: Municipality, viewMode: boolean = false) => {
     setIsViewMode(viewMode);
@@ -185,13 +237,8 @@ const Municipalities: React.FC = () => {
       return p.municipalityId === municipalityId;
     }).length;
 
-    // Mock de produção baseada no ID (Simulando dados do Painel de Produção)
-    const productionMap: Record<string, number> = {
-      'm1': 16900, // São Paulo do Sul (12400 + 4500)
-      'm2': 12100, // Rio Verde (8900 + 3200)
-      'm3': 6700,  // Belo Campo (5600 + 1100)
-    };
-    const productionCount = productionMap[municipalityId] || 0;
+    // Real Production Count (Manual + Extracted)
+    const productionCount = productionStats[municipalityId] || 0;
 
     return { unitsCount, prosCount, productionCount };
   };
@@ -286,7 +333,13 @@ const Municipalities: React.FC = () => {
                     <span className="text-gray-600 dark:text-gray-400 flex items-center gap-2">
                       <Activity className="w-4 h-4 text-gray-400" /> Produção Realizada
                     </span>
-                    <span className="font-medium text-gray-900 dark:text-white">{productionCount.toLocaleString()}</span>
+                    <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                      {loadingStats && productionStats[mun.id] === undefined ? (
+                        <RefreshCw className="w-3 h-3 animate-spin text-gray-400" />
+                      ) : (
+                        productionCount.toLocaleString()
+                      )}
+                    </span>
                   </div>
 
                   {/* Endereço e Contato */}

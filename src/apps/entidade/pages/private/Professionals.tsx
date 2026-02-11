@@ -44,7 +44,16 @@ const Professionals: React.FC = () => {
   const [selectedProfForAccess, setSelectedProfForAccess] = useState<Professional | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [collapsedMunicipalities, setCollapsedMunicipalities] = useState<Record<string, boolean>>({});
+  const [expandedMunicipalities, setExpandedMunicipalities] = useState<Record<string, boolean>>({});
+
+  // Advanced Filters State
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    startDate: '',
+    endDate: '',
+    unitId: '',
+    cbo: ''
+  });
 
   // Feedback de envio de email
   const [emailSent, setEmailSent] = useState(false);
@@ -83,7 +92,7 @@ const Professionals: React.FC = () => {
   }, [claims?.entityId]);
 
   const toggleMunicipality = (munId: string) => {
-    setCollapsedMunicipalities(prev => ({
+    setExpandedMunicipalities(prev => ({
       ...prev,
       [munId]: !prev[munId]
     }));
@@ -311,19 +320,91 @@ const Professionals: React.FC = () => {
   // Filtragem local
   const filteredData = hierarchicalData.map(group => {
     const filteredUnits = group.units.map(unit => {
-      const filteredProfs = unit.professionals.filter(p =>
-        !searchTerm ||
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.cns.includes(searchTerm) ||
-        // Check assignments for occupation match
-        (p.assignments || []).some(a => a.occupation.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        p.occupation?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      // 1. FILTER
+      // 1. FILTER
+      let filteredProfs = unit.professionals.filter(p => {
+        // Text Search (Name, CNS, CPF) - Always active if typed
+        const matchesSearch = !searchTerm ||
+          p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          p.cns.includes(searchTerm) ||
+          p.cpf.includes(searchTerm) ||
+          (p.assignments || []).some(a => a.occupation.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        if (!matchesSearch) return false;
+
+        // Advanced Filters
+        // 1. Date Range matches
+        const pDate = p.createdAt?.seconds ? new Date(p.createdAt.seconds * 1000) : (p.createdAt ? new Date(p.createdAt) : new Date(0));
+        // Normalize professional date to YYYY-MM-DD in LOCAL time
+        const pYear = pDate.getFullYear();
+        const pMonth = String(pDate.getMonth() + 1).padStart(2, '0');
+        const pDay = String(pDate.getDate()).padStart(2, '0');
+        const pDateStr = `${pYear}-${pMonth}-${pDay}`;
+
+        if (filters.startDate) {
+          if (pDateStr < filters.startDate) return false;
+        }
+
+        if (filters.endDate) {
+          if (pDateStr > filters.endDate) return false;
+        }
+
+        // 2. Unit
+        if (filters.unitId) {
+          // Check if professional is assigned to this unit
+          // Note: Data is already grouped by unit, but a professional might be in multiple units.
+          // If we filter, we want to show ONLY the unit matching? 
+          // The outer map iterates ALL units.
+          // If I select Unit A, I only want to see professionals In Unit A.
+          // Since we are iterating unit-by-unit, checking if `unit.id === filters.unitId` on the mapping level might be better?
+          // But here we are filtering *professionals* inside the unit.
+          // If the outer unit matches (or no filter), we show.
+          // Wait, standard UI pattern: If I filter "Unit A", I expect to hide other Unit groups?
+          // The current logic filters professionals *inside* the current unit loop.
+          // So if I select Unit A, and I am rendering Unit B, I should probably return empty or handle it at group level.
+
+          // Actually, best approach:
+          // If `filters.unitId` is set, check if `unit.unitId` matches it. If not, this entire unit block should be empty/skipped.
+          if (unit.unitId !== filters.unitId) return false;
+        }
+
+        // 3. CBO
+        if (filters.cbo) {
+          const hasCbo = (p.assignments || []).some(a => a.occupation.toLowerCase().includes(filters.cbo.toLowerCase())) ||
+            p.occupation?.toLowerCase().includes(filters.cbo.toLowerCase());
+          if (!hasCbo) return false;
+        }
+
+        return true;
+      });
+
+      // 2. SORT (Newest First)
+      filteredProfs.sort((a, b) => {
+        const dateA = a.createdAt?.seconds ? new Date(a.createdAt.seconds * 1000) : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+        const dateB = b.createdAt?.seconds ? new Date(b.createdAt.seconds * 1000) : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+        return dateB.getTime() - dateA.getTime(); // Descending
+      });
+
       return { ...unit, professionals: filteredProfs };
     }).filter(u => u.professionals.length > 0);
 
     return { ...group, units: filteredUnits };
   }).filter(g => g.units.length > 0);
+
+  // Helper for Date Formatting
+  const formatDate = (date: any) => {
+    if (!date) return '-';
+    try {
+      // Handle Firestore Timestamp
+      if (date.seconds) {
+        return new Date(date.seconds * 1000).toLocaleDateString('pt-BR');
+      }
+      // Handle String/Date
+      return new Date(date).toLocaleDateString('pt-BR');
+    } catch (e) {
+      return '-';
+    }
+  };
 
   if (loading) {
     return <div className="p-8 text-center text-gray-500">Carregando corpo clínico...</div>;
@@ -373,28 +454,102 @@ const Professionals: React.FC = () => {
       </div>
 
       {/* Filtros */}
-      <Card className="p-4 bg-white dark:bg-gray-800 sticky top-0 z-20 shadow-sm border-b border-gray-100 dark:border-gray-700">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por Nome, CNS ou Cargo..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
-            />
+      <Card className="bg-white dark:bg-gray-800 sticky top-0 z-20 shadow-sm border-b border-gray-100 dark:border-gray-700 overflow-visible transition-all duration-300">
+        <div className="p-4 flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por Nome, CNS ou CPF..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center justify-center px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${showFilters ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+            >
+              <Filter className="w-4 h-4 mr-2" /> Filtros
+              {(filters.startDate || filters.endDate || filters.unitId || filters.cbo) && (
+                <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500"></span>
+              )}
+            </button>
           </div>
-          <button className="flex items-center justify-center px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
-            <Filter className="w-4 h-4 mr-2" /> Filtros
-          </button>
+
+          {/* Painel de Filtros Avançados */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="pt-2 pb-2 grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">De</label>
+                    <input
+                      type="date"
+                      value={filters.startDate}
+                      onChange={(e) => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Até</label>
+                    <input
+                      type="date"
+                      value={filters.endDate}
+                      onChange={(e) => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Unidade</label>
+                    <select
+                      value={filters.unitId}
+                      onChange={(e) => setFilters(prev => ({ ...prev, unitId: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
+                    >
+                      <option value="">Todas as Unidades</option>
+                      {units.map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Cargo / CBO</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Enfermeiro, Médico..."
+                      value={filters.cbo}
+                      onChange={(e) => setFilters(prev => ({ ...prev, cbo: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="md:col-span-4 flex justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => setFilters({ startDate: '', endDate: '', unitId: '', cbo: '' })}
+                    >
+                      Limpar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </Card>
 
       {/* Lista Hierárquica */}
       <div className="space-y-8">
         {filteredData.map((munGroup) => {
-          const isCollapsed = collapsedMunicipalities[munGroup.municipalityId];
+          const isExpanded = expandedMunicipalities[munGroup.municipalityId];
 
           return (
             <div key={munGroup.municipalityId} className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
@@ -420,14 +575,14 @@ const Professionals: React.FC = () => {
                     {munGroup.units.reduce((acc, u) => acc + u.professionals.length, 0)} Profissionais
                   </Badge>
                   <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                    {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" />}
+                    {isExpanded ? <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" /> : <ChevronDown className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
 
               {/* Conteúdo do Município */}
               <AnimatePresence>
-                {!isCollapsed && (
+                {isExpanded && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
@@ -502,8 +657,13 @@ const Professionals: React.FC = () => {
                                       <h3 className="font-bold text-gray-900 dark:text-white line-clamp-1 w-full" title={prof.name}>
                                         {prof.name}
                                       </h3>
-                                      <span className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-mono bg-white dark:bg-gray-900 px-2 py-0.5 rounded border border-gray-100 dark:border-gray-700">
+                                      <span className="text-xs text-gray-500 dark:text-gray-400 mb-1 font-mono bg-white dark:bg-gray-900 px-2 py-0.5 rounded border border-gray-100 dark:border-gray-700">
                                         CPF: {prof.cpf}
+                                      </span>
+
+                                      {/* DATE DISPLAY */}
+                                      <span className="text-[10px] text-emerald-600 dark:text-emerald-500 mb-3 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-800/30">
+                                        Cadastrado em: {formatDate(prof.createdAt)}
                                       </span>
 
                                       <div className="w-full pt-3 border-t border-gray-200 dark:border-gray-700 mt-auto">

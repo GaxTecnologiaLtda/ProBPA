@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.7.7] - 10/02/2026
+### Adicionado
+- **Filtros Avançados**: Novo painel na listagem de profissionais permitindo filtrar por intervalo de datas, unidade específica e cargo (CBO).
+- **Refinamento de Busca**: Capacidade de combinar busca textual (Nome/CPF) com filtros estruturados.
+
+### Corrigido
+- **Dark Mode**: Corrigida a cor do texto nos inputs de filtro que ficavam ilegíveis no modo escuro.
+- **Filtro de Data**: Ajustada a lógica de comparação de datas para utilizar o horário local (YYYY-MM-DD), resolvendo problemas de fuso horário.
+- **Exportação Precisa**: A exportação individual de profissional agora respeita rigorosamente o intervalo de datas aplicado.
+
+### Melhorado
+- **Modal de Produção**:
+    - **Filtro Explícito**: Adicionado botão "Aplicar" para o filtro de datas, evitando recarregamentos desnecessários durante a digitação.
+    - **Listagem Inteligente**: Ao aplicar um filtro de data, a lista exibe apenas profissionais com produção no período, facilitando a visualização.
+
+### v1.7.6 (09/02/2026)
+- **Novidade**: Sistema de Notificações em tempo real para gestores.
+- **Melhoria**: Cadastro de Profissionais agora usa lista fechada de CBOs.
+- **Melhoria**: Campos de Email e Whatsapp obrigatórios para garantir contato.
+- **Visual**: Atualização da imagem de exemplo para assinatura.
+
+### v1.7.5 (08/02/2026)
+### Assinaturas e Refinamentos de Relatório
+- **Assinatura Digital:**
+    - **Ajuste e Download:** Implementada funcionalidade para visualizar e baixar a assinatura digitalizada dos profissionais diretamente no painel.
+- **Produção Global:**
+    - **Otimização:** Melhoria de performance no carregamento da aba de produção unificada.
+- **Relatórios Confiáveis:**
+    - **Filtro de Duplicatas:** Refinamento na lógica de extração para identificar e eliminar registros duplicados (ex: CONSULTA/ATENDIMENTO INDIVIDUAL).
+    - **Normalização de Vacinas:** Padronização rigorosa dos nomes de vacinas seguindo a descrição oficial SIGTAP (ex: "ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL").
+
+## [1.7.4] - 2026-02-07
+### Otimização de Performance e UX
+- **Performance:**
+    - **Cache em Memória (RAM):** Implementada camada de cache local que elimina a necessidade de releitura do disco (localStorage) e parse de JSON a cada troca de aba. A navegação entre Dashboard e Municípios agora é **instantânea**.
+- **Experiência do Usuário (UX):**
+    - **Loading Polido:** Substituído o spinner bloqueante por um overlay com efeito de blur e mensagem informativa ("Consolidando e agregando dados...").
+    - **Feedback:** O sistema agora informa claramente que está processando dados em segundo plano, sem travar a interface visual.
+
+## [1.7.3] - 2026-02-07
+### Correção de Exibição no Painel
+- **Dashboard Unificado:**
+    - **Visualização Completa:** Corrigido comportamento onde a produção vinda do Conector (arquivos antigos) não somava aos totais do painel principal.
+    - **Sincronização Retroativa:** Ao cadastrar um novo profissional, o sistema agora "encontra" automaticamente toda a produção dele que já havia sido importada pelo Conector, atualizando os gráficos instantaneamente.
+    - **Filtro Inteligente:** O painel garante que apenas a produção dos profissionais efetivamente vinculados à sua entidade seja contabilizada, mesmo que o arquivo importado contenha dados de terceiros.
+- **Gestão de Municípios:**
+    - **Contadores Reais:** O card de cada município na listagem agora exibe a "Produção Realizada" consolidada (Manual + Conector), permitindo monitorar o desempenho individual de cada cidade parceira.
+
 ## [1.7.2] - 2026-02-06
 ### Otimizações em Ações e Programas
 - **Produção e Cadastro:**

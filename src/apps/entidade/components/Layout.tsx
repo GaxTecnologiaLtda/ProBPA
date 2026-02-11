@@ -24,6 +24,7 @@ import { EntityType } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useEntityData } from '../hooks/useEntityData';
 import { getVersionString, LATEST_CHANGES, APP_VERSION } from '../version';
+import NotificationMenu from './NotificationMenu';
 
 interface LayoutProps {
   type: EntityType;
@@ -277,6 +278,8 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
             >
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
+
+            {type !== 'public' && <NotificationMenu />}
 
             <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700">
               <div className="text-right hidden md:block">

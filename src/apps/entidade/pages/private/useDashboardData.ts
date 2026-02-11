@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { goalService, calculateGoalStatus } from '../../services/goalService';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
+import { statsCache } from '../../services/statsCache';
 import { useAuth } from '../../context/AuthContext';
 
 export interface DashboardStats {
@@ -10,6 +11,7 @@ export interface DashboardStats {
         trend: number; // percentage
         trendUp: boolean;
         chartData: { month: string; procedures: number }[];
+        topProcedures: { name: string; value: number }[];
     };
     professionals: {
         value: number;
@@ -27,16 +29,18 @@ export interface DashboardStats {
         trendUp: boolean;
     };
     loading: boolean;
+    rawRecords?: any[];
 }
 
 export const useDashboardData = () => {
     const { claims } = useAuth();
     const [stats, setStats] = useState<DashboardStats>({
-        production: { total: 0, trend: 0, trendUp: true, chartData: [] },
+        production: { total: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
         professionals: { value: 0, trend: 0, trendUp: true },
         municipalities: { value: 0, trendUp: true, topList: [] },
         goals: { value: '0%', trend: 0, trendUp: true },
-        loading: true
+        loading: true,
+        rawRecords: []
     });
 
     useEffect(() => {
@@ -45,18 +49,24 @@ export const useDashboardData = () => {
         const load = async () => {
             try {
                 const currentYear = new Date().getFullYear().toString();
-                // 1. Fetch Data in Parallel
-                const [
-                    productionStats,
-                    professionals,
-                    municipalities,
-                    goals
-                ] = await Promise.all([
-                    goalService.getEntityProductionStats(claims.entityId, currentYear),
+
+                // 1. Fetch Municipalities & Professionals First (Needed for Context)
+                const [professionals, municipalities, goals] = await Promise.all([
                     fetchProfessionalsByEntity(claims.entityId),
                     fetchMunicipalitiesByEntity(claims.entityId),
                     goalService.getGoalsForEntityPrivate(claims)
                 ]);
+
+                // 2. Fetch Production (Robust Cache with Promise Deduplication)
+                const productionStats = await statsCache.getOrFetch(claims.entityId, currentYear, async () => {
+                    return await goalService.getEntityProductionStats(
+                        claims.entityId,
+                        currentYear,
+                        undefined,
+                        municipalities, // Pass list for extraction querying
+                        professionals   // Pass list for filtering extracted records
+                    );
+                });
 
                 // 2. Process Production (Raw Records -> Aggregated Stats)
                 const aggregatedByMonth: Record<string, number> = {};
@@ -80,6 +90,19 @@ export const useDashboardData = () => {
                     month: m, // YYYY-MM or formatted
                     procedures: aggregatedByMonth[m]
                 }));
+
+                // Aggregate Top Procedures
+                const procAggregation: Record<string, number> = {};
+                productionStats.forEach(p => {
+                    const name = p.procedureName || `Código: ${p.procedureCode}`;
+                    const qty = Number(p.quantity) || 0;
+                    procAggregation[name] = (procAggregation[name] || 0) + qty;
+                });
+
+                const topProcedures = Object.entries(procAggregation)
+                    .map(([name, value]) => ({ name, value }))
+                    .sort((a, b) => b.value - a.value)
+                    .slice(0, 10);
 
                 const totalProductionYear = totalQuantity;
 
@@ -124,7 +147,8 @@ export const useDashboardData = () => {
                         total: totalProductionYear,
                         trend: trendProd,
                         trendUp: true,
-                        chartData
+                        chartData,
+                        topProcedures
                     },
                     professionals: {
                         value: totalProfs,
@@ -141,7 +165,8 @@ export const useDashboardData = () => {
                         trend: 2,
                         trendUp: true
                     },
-                    loading: false
+                    loading: false,
+                    rawRecords: productionStats // Expose raw for drill-down
                 });
 
             } catch (error) {

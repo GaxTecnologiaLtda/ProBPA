@@ -96,6 +96,7 @@ export interface ProfessionalAssignment {
   municipalityName: string;
   occupation: string;
   registerClass: string;
+  cbo?: string;
   active: boolean;
 }
 
@@ -111,6 +112,7 @@ export interface Professional {
   unitId?: string;
   unitName?: string;
   occupation?: string;
+  cbo?: string;
   registerClass?: string;
   active?: boolean;
 

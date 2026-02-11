@@ -86,6 +86,27 @@ service cloud.firestore {
                                || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
         }
       }
+      
+      // 🔐 NOTIFICATIONS (Subcollection)
+      match /notifications/{notificationId} {
+          // Read: Entity Staff
+          allow read: if isAdmin() 
+                      || isMasterOf(entityId)
+                      || isCoordinationOf(entityId)
+                      || isSubsedeOf(entityId);
+          
+          // Update (Mark as read): Entity Staff
+          allow update: if isAdmin() 
+                        || isMasterOf(entityId)
+                        || isCoordinationOf(entityId)
+                        || isSubsedeOf(entityId);
+
+          // Delete: Admin/Master
+          allow delete: if isAdmin() || isMasterOf(entityId);
+
+          // Create: Public (Triggers)
+          allow create: if true;
+      }
     }
 
 

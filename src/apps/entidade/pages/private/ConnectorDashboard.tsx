@@ -413,21 +413,41 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                        {detailsData.map(row => (
-                                            <tr key={row.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                                <td className="px-6 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                                                    {row.productionDate?.split(' ')[0].split('-').reverse().join('/')}
-                                                    <span className="text-xs text-gray-400 ml-1">{row.productionDate?.split(' ')[1]?.substring(0, 5)}</span>
-                                                </td>
-                                                <td className="px-6 py-3">
-                                                    <div className="font-medium text-gray-800 dark:text-gray-200">{row.procedure.code}</div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{row.procedure.name}</div>
-                                                </td>
-                                                <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
-                                                    {row.patient.name || 'Não identificado'}
-                                                </td>
-                                            </tr>
-                                        ))}
+                                        {detailsData.map(row => {
+                                            const code = (row.procedure.code || '').toUpperCase();
+                                            const name = (row.procedure.name || '').toUpperCase();
+                                            const isDuplicate = code === 'CONSULTA' && name.includes('ATENDIMENTO INDIVIDUAL');
+
+                                            return (
+                                                <tr key={row.id} className={`bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 ${isDuplicate ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                                                    <td className="px-6 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                                                        {row.productionDate?.split(' ')[0].split('-').reverse().join('/')}
+                                                        <span className="text-xs text-gray-400 ml-1">{row.productionDate?.split(' ')[1]?.substring(0, 5)}</span>
+                                                    </td>
+                                                    <td className="px-6 py-3">
+                                                        {isDuplicate ? (
+                                                            <div className="relative">
+                                                                <span className="absolute -top-3 -left-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/50 dark:text-red-300 dark:border-red-800 transform scale-90 origin-bottom-left">
+                                                                    DUPLICIDADE
+                                                                </span>
+                                                                <div className="opacity-50 grayscale select-none">
+                                                                    <div className="font-medium text-gray-800 dark:text-gray-200 line-through Decoration-red-400">{row.procedure.code}</div>
+                                                                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px] line-through">{row.procedure.name}</div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div className="font-medium text-gray-800 dark:text-gray-200">{row.procedure.code}</div>
+                                                                <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{row.procedure.name}</div>
+                                                            </>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                                                        {row.patient.name || 'Não identificado'}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             )}

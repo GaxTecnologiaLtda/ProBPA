@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Goal } from '../types';
+import { normalizeVaccine } from './municipalityReportService';
 
 const COLLECTION_GROUP_NAME = 'goals';
 
@@ -315,15 +316,15 @@ export const goalService = {
      * Fetch production records for an entity, optimally filtered by year.
      * Use to avoid loading entire history.
      */
-    getEntityProductionStats: async (entityId: string, year?: string, municipalityId?: string): Promise<EntityProductionRecord[]> => {
-        return goalService.getEntityProductionStatsRange(entityId, year, year, municipalityId);
+    getEntityProductionStats: async (entityId: string, year?: string, municipalityId?: string, municipalitiesList?: any[], professionalsList?: any[]): Promise<EntityProductionRecord[]> => {
+        return goalService.getEntityProductionStatsRange(entityId, year, year, municipalityId, municipalitiesList, professionalsList);
     },
 
     /**
      * Fetch production stats for a custom year range (inclusive).
      * e.g. startYear="2025", endYear="2026" -> Fetches 2025-01 to 2026-12
      */
-    getEntityProductionStatsRange: async (entityId: string, startYear?: string, endYear?: string, municipalityId?: string): Promise<EntityProductionRecord[]> => {
+    getEntityProductionStatsRange: async (entityId: string, startYear?: string, endYear?: string, municipalityId?: string, municipalitiesList?: any[], professionalsList?: any[]): Promise<EntityProductionRecord[]> => {
         try {
             if (!entityId) return [];
 
@@ -333,7 +334,28 @@ export const goalService = {
             // Range Filter for YYYY-MM
             const startKey = `${sYear}-01`;
             const endKey = `${eYear}-12\uf8ff`; // Unicode high character for inclusive end
+            // Date String for Extractions (YYYY-MM-DD)
+            const startDateDt = `${sYear}-01-01`;
+            const endDateDt = `${eYear}-12-31 23:59:59`;
 
+            // Helper for normalization
+            const normalize = (str: string) => String(str || '').replace(/\D/g, '');
+            const normalizeName = (str: string) => String(str || '').trim().toLowerCase();
+
+            // Prepare Professional Lookup Maps (if list provided)
+            const cnsMap = new Map<string, string>();
+            const cpfMap = new Map<string, string>();
+            const nameMap = new Map<string, string>();
+
+            if (professionalsList && professionalsList.length > 0) {
+                professionalsList.forEach(p => {
+                    if (p.cns) cnsMap.set(normalize(p.cns), p.id);
+                    if (p.cpf) cpfMap.set(normalize(p.cpf), p.id);
+                    if (p.name) nameMap.set(normalizeName(p.name), p.id);
+                });
+            }
+
+            // 1. Fetch Manual Production
             let q = query(
                 collectionGroup(db, 'procedures'),
                 where('entityId', '==', entityId),
@@ -342,14 +364,6 @@ export const goalService = {
             );
 
             if (municipalityId) {
-                // Warning: Compound queries with range filter on one field and equality on another require a composite index.
-                // procedures: competenceMonth ASC, municipalityId ASC (or variable)
-                // Firestore might complain if index is missing.
-                // Ideally we filter by exact match on municipalityId as well.
-                // Given the constraints and likely indexing, we might need to filter in memory if index issues arise, 
-                // BUT for performance we should try query first.
-                // However, Firestore requires range filter to be on the same field as the sort, 
-                // and if we add equality, it's fine.
                 q = query(
                     collectionGroup(db, 'procedures'),
                     where('entityId', '==', entityId),
@@ -359,37 +373,174 @@ export const goalService = {
                 );
             }
 
-            const snap = await getDocs(q);
-
-            // Deduplicate (Prioritizing 'municipalities' path)
-            const uniqueMap = new Map();
-            snap.docs.forEach(d => {
+            const manualPromise = getDocs(q).then(snap => snap.docs.map(d => {
                 const data = d.data();
-                // IN-MEMORY FILTER: Exclude canceled records (can't do in query with range)
-                if (data.status === 'canceled') return;
-
                 const id = data.id || d.id;
                 const pathParts = d.ref.path.split('/');
                 const isNewPath = pathParts[0] === 'municipalities';
 
                 // FIX: Ensure municipalityId, unitId, professionalId is present. 
-                // If missing in data but present in New Structure Path, extract it.
-                // Path: municipalities/{entityType}/{entityId}/{municipalityId}/bpai_records/{unitId}/professionals/{professionalId}/...
-                // Index: 0             1             2           3                 4             5          6              7
                 if (isNewPath && pathParts.length >= 4) {
                     if (!data.municipalityId) data.municipalityId = pathParts[3];
                     if (!data.unitId && pathParts.length >= 6) data.unitId = pathParts[5];
                     if (!data.professionalId && pathParts.length >= 8) data.professionalId = pathParts[7];
                 }
+                return { ...data, id, _isNewPath: isNewPath, source: 'manual' };
+            }));
+
+            // 2. Fetch Extracted Production (Connector)
+            const extractedPromise = (async () => {
+                if (!municipalitiesList || municipalitiesList.length === 0) return [];
+
+                // Filter target municipalities
+                const targetMuns = municipalityId
+                    ? municipalitiesList.filter(m => m.id === municipalityId)
+                    : municipalitiesList;
+
+                const promises = targetMuns.map(async (mun) => {
+                    try {
+                        // Infer Entity Type for Path
+                        let entType = 'public_entities';
+                        if (mun._pathContext?.entityType) {
+                            entType = mun._pathContext.entityType;
+                        } else if (mun.entityType === 'PRIVATE' || mun.entityType === 'private') {
+                            entType = 'private_entities';
+                        }
+
+                        // Path: municipalities/{type}/{entityId}/{munId}/extractions
+                        // We use the entityId from params, assuming it matches the structure
+                        const extractRef = collection(db, 'municipalities', entType, entityId, mun.id, 'extractions');
+                        const qExt = query(
+                            extractRef,
+                            where('productionDate', '>=', startDateDt),
+                            where('productionDate', '<=', endDateDt)
+                        );
+
+                        const snap = await getDocs(qExt);
+                        const mappedDocs = snap.docs.map(doc => {
+                            const data = doc.data() as any;
+                            // Normalize Date to Competence (YYYY-MM)
+                            let compMonth = '';
+                            if (data.productionDate) {
+                                const [yyyy, mm] = data.productionDate.split(' ')[0].split('-');
+                                compMonth = `${yyyy}-${mm}`;
+                            }
+
+                            // Normalize properties (Flatten procedure object if exists)
+                            const proc = data.procedure || {};
+                            let procedureCode = data.procedureCode || proc.code || '';
+                            let procedureName = data.procedureName || proc.name || 'Procedimento sem nome';
+                            const procedureType = data.procedureType || proc.type || '';
+
+                            // --- IGNORE INTERNAL PEC PROCEDURES ---
+                            const rawCodeUpper = String(procedureCode).toUpperCase();
+                            const rawNameUpper = String(procedureName).toUpperCase();
+
+                            // Helper to check if code is a valid SIGTAP (mostly numeric, 10 chars usually, but let's just say "starts with number")
+                            // Actually, just check if it's NOT the placeholder "CONSULTA" or "ODONTO".
+                            // If the code is a valid number (e.g. 0301010072), we MUST PRESERVE IT, even if name is "ATENDIMENTO INDIVIDUAL".
+                            const hasValidCode = /^\d+$/.test(procedureCode) && procedureCode.length >= 7;
+
+                            if (!hasValidCode) {
+                                // Case 1: Code=CONSULTA, Name=ATENDIMENTO INDIVIDUAL -> IGNORE (No SIGTAP)
+                                if (rawCodeUpper.includes('CONSULTA') && rawNameUpper.includes('ATENDIMENTO INDIVIDUAL')) {
+                                    return null;
+                                }
+                            }
+
+                            // Case 2: Code=ODONTO, Name=ATENDIMENTO ODONTOLOGICO -> MAP to 0301010030
+                            if (rawCodeUpper.includes('ODONTO') && rawNameUpper.includes('ATENDIMENTO ODONTOLOGICO')) {
+                                procedureCode = '0301010030';
+                                // name: "CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)"
+                                procedureName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
+                            }
+
+                            // Case 3: VACCINE Normalization
+                            // Ensure vaccine names (e.g. TRIPLICE VIRAL) are mapped to standard codes if possible
+                            const vacNorm = normalizeVaccine(procedureName, procedureType);
+                            if (vacNorm) {
+                                procedureCode = vacNorm.code;
+                                procedureName = vacNorm.name;
+                            }
+
+
+
+                            return {
+                                id: doc.id,
+                                ...data,
+                                source: 'connector',
+                                municipalityId: mun.id,
+                                competenceMonth: compMonth,
+                                quantity: 1, // Usually 1 per record in extractions
+                                _isNewPath: true,
+                                // Enforce flat structure
+                                procedureCode: String(procedureCode).replace(/\D/g, ''),
+                                procedureName,
+                                procedureType
+                            };
+                        })
+                            .filter(item => item !== null) as any[]; // Remove nulls
+
+                        // Apply Filter based on Professionals List (if provided)
+                        if (professionalsList && professionalsList.length > 0) {
+                            return mappedDocs.filter(rec => {
+                                // Extract info from record
+                                const pData = rec.professional || {};
+                                const recCns = normalize(pData.cns);
+                                const recCpf = normalize(pData.cpf) || ((recCns.length === 11) ? recCns : '');
+                                const recName = normalizeName(pData.name);
+
+                                // Try Match
+                                let profId = cnsMap.get(recCns);
+                                if (!profId && recCpf) profId = cpfMap.get(recCpf);
+                                if (!profId && recName) profId = nameMap.get(recName);
+
+                                // If matched, inject professionalId to normalizing downstream usage
+                                if (profId) {
+                                    rec.professionalId = profId;
+                                    return true;
+                                }
+                                return false;
+                            });
+                        }
+
+                        return mappedDocs;
+
+                    } catch (e) {
+                        console.warn(`Failed to fetch extracted for mun ${mun.id}`, e);
+                        return [];
+                    }
+                });
+
+                const results = await Promise.all(promises);
+                return results.flat();
+            })();
+
+            const [manualRecords, extractedRecords] = await Promise.all([manualPromise, extractedPromise]);
+
+            // Deduplicate (Prioritizing 'municipalities' path for manual, keeping all unique extracted)
+            const uniqueMap = new Map();
+
+            // Process Manual
+            manualRecords.forEach((r: any) => {
+                if (r.status === 'canceled') return;
+                const id = r.id;
 
                 if (!uniqueMap.has(id)) {
-                    uniqueMap.set(id, { ...data, _isNewPath: isNewPath });
+                    uniqueMap.set(id, r);
                 } else {
-                    // If we have a record, but the current one is from the NEW path, overwrite it (prioritize new path)
-                    if (!uniqueMap.get(id)._isNewPath && isNewPath) {
-                        uniqueMap.set(id, { ...data, _isNewPath: isNewPath });
+                    if (!uniqueMap.get(id)._isNewPath && r._isNewPath) {
+                        uniqueMap.set(id, r);
                     }
                 }
+            });
+
+            // Process Extracted (Add them in)
+            extractedRecords.forEach((r: any) => {
+                // Extracted IDs are usually unique UUIDs from connector or local DB.
+                // We add them. If collision is possible with manual, we might need prefix, 
+                // but typically they are distinct sets.
+                uniqueMap.set(r.id, r as EntityProductionRecord);
             });
 
             return Array.from(uniqueMap.values()) as EntityProductionRecord[];
