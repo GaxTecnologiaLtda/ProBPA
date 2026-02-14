@@ -27,3 +27,7 @@ node_modules/
 dist/
 build/
 .firebase/
+
+# Explicitly ignore large data folders (Backup Request)
+DOCUMENTOS/
+postgreSQL e-sus/
