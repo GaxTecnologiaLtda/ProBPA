@@ -24,23 +24,19 @@ jobs:
       - name: Install Python Dependencies
         run: |
           pip install -r connector_app/requirements.txt
-          pip install flet pyinstaller
+          pip install pyinstaller
 
       - name: Setup Inno Setup
         uses: minhng99/download-inno-setup@v1
         with:
           version: "6.2.2"
 
-      - name: Compile App (Flet Pack)
-        # We run from root, but flet pack needs to know where main is.
-        # We replicate compile_build_kit.bat logic using shell commands.
+      - name: Build Executable (PyInstaller)
         run: |
           cd connector_app
-          python -m flet pack launcher.py --name ProBPA_Connector --product-name "ProBPA Connector" --product-version "1.0.0" --copyright "GAX Tecnologia" --no-console
+          pyinstaller --noconfirm --log-level=WARN --clean packaging/windows.spec
 
       - name: Create Installer (Inno Setup)
-        # The OutputDir in .iss is '..\installer', so relative to 'packaging' folder.
-        # It will end up in connector_app/installer
         run: |
           iscc "connector_app\packaging\setup_script.iss"
 
@@ -48,5 +44,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Setup_Conector_ProBPA
-          path: connector_app/installer/*.exe
+          path: connector_app/packaging/Output/*.exe
           if-no-files-found: error
