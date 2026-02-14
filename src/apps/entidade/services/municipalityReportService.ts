@@ -5,6 +5,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { statsCache } from './statsCache';
 import { goalService } from './goalService';
+import { connectorService } from './connectorService';
 
 // Types
 export interface BpaCReportRow {
@@ -22,17 +23,18 @@ const normalize = (str: string) => String(str || '').trim().toLowerCase();
 const onlyNumbers = (text: string) => String(text).replace(/\D/g, '');
 
 export const normalizeVaccine = (name: string, type: string) => {
-    if (type === 'VACCINATION' || name.toUpperCase().includes('VACINA')) {
-        const nameUpper = name.toUpperCase();
+    const nameUpper = String(name || '').toUpperCase();
+    const isVaccine = type === 'VACCINATION' || nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA');
 
+    if (isVaccine) {
         // 1. VIA ORAL (03.01.10.021-7)
-        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA')) {
+        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA')) {
             return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
         }
 
         // 2. VIA INTRADÉRMICA (03.01.10.023-3)
-        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG')) {
-            return { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' };
+        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG') || nameUpper.includes('ID')) {
+            return { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' }; // Sigtap closest generic
         }
 
         // 3. VIA SUBCUTÂNEA (03.01.10.022-5)
@@ -40,12 +42,15 @@ export const normalizeVaccine = (name: string, type: string) => {
             nameUpper.includes('TRIPLICE') || nameUpper.includes('SARAMPO') || nameUpper.includes('CAXUMBA') || nameUpper.includes('RUBEOLA') ||
             nameUpper.includes('FEBRE AMARELA') ||
             nameUpper.includes('VARICELA') || nameUpper.includes('CATAPORA') ||
-            nameUpper.includes('TETRA VIRAL') || nameUpper.includes('SCR')) {
+            nameUpper.includes('TETRA VIRAL') || nameUpper.includes('SCR') ||
+            nameUpper.includes('SC')) {
             return { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' };
         }
 
-        // 4. VIA INTRAMUSCULAR (03.01.10.020-9)
-        if (nameUpper.includes('INTRAMUSCULAR') ||
+        // 4. VIA INTRAMUSCULAR (03.01.10.020-9) - Broadest Category
+        // Most adult vaccines (Covid, Flu, Hep, DTP, Penta, etc.) are IM.
+        // Also catching 'IM' explicitly.
+        if (nameUpper.includes('INTRAMUSCULAR') || nameUpper.includes('IM') ||
             nameUpper.includes('HEPATITE') ||
             nameUpper.includes('PENTA') || nameUpper.includes('DTP') || nameUpper.includes('HIB') ||
             nameUpper.includes('VIP') ||
@@ -53,6 +58,7 @@ export const normalizeVaccine = (name: string, type: string) => {
             nameUpper.includes('INFLUENZA') || nameUpper.includes('GRIPE') ||
             nameUpper.includes('COVID') ||
             nameUpper.includes('DUPLA') || nameUpper.includes('DT') ||
+            nameUpper.includes('TETANO') || nameUpper.includes('TÉTANO') ||
             nameUpper.includes('HPV')) {
             return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
         }
@@ -61,8 +67,8 @@ export const normalizeVaccine = (name: string, type: string) => {
             return { code: '0301100195', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ENDOVENOSA' };
         }
 
-        // Default Fallback for Vaccine
-        return { code: '0301100209', name: `${name} (ADMINISTRAÇÃO IM)` };
+        // Default Fallback for ANY vaccine not matched above is usually IM in reports
+        return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
     }
     return null;
 };
@@ -296,6 +302,16 @@ const resolveSigtapCode = (rec: any): { code: string, name: string } => {
     const profCbo = rec.professional?.cbo || rec.cbo || '';
 
     // If we already have a valid SIGTAP code (10 digits starting with 0), keep it.
+    // BUT: If code is small (e.g. "25", "46") it's likely an internal ID -> FORCE check.
+    const isSmallCode = code.length <= 5;
+    const nameUpper = name.toUpperCase();
+
+    // Force Vaccine Check for small codes if name looks like vaccine
+    if (isSmallCode && (nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA'))) {
+        const vacNorm = normalizeVaccine(name, type);
+        if (vacNorm) return vacNorm;
+    }
+
     // Allow 2 digits (Vaccine) or other lengths if they seem valid, but if it's "CONSULTA" or "ODONTO", we map.
     // Strict Normalization: Check for forbidden codes even if valid-looking
     // if (code.length === 10 && code.startsWith('0')) return { code, name };
@@ -374,21 +390,80 @@ export const municipalityReportService = {
                 compFilter = competence; // already YYYY-MM
             }
 
-            // 2. Get from Cache (Unifies with Dashboard)
-            const allRecords = await statsCache.getOrFetch(entityId, year, async () => {
-                return await goalService.getEntityProductionStats(
-                    entityId,
-                    year,
-                    undefined,
-                    municipalitiesList,
-                    professionalsMap
+            // 2. Fetch DIRECTLY within service to ensure accuracy
+            console.log(`[MunicipalityReportService] Fetching Data Direct. Entity: ${entityId}, Comp: ${competence}`);
+
+            // A. Manual Production
+            let manualRecords: any[] = [];
+            try {
+                const manualQ = query(
+                    collectionGroup(db, 'procedures'),
+                    where('entityId', '==', entityId),
+                    where('competenceMonth', '==', compFilter)
                 );
-            });
+
+                if (municipalityId) {
+                    // Optimized query if municipality known
+                    // (Requires composite index, sticking to Entity+Comp is safer usually, then filter in memory)
+                }
+
+                const manualSnap = await getDocs(manualQ);
+                manualRecords = manualSnap.docs.map(d => {
+                    const data = d.data();
+                    // Ensure ID
+                    return { ...data, id: d.id, source: 'manual', professionalId: data.professionalId };
+                });
+
+                if (municipalityId) {
+                    manualRecords = manualRecords.filter(r => r.municipalityId === municipalityId);
+                }
+
+                console.log(`[MunicipalityReportService] Manual Records: ${manualRecords.length}`);
+            } catch (e) {
+                console.error('[MunicipalityReportService] Error fetching manual:', e);
+            }
+
+            // B. Connector Production (Nested Schema)
+            let connectorRecords: any[] = [];
+            try {
+                // Identify target municipalities
+                let targetMunis = municipalitiesList || [];
+                if (municipalityId) {
+                    targetMunis = targetMunis.filter((m: any) => m.id === municipalityId);
+                }
+
+                connectorRecords = await connectorService.fetchConnectorDataForCompetence(
+                    entityId,
+                    competence,
+                    targetMunis,
+                    professionalsMap || []
+                );
+
+                console.log(`[MunicipalityReportService] Connector Records: ${connectorRecords.length}`);
+            } catch (e) {
+                console.error('[MunicipalityReportService] Error fetching connector:', e);
+            }
+
+            const allRecords = [...manualRecords, ...connectorRecords];
+            console.log('[MunicipalityReportService] Got', allRecords.length, 'records from goalService');
 
             // 3. Filter Locally
             const filteredRecords = allRecords.filter(r => {
                 // Competence Match
-                const rComp = r.competenceMonth || r.competence || (r.productionDate ? r.productionDate.slice(0, 7) : '');
+                let rComp = r.competenceMonth || r.competence || (r.productionDate ? r.productionDate.slice(0, 7) : '');
+
+                // NORMALIZE rComp to YYYY-MM
+                if (rComp) {
+                    rComp = rComp.replace('/', '-');
+                    if (rComp.includes('-')) {
+                        const parts = rComp.split('-');
+                        if (parts[0].length === 2 && parts[1].length === 4) {
+                            // MM-YYYY -> YYYY-MM
+                            rComp = `${parts[1]}-${parts[0]}`;
+                        }
+                    }
+                }
+
                 if (rComp !== compFilter) return false;
 
                 // Municipality Match
@@ -687,11 +762,49 @@ export const municipalityReportService = {
     generateUnifiedProfessionalProductionPdf: async (records: any[], allProfessionals: any[], meta: any) => {
         const doc = new jsPDF();
         let firstPage = true;
-        for (const prof of allProfessionals) {
-            // Filter by ID (which we normalized!)
-            let profRecords = records.filter((r: any) => r.professionalId === prof.id);
 
-            // Also include records mapped to 'ext_CNS' if this professional has that CNS
+        // 1. Extract Unique Professionals from Records (Merge with allProfessionals)
+        // Some records (Connector) might have professionalId that is NOT in allProfessionals
+        const recordProfsMap = new Map<string, any>();
+
+        // Add known professionals first (reference)
+        allProfessionals.forEach(p => recordProfsMap.set(p.id, p));
+
+        // Scan records for missing professionals
+        records.forEach(r => {
+            if (r.professionalId && !recordProfsMap.has(r.professionalId)) {
+                // Create a "virtual" professional object from record data
+                recordProfsMap.set(r.professionalId, {
+                    id: r.professionalId,
+                    name: r.professionalName || 'Profissional Externo/Desconhecido',
+                    cns: r.professionalCns || '', // If available in rec
+                    occupation: r.cbo || 'N/A',
+                    unitName: r.unitName || 'N/A'
+                });
+            }
+        });
+
+        // Convert back to array (only those with records!)
+        // Wait, loop logic below filters by ID. Let's iterate the MAP or just unique IDs in records.
+        // Better: Iterate unique professional IDs present in records.
+
+        const uniqueProfIds = Array.from(new Set(records.map(r => r.professionalId).filter(Boolean)));
+
+        // Sort by Name (using map)
+        uniqueProfIds.sort((a, b) => {
+            const nameA = recordProfsMap.get(a)?.name || '';
+            const nameB = recordProfsMap.get(b)?.name || '';
+            return nameA.localeCompare(nameB);
+        });
+
+        for (const profId of uniqueProfIds) {
+            const prof = recordProfsMap.get(profId);
+            if (!prof) continue;
+
+            // Filter records for this ID
+            let profRecords = records.filter((r: any) => r.professionalId === profId);
+
+            // Legacy/CNS fallback (if needed, but ideally ID matches)
             if (prof.cns) {
                 const extRecords = records.filter((r: any) => r.professionalId === `ext_${prof.cns}`);
                 profRecords = [...profRecords, ...extRecords];
@@ -704,7 +817,7 @@ export const municipalityReportService = {
 
             const profMeta = {
                 ...meta,
-                signatureUrl: prof.signatureUrl,
+                signatureUrl: prof.signatureUrl, // Only real profs have this
                 signatureBase64: prof.signatureBase64,
                 professional: {
                     name: prof.name,

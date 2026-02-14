@@ -105,59 +105,128 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                 return;
             }
 
-            // Determine Collection Reference
-            let recordsRef;
-            if (selectedMun._pathContext) {
-                const { entityType, entityId } = selectedMun._pathContext;
-                recordsRef = collection(db, 'municipalities', entityType, entityId, selectedMunId, 'extractions');
-            } else {
-                recordsRef = collectionGroup(db, 'extractions');
-            }
-
             // Parse Competence
             const [month, year] = competence.split('/');
             const startDate = `${year}-${month}-01`;
             const endDate = `${year}-${month}-31 23:59:59`;
 
-            // Strategy: Fetch ALL records for the month (Recursive Pagination)
+            console.log('[CONNECTOR_DASHBOARD] Loading stats for', selectedMunId, competence);
+
+            // NEW: Query nested schema structure
+            // Path: municipalities/{entityType}/{entityId}/{munId}/extractions/{YYYY}/competences/{MM-YYYY}/extraction_records
             let allDocs: any[] = [];
-            let lastDoc = null;
-            let keepFetching = true;
-            let safetyCounter = 0;
-            const BATCH_SIZE = 2000;
 
-            while (keepFetching && safetyCounter < 50) { // Max 100k records
-                safetyCounter++;
+            try {
+                const { entityType, entityId: ctxEntityId } = selectedMun._pathContext || { entityType: 'public_entities', entityId };
 
-                const constraints: any[] = [
-                    where('productionDate', '>=', startDate),
-                    where('productionDate', '<=', endDate),
-                    orderBy('productionDate', 'asc'),
-                    limit(BATCH_SIZE)
-                ];
+                // Build competence ID from parsed month/year
+                const competenceId = `${month}-${year}`;
 
-                if (!selectedMun._pathContext) {
-                    constraints.push(where('municipalityId', '==', selectedMunId));
-                }
+                // Reference to extraction_records for this competence
+                const recordsRef = collection(
+                    db,
+                    'municipalities',
+                    entityType,
+                    ctxEntityId,
+                    selectedMunId,
+                    'extractions',
+                    year,
+                    'competences',
+                    competenceId,
+                    'extraction_records'
+                );
 
-                if (lastDoc) {
-                    constraints.push(startAfter(lastDoc));
-                }
+                console.log(`[CONNECTOR_DASHBOARD] Querying path: municipalities/${entityType}/${ctxEntityId}/${selectedMunId}/extractions/${year}/competences/${competenceId}/extraction_records`);
 
-                const q = query(recordsRef, ...constraints);
-                const snapshot = await getDocs(q);
+                // Fetch all records for this competence
+                let lastDoc = null;
+                let keepFetching = true;
+                let safetyCounter = 0;
+                const BATCH_SIZE = 2000;
 
-                if (snapshot.empty) {
-                    keepFetching = false;
-                } else {
-                    // Store raw data + ID
-                    const chunk = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-                    allDocs = [...allDocs, ...chunk];
-                    lastDoc = snapshot.docs[snapshot.docs.length - 1];
-                    if (snapshot.docs.length < BATCH_SIZE) {
+                while (keepFetching && safetyCounter < 50) {
+                    safetyCounter++;
+
+                    const constraints: any[] = [
+                        where('productionDate', '>=', startDate),
+                        where('productionDate', '<=', endDate),
+                        orderBy('productionDate', 'asc'),
+                        limit(BATCH_SIZE)
+                    ];
+
+                    if (lastDoc) {
+                        constraints.push(startAfter(lastDoc));
+                    }
+
+                    const q = query(recordsRef, ...constraints);
+                    const snapshot = await getDocs(q);
+
+                    if (snapshot.empty) {
                         keepFetching = false;
+                    } else {
+                        const chunk = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                        allDocs = [...allDocs, ...chunk];
+                        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                        if (snapshot.docs.length < BATCH_SIZE) {
+                            keepFetching = false;
+                        }
                     }
                 }
+
+                console.log(`[CONNECTOR_DASHBOARD] Fetched ${allDocs.length} records from ${year}/${competenceId}`);
+
+            } catch (err) {
+                console.error('[CONNECTOR_DASHBOARD] Error fetching nested schema:', err);
+                // Fallback: Try flat schema (legacy)
+                console.log('[CONNECTOR_DASHBOARD] Falling back to flat schema...');
+
+                let recordsRef;
+                if (selectedMun._pathContext) {
+                    const { entityType, entityId } = selectedMun._pathContext;
+                    recordsRef = collection(db, 'municipalities', entityType, entityId, selectedMunId, 'extractions');
+                } else {
+                    recordsRef = collectionGroup(db, 'extractions');
+                }
+
+                let lastDoc = null;
+                let keepFetching = true;
+                let safetyCounter = 0;
+                const BATCH_SIZE = 2000;
+
+                while (keepFetching && safetyCounter < 50) {
+                    safetyCounter++;
+
+                    const constraints: any[] = [
+                        where('productionDate', '>=', startDate),
+                        where('productionDate', '<=', endDate),
+                        orderBy('productionDate', 'asc'),
+                        limit(BATCH_SIZE)
+                    ];
+
+                    if (!selectedMun._pathContext) {
+                        constraints.push(where('municipalityId', '==', selectedMunId));
+                    }
+
+                    if (lastDoc) {
+                        constraints.push(startAfter(lastDoc));
+                    }
+
+                    const q = query(recordsRef, ...constraints);
+                    const snapshot = await getDocs(q);
+
+                    if (snapshot.empty) {
+                        keepFetching = false;
+                    } else {
+                        const chunk = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                        allDocs = [...allDocs, ...chunk];
+                        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+                        if (snapshot.docs.length < BATCH_SIZE) {
+                            keepFetching = false;
+                        }
+                    }
+                }
+
+                console.log(`[CONNECTOR_DASHBOARD] Fell back to flat schema, fetched ${allDocs.length} records`);
             }
 
             // Aggregation Client-Side with COMPREHENSIVE SMART MATCHING
@@ -175,6 +244,14 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
             const countsByProfId: Record<string, number> = {};
 
             allDocs.forEach(doc => {
+                // A. FILTER DUPLICATES (Same logic as connectorService)
+                const rawCode = String(doc.procedure?.code || doc.procedureCode || '').toUpperCase();
+                const rawName = String(doc.procedure?.name || doc.procedureName || '').toUpperCase();
+
+                if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                    return; // SKIP DUPLICATE
+                }
+
                 if (doc.professional) {
                     const recCns = normalizeCns(doc.professional.cns);
                     const recCpf = normalizeCns((doc.professional as any).cpf); // Some extractors put CPF here or in 'cpf' field?

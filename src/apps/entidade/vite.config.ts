@@ -19,6 +19,16 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, '.'),
         '@root': path.resolve(__dirname, '../../'),
       }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          // Force unique filenames on each build to bust browser cache
+          entryFileNames: `assets/[name]-[hash].js`,
+          chunkFileNames: `assets/[name]-[hash].js`,
+          assetFileNames: `assets/[name]-[hash].[ext]`
+        }
+      }
     }
   };
 });

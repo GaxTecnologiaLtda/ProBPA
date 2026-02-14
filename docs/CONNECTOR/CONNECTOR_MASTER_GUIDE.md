@@ -210,12 +210,15 @@ Cada lote de produção é enviado para a API (`ingestPecData`) seguindo estrita
 *   `COLLECTIVE_ACTIVITY`: Atividade Coletiva.
 
 ### Destino no Firestore ☁️
-Os dados são gravados na subcoleção `extractions` dentro do documento do município.
-**Path:** `municipalities/{TIPO}/{ID_ENTIDADE}/{ID_MUNICIPIO}/extractions/{externalId}`
+Os dados são gravados na subcoleção `extractions` dentro do documento do município, seguindo uma hierarquia de **ano e competência**.
 
-*   **TIPO:** `PUBLIC` ou `PRIVATE` (depende da entidade).
-*   **ID_ENTIDADE:** Auto-detectado pela API via chave de acesso.
-*   **externalId:** O mesmo ID gerado localmente (garante a atualização/merge).
+**Path:** `municipalities/{TIPO}/{ID_ENTIDADE}/{ID_MUNICIPIO}/extractions/{YYYY}/competences/{MM-YYYY}/extraction_records/{externalId}`
+
+*   **TIPO:** `pubic_entities` ou `private_entities` (normalizado).
+*   **ID_ENTIDADE:** Auto-detectado.
+*   **YYYY:** Ano da produção (ex: "2024").
+*   **MM-YYYY:** Competência (ex: "01-2024").
+*   **Enriquecimento:** O conector/API adiciona os campos `_year`, `_month`, `_competence` e `entityId` em cada registro para permitir **Collection Group Queries** globais de alta performance.
 
 ---
 

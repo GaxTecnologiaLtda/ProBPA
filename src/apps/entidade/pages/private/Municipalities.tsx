@@ -9,6 +9,7 @@ import { fetchMunicipalitiesByEntity, createMunicipality, updateMunicipality, de
 import { fetchUnitsByEntity } from '../../services/unitsService';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
 import { goalService } from '../../services/goalService';
+import { connectorService } from '../../services/connectorService';
 import { statsCache } from '../../services/statsCache';
 import { Unit, Professional } from '../../types';
 
@@ -71,17 +72,28 @@ const Municipalities: React.FC = () => {
 
     setLoadingStats(true);
     try {
-      const rawProduction = await statsCache.getOrFetch(claims.entityId, currentYear, async () => {
-        return await goalService.getEntityProductionStats(
+      const [manualProduction, connectorProduction] = await Promise.all([
+        statsCache.getOrFetch(claims.entityId, currentYear, async () => {
+          return await goalService.getEntityProductionStats(
+            claims.entityId,
+            currentYear,
+            undefined,
+            municipalities,
+            professionals
+          );
+        }),
+        connectorService.fetchAggregateConnectorData(
           claims.entityId,
           currentYear,
-          undefined,
           municipalities,
           professionals
-        );
-      });
+        )
+      ]);
 
-      processAndSetStats(rawProduction);
+      const manualFiltered = (manualProduction || []).filter((r: any) => r.source !== 'connector');
+      const allProduction = [...manualFiltered, ...connectorProduction];
+
+      processAndSetStats(allProduction);
 
     } catch (error) {
       console.error("Error loading production stats:", error);

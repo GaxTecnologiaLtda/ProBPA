@@ -209,13 +209,41 @@ service cloud.firestore {
         // PUBLIC REGISTRATION: Allow read
         allow read: if true;
 
-        // 🔐 EXTRACTIONS (Dados do Conector - Nested)
+        // 🔐 EXTRACTIONS (Dados do Conector - Nested Structure)
+        // Allow reading the old flat structure
         match /extractions/{extractionId} {
-             // Admin, Master, Coordenação, Subsede (scoped)
              allow read: if isAdmin()
                          || isMasterOf(entityId)
                          || isCoordinationOf(entityId)
                          || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
+        }
+
+        // 🔐 EXTRACTIONS YEAR DOCUMENTS (Nested Schema: extractions/{year})
+        // Allow listing year documents (needed for getDocs on extractions collection)
+        match /extractions/{year} {
+             allow read: if isAdmin()
+                         || isMasterOf(entityId)
+                         || isCoordinationOf(entityId)
+                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
+                         || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+             
+             // Allow listing competences subcollection
+             match /competences/{competence} {
+                  allow read: if isAdmin()
+                              || isMasterOf(entityId)
+                              || isCoordinationOf(entityId)
+                              || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
+                              || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+                  
+                  // Allow reading extraction_records
+                  match /extraction_records/{recordId} {
+                       allow read: if isAdmin()
+                                   || isMasterOf(entityId)
+                                   || isCoordinationOf(entityId)
+                                   || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
+                                   || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+                  }
+             }
         }
 
         // 🔐 Records duplicados (Produção)
@@ -533,6 +561,30 @@ service cloud.firestore {
     // SIGTAP Collection Group (Public Read for Auth)
     match /{path=**}/procedimentos/{procedureId} {
       allow read: if request.auth != null;
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 12b. Collection Group: EXTRACTIONS (Connector Data - Old Flat Schema)
+    ///////////////////////////////////////////
+    match /{path=**}/extractions/{extractionId} {
+      allow read: if isAdmin()
+                  || (request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "SUBSEDE" && resource.data.entityId == request.auth.token.entityId && resource.data.municipalityId == request.auth.token.municipalityId)
+                  // Allow if user has entityId claim matching resource (broader check for safety)
+                  || (request.auth.token.entityId == resource.data.entityId);
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 12c. Collection Group: EXTRACTION_RECORDS (Connector Data - New Nested Schema)
+    ///////////////////////////////////////////
+    match /{path=**}/extraction_records/{recordId} {
+      allow read: if isAdmin()
+                  || (request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId)
+                  || (request.auth.token.role == "SUBSEDE" && resource.data.entityId == request.auth.token.entityId && resource.data.municipalityId == request.auth.token.municipalityId)
+                  // Allow if user has entityId claim matching resource (broader check for safety)
+                  || (request.auth.token.entityId == resource.data.entityId);
     }
 
     ///////////////////////////////////////////

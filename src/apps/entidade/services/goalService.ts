@@ -388,132 +388,207 @@ export const goalService = {
                 return { ...data, id, _isNewPath: isNewPath, source: 'manual' };
             }));
 
-            // 2. Fetch Extracted Production (Connector)
+            // 2. Fetch Extracted Production (Connector) - Direct Path Approach
             const extractedPromise = (async () => {
-                if (!municipalitiesList || municipalitiesList.length === 0) return [];
+                try {
+                    console.log('[CONNECTOR] Starting connector data fetch...');
 
-                // Filter target municipalities
-                const targetMuns = municipalityId
-                    ? municipalitiesList.filter(m => m.id === municipalityId)
-                    : municipalitiesList;
-
-                const promises = targetMuns.map(async (mun) => {
-                    try {
-                        // Infer Entity Type for Path
-                        let entType = 'public_entities';
-                        if (mun._pathContext?.entityType) {
-                            entType = mun._pathContext.entityType;
-                        } else if (mun.entityType === 'PRIVATE' || mun.entityType === 'private') {
-                            entType = 'private_entities';
-                        }
-
-                        // Path: municipalities/{type}/{entityId}/{munId}/extractions
-                        // We use the entityId from params, assuming it matches the structure
-                        const extractRef = collection(db, 'municipalities', entType, entityId, mun.id, 'extractions');
-                        const qExt = query(
-                            extractRef,
-                            where('productionDate', '>=', startDateDt),
-                            where('productionDate', '<=', endDateDt)
+                    // Get all municipalities for this entity
+                    let municipalities = municipalitiesList || [];
+                    if (!municipalities || municipalities.length === 0) {
+                        // Fetch municipalities if not provided
+                        const munSnap = await getDocs(
+                            query(collection(db, 'municipalities'), where('linkedEntityId', '==', entityId))
                         );
+                        municipalities = munSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    }
 
-                        const snap = await getDocs(qExt);
-                        const mappedDocs = snap.docs.map(doc => {
-                            const data = doc.data() as any;
-                            // Normalize Date to Competence (YYYY-MM)
-                            let compMonth = '';
-                            if (data.productionDate) {
-                                const [yyyy, mm] = data.productionDate.split(' ')[0].split('-');
-                                compMonth = `${yyyy}-${mm}`;
-                            }
+                    console.log(`[CONNECTOR] Found ${municipalities.length} municipalities`);
 
-                            // Normalize properties (Flatten procedure object if exists)
-                            const proc = data.procedure || {};
-                            let procedureCode = data.procedureCode || proc.code || '';
-                            let procedureName = data.procedureName || proc.name || 'Procedimento sem nome';
-                            const procedureType = data.procedureType || proc.type || '';
-
-                            // --- IGNORE INTERNAL PEC PROCEDURES ---
-                            const rawCodeUpper = String(procedureCode).toUpperCase();
-                            const rawNameUpper = String(procedureName).toUpperCase();
-
-                            // Helper to check if code is a valid SIGTAP (mostly numeric, 10 chars usually, but let's just say "starts with number")
-                            // Actually, just check if it's NOT the placeholder "CONSULTA" or "ODONTO".
-                            // If the code is a valid number (e.g. 0301010072), we MUST PRESERVE IT, even if name is "ATENDIMENTO INDIVIDUAL".
-                            const hasValidCode = /^\d+$/.test(procedureCode) && procedureCode.length >= 7;
-
-                            if (!hasValidCode) {
-                                // Case 1: Code=CONSULTA, Name=ATENDIMENTO INDIVIDUAL -> IGNORE (No SIGTAP)
-                                if (rawCodeUpper.includes('CONSULTA') && rawNameUpper.includes('ATENDIMENTO INDIVIDUAL')) {
-                                    return null;
-                                }
-                            }
-
-                            // Case 2: Code=ODONTO, Name=ATENDIMENTO ODONTOLOGICO -> MAP to 0301010030
-                            if (rawCodeUpper.includes('ODONTO') && rawNameUpper.includes('ATENDIMENTO ODONTOLOGICO')) {
-                                procedureCode = '0301010030';
-                                // name: "CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)"
-                                procedureName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
-                            }
-
-                            // Case 3: VACCINE Normalization
-                            // Ensure vaccine names (e.g. TRIPLICE VIRAL) are mapped to standard codes if possible
-                            const vacNorm = normalizeVaccine(procedureName, procedureType);
-                            if (vacNorm) {
-                                procedureCode = vacNorm.code;
-                                procedureName = vacNorm.name;
-                            }
-
-
-
-                            return {
-                                id: doc.id,
-                                ...data,
-                                source: 'connector',
-                                municipalityId: mun.id,
-                                competenceMonth: compMonth,
-                                quantity: 1, // Usually 1 per record in extractions
-                                _isNewPath: true,
-                                // Enforce flat structure
-                                procedureCode: String(procedureCode).replace(/\D/g, ''),
-                                procedureName,
-                                procedureType
-                            };
-                        })
-                            .filter(item => item !== null) as any[]; // Remove nulls
-
-                        // Apply Filter based on Professionals List (if provided)
-                        if (professionalsList && professionalsList.length > 0) {
-                            return mappedDocs.filter(rec => {
-                                // Extract info from record
-                                const pData = rec.professional || {};
-                                const recCns = normalize(pData.cns);
-                                const recCpf = normalize(pData.cpf) || ((recCns.length === 11) ? recCns : '');
-                                const recName = normalizeName(pData.name);
-
-                                // Try Match
-                                let profId = cnsMap.get(recCns);
-                                if (!profId && recCpf) profId = cpfMap.get(recCpf);
-                                if (!profId && recName) profId = nameMap.get(recName);
-
-                                // If matched, inject professionalId to normalizing downstream usage
-                                if (profId) {
-                                    rec.professionalId = profId;
-                                    return true;
-                                }
-                                return false;
-                            });
-                        }
-
-                        return mappedDocs;
-
-                    } catch (e) {
-                        console.warn(`Failed to fetch extracted for mun ${mun.id}`, e);
+                    if (municipalities.length === 0) {
+                        console.warn('[CONNECTOR] No municipalities found for entity');
                         return [];
                     }
-                });
 
-                const results = await Promise.all(promises);
-                return results.flat();
+                    // Determine entity type from first municipality
+                    const firstMun: any = municipalities[0];
+                    const entityType = firstMun.entityType || 'public_entities';
+
+                    // Extract years from date range
+                    const startYearNum = parseInt(sYear);
+                    const endYearNum = parseInt(eYear);
+                    const years = [];
+                    for (let y = startYearNum; y <= endYearNum; y++) {
+                        years.push(y.toString());
+                    }
+
+                    console.log(`[CONNECTOR] Searching years: ${years.join(', ')}`);
+                    console.log(`[CONNECTOR] Entity type: ${entityType}`);
+
+                    // Fetch records from each municipality's hierarchical path
+                    const allRecordsPromises = municipalities.map(async (mun: any) => {
+                        const munId = mun.id;
+                        const records: any[] = [];
+
+                        // Resolve Entity Type/ID specific to this municipality context
+                        const ctx = mun._pathContext || {};
+                        const mEntityType = mun.entityType || ctx.entityType || entityType || 'public_entities';
+                        const mEntityId = mun.entityId || ctx.entityId || entityId;
+
+                        console.log(`[GOAL_SERVICE] Fetching Mun: ${mun.name} (${munId}) Type: ${mEntityType} EntID: ${mEntityId}`);
+
+                        for (const year of years) {
+                            try {
+                                // Path: municipalities/{entityType}/{entityId}/{munId}/extractions/{YYYY}/competences
+                                const competencesPath = `municipalities/${mEntityType}/${mEntityId}/${munId}/extractions/${year}/competences`;
+                                console.log(`[GOAL_SERVICE] Path: ${competencesPath}`);
+
+                                const competencesRef = collection(db, competencesPath);
+
+                                const competencesSnap = await getDocs(competencesRef);
+                                console.log(`[GOAL_SERVICE] Year ${year}: found ${competencesSnap.size} competences`);
+
+                                for (const compDoc of competencesSnap.docs) {
+                                    const competence = compDoc.id; // e.g., "01-2026" (MM-YYYY)
+
+                                    // Normalize competence to YYYY-MM for comparison
+                                    const [cMonth, cYear] = competence.split('-');
+                                    const compYm = `${cYear}-${cMonth}`;
+
+                                    // Check if competence is in range
+                                    // console.log(`[GOAL_SERVICE] Comp: ${competence} (${compYm}) Range: ${startKey}-${endKey}`);
+                                    if (compYm < startKey || compYm > endKey) {
+                                        continue;
+                                    }
+
+                                    // Fetch extraction_records for this competence
+                                    const recordsRef = collection(compDoc.ref, 'extraction_records');
+                                    const recordsSnap = await getDocs(recordsRef);
+
+                                    recordsSnap.docs.forEach(doc => {
+                                        const data = doc.data();
+
+                                        // Filter by productionDate (optional double check)
+                                        // if (data.productionDate && (data.productionDate < startDateDt || data.productionDate > endDateDt)) return;
+
+                                        records.push({ id: doc.id, ...data });
+                                    });
+                                }
+                            } catch (err) {
+                                console.warn(`[CONNECTOR] Error fetching from ${munId}/${year}:`, err);
+                            }
+                        }
+
+                        return records;
+                    });
+
+                    const allRecordsArrays = await Promise.all(allRecordsPromises);
+                    const flatRecords = allRecordsArrays.flat();
+
+                    console.log(`[CONNECTOR] Total raw records fetched: ${flatRecords.length}`);
+
+                    // Process and normalize records
+                    const processedRecords = flatRecords.map(data => {
+                        // Normalize Date to Competence (YYYY-MM)
+                        let compMonth = '';
+                        if (data.productionDate) {
+                            const [yyyy, mm] = data.productionDate.split(' ')[0].split('-');
+                            compMonth = `${yyyy}-${mm}`;
+                        }
+
+                        // Normalize properties
+                        const proc = data.procedure || {};
+                        let procedureCode = data.procedureCode || proc.code || '';
+                        let procedureName = data.procedureName || proc.name || 'Procedimento sem nome';
+                        const procedureType = data.procedureType || proc.type || '';
+
+                        // --- IGNORE INTERNAL PEC PROCEDURES ---
+                        const rawCodeUpper = String(procedureCode).toUpperCase();
+                        const rawNameUpper = String(procedureName).toUpperCase();
+
+                        const hasValidCode = /^\d+$/.test(procedureCode) && procedureCode.length >= 7;
+
+                        // Check if it's a vaccine (by Type or Name) to allow small codes
+                        const isVaccine = procedureType === 'VACCINATION' || rawNameUpper.includes('VACINA') || rawNameUpper.includes('IMUNIZA');
+
+                        if (!hasValidCode && !isVaccine) {
+                            if (rawCodeUpper.includes('CONSULTA') && rawNameUpper.includes('ATENDIMENTO INDIVIDUAL')) {
+                                return null;
+                            }
+                            // Also ignore completely invalid things that are NOT vaccines
+                            if (procedureCode.length < 3) return null;
+                        }
+
+                        // Case 2: Code=ODONTO, Name=ATENDIMENTO ODONTOLOGICO -> MAP to 0301010030
+                        if (rawCodeUpper.includes('ODONTO') && rawNameUpper.includes('ATENDIMENTO ODONTOLOGICO')) {
+                            procedureCode = '0301010030';
+                            procedureName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
+                        }
+
+                        // Case 3: VACCINE Normalization
+                        const vacNorm = normalizeVaccine(procedureName, procedureType);
+                        if (vacNorm) {
+                            procedureCode = vacNorm.code;
+                            procedureName = vacNorm.name;
+                        }
+
+                        // Map professional CNS to professionalId for report aggregation
+                        let professionalId = data.professionalId; // May already exist from manual data
+                        let professionalName = data.professionalName;
+
+                        const pData = data.professional || {};
+                        const pCns = String(pData.cns || '').replace(/\D/g, '');
+                        const pCpf = String(pData.cpf || '').replace(/\D/g, '');
+                        const pName = String(pData.name || '').trim().toLowerCase();
+
+                        if (!professionalId) {
+                            // 1. CNS Match
+                            if (pCns) professionalId = cnsMap.get(pCns);
+
+                            // 2. CPF Match
+                            if (!professionalId && pCpf) professionalId = cpfMap.get(pCpf);
+
+                            // 3. Name Match
+                            if (!professionalId && pName) professionalId = nameMap.get(pName);
+
+                            // Get name from professionalsList if mapped
+                            if (professionalId && professionalsList) {
+                                const matchedProf = professionalsList.find((p: any) => p.id === professionalId);
+                                if (matchedProf) {
+                                    professionalName = matchedProf.name;
+                                }
+                            }
+                        }
+
+                        // Fallback to professional data from connector
+                        if (!professionalName && pData.name) {
+                            professionalName = pData.name;
+                        }
+
+                        return {
+                            id: data.id,
+                            ...data,
+                            source: 'connector',
+                            municipalityId: data.municipalityId,
+                            professionalId, // CRITICAL: Added for report aggregation
+                            professionalName, // Added for display
+                            competenceMonth: compMonth,
+                            quantity: 1,
+                            _isNewPath: true,
+                            procedureCode: String(procedureCode).replace(/\D/g, ''),
+                            procedureName,
+                            procedureType
+                        };
+                    }).filter(item => item !== null) as any[];
+
+                    console.log(`[CONNECTOR] Processed records (after filtering): ${processedRecords.length}`);
+
+                    return processedRecords;
+
+                } catch (e) {
+                    console.error(`[CONNECTOR] Failed to fetch connector data:`, e);
+                    return [];
+                }
             })();
 
             const [manualRecords, extractedRecords] = await Promise.all([manualPromise, extractedPromise]);

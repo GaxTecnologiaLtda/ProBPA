@@ -1,38 +1,29 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-.env
+# Ignore everything in ROOT (non-recursive)
+/*
 
-# Connector App Build Artifacts
-connector_app/build/
-connector_app/dist/
-connector_app/release/
-connector_app/installer/
-*.spec
-!connector_app/packaging/*.spec
+# Whitelist specific project directories (and their contents)
+!/functions/
+!/connector_app/
+!/src/
+!/pacote_transferencia_windows/
 
-# IDEs
-.vscode/
-.idea/
-*.swp
+# Whitelist critical infrastructure
+!/.gitignore
+!/.github/
+!/firebase.json
+!/firestore.rules
+!/storage.rules
+!/database.rules.json
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/vite.config.ts
 
-# OS
+# Ignore system files even in whitelisted dirs (just in case)
 .DS_Store
-Thumbs.db
-node_modules
-
-# Data Dumps (Large Files)
-postgreSQL e-sus/
-*.xml
-
-# Documentation & Legacy Assets (Ignored)
-"DICIONÁRIO LEDI versão 7.3.3/"
-DOCUMENTOS/
-"PRINTS AGENDA/"
-"REPO GIT LEDI/"
-"CAPÍTULO 5 - Agenda-2.pdf"
-"CAPÍTULO 5 - Agenda-2.pdf" 
-# Note: Added both spellings just in case of unicode differences unique to Mac filenames
-
+node_modules/
+.env
+.env.local
+dist/
+build/
+.firebase/

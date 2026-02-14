@@ -255,13 +255,23 @@ const Production: React.FC = () => {
 
    // Carregar dados quando o modal abrir e for o relatório correto
    useEffect(() => {
+      console.log('[PRODUCTION_REPORT] useEffect triggered!');
+      console.log('- isReportModalOpen:', isReportModalOpen);
+      console.log('- selectedReport?.id:', selectedReport?.id);
+      console.log('- claims?.entityId:', claims?.entityId);
+
       if (isReportModalOpen && selectedReport?.id === 'profissional' && claims?.entityId) {
+         console.log('[PRODUCTION_REPORT] ✅ All conditions met - calling loadManagementData()');
          loadManagementData();
+      } else {
+         console.log('[PRODUCTION_REPORT] ❌ Conditions NOT met - skipping data load');
       }
    }, [isReportModalOpen, selectedReport, selectedCompetence, claims?.entityId]);
 
    // Re-calculate Production Stats when Applied Filter or Records change
    useEffect(() => {
+      console.log('[PRODUCTION_REPORT] Stats calculation - fetchedRecords:', fetchedRecords.length);
+
       if (fetchedRecords.length === 0) {
          setProductionStats({});
          return;
@@ -278,6 +288,8 @@ const Production: React.FC = () => {
          });
       }
 
+      console.log('[PRODUCTION_REPORT] After date filter:', filtered.length);
+
       // Aggregate Stats
       const stats: Record<string, number> = {};
       filtered.forEach((p: any) => {
@@ -286,6 +298,10 @@ const Production: React.FC = () => {
             stats[pId] = (stats[pId] || 0) + (Number(p.quantity) || 0);
          }
       });
+
+      console.log('[PRODUCTION_REPORT] Calculated stats:', Object.keys(stats).length, 'professionals');
+      console.log('[PRODUCTION_REPORT] Sample stats:', Object.entries(stats).slice(0, 3));
+
       setProductionStats(stats);
 
    }, [fetchedRecords, appliedStartDate, appliedEndDate]);
@@ -300,33 +316,42 @@ const Production: React.FC = () => {
    const loadManagementData = async () => {
       if (!claims?.entityId) return;
       setLoadingReport(true);
+      console.log('[PRODUCTION_REPORT] ===== DIRECT QUERY APPROACH =====');
+
       try {
-         // 1. Fetch Professionals, Municipalities, and Units
-         const [profs, munis, units] = await Promise.all([
+         // 1. Fetch Professionals and Municipalities
+         const [profs, munis] = await Promise.all([
             fetchProfessionalsByEntity(claims.entityId),
-            fetchMunicipalitiesByEntity(claims.entityId),
-            fetchUnitsByEntity(claims.entityId)
+            fetchMunicipalitiesByEntity(claims.entityId)
          ]);
+
+         console.log('[PRODUCTION_REPORT] Loaded', profs.length, 'professionals');
+         console.log('[PRODUCTION_REPORT] Loaded', munis.length, 'municipalities');
 
          setProfessionals(profs);
          setAllMunicipalities(munis);
+
+         // 2. Fetch via municipalityReportService (now with cache bypass)
+         console.log('[PRODUCTION_REPORT] Calling municipalityReportService...');
+
+         const [units, production] = await Promise.all([
+            fetchUnitsByEntity(claims.entityId),
+            municipalityReportService.fetchMunicipalityProduction(
+               claims.municipalityId || '',
+               selectedCompetence,
+               [],
+               claims.entityId,
+               profs,
+               munis
+            )
+         ]);
+
          setAllUnits(units);
-
-         // 2. Fetch Production (using logic similar to Exports.tsx)
-         const production = await municipalityReportService.fetchMunicipalityProduction(
-            claims.municipalityId || '', // Pass municipalityId if SUBSEDE
-            selectedCompetence,
-            [],
-            claims.entityId,
-            profs, // Pass professionals map
-            munis  // Pass municipalities list
-         );
-
-         setFetchedRecords(production); // Store raw records
-         // Stats calculation moved to useEffect
+         console.log('[PRODUCTION_REPORT] Service returned', production.length, 'normalized records');
+         setFetchedRecords(production);
 
       } catch (error) {
-         console.error("Error loading report data:", error);
+         console.error("[PRODUCTION_REPORT] Error loading:", error);
       } finally {
          setLoadingReport(false);
       }
@@ -457,18 +482,12 @@ const Production: React.FC = () => {
             entityLogoBase64 = data.logoBase64;
          }
 
-         // 2. Fetch Production for this Professional
-         const records = await municipalityReportService.fetchMunicipalityProduction(
-            claims.municipalityId || '',
-            selectedCompetence,
-            [], // All units
-            claims.entityId,
-            professionals,
-            allMunicipalities
-         );
+         // 2. Use Production records already loaded in modal
+         console.log('[EXPORT] Using fetchedRecords:', fetchedRecords.length);
 
-         // Filter in memory for this professional
-         let profRecords = records.filter((r: any) => r.professionalId === prof.id);
+         // Filter for this professional
+         let profRecords = fetchedRecords.filter((r: any) => r.professionalId === prof.id);
+         console.log('[EXPORT] Filtered for prof:', profRecords.length);
 
          // Apply Date Filter if active
          if (appliedStartDate && appliedEndDate) {
@@ -477,6 +496,7 @@ const Production: React.FC = () => {
                if (!rRaw) return false;
                return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
             });
+            console.log('[EXPORT] After date filter:', profRecords.length);
          }
 
          if (profRecords.length === 0) {
@@ -485,10 +505,43 @@ const Production: React.FC = () => {
             return;
          }
 
-         // 3. Generate PDF based on Layout
+         // 3. NORMALIZE connector data to flat structure (patient.name → patientName)
+         const normalizedRecords = profRecords.map((r: any) => {
+            // Flatten nested patient data
+            const patientName = r.patient?.name || r.patientName || 'NÃO IDENTIFICADO';
+            const patientCns = r.patient?.cns || r.patientCns || '';
+            const patientCpf = r.patient?.cpf || r.patientCpf || '';
+            const patientBirthDate = r.patient?.birthDate || r.patientBirthDate || '';
+
+            // Flatten nested procedure data
+            const procedureCode = r.procedure?.code || r.procedureCode || '';
+            const procedureName = r.procedure?.name || r.procedureName || '';
+
+            // Flatten professional data
+            const professionalName = r.professional?.name || r.professionalName || prof.name;
+            const professionalCns = r.professional?.cns || r.professionalCns || prof.cns;
+
+            return {
+               ...r,
+               patientName,
+               patientCns,
+               patientCpf,
+               patientBirthDate,
+               procedureCode,
+               procedureName,
+               professionalName,
+               professionalCns,
+               attendanceDate: r.productionDate || r.attendanceDate || '',
+               cbo: r.professional?.cbo || r.cbo || prof.cbo || ''
+            };
+         });
+
+         console.log('[EXPORT] Normalized sample:', normalizedRecords[0]);
+
+         // 4. Generate PDF based on Layout
          if (layout === 'sus') {
             await susReportService.generateSusProductionPdf(
-               profRecords,
+               normalizedRecords,
                {
                   competence: selectedCompetence,
                   municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
@@ -522,7 +575,7 @@ const Production: React.FC = () => {
          } else {
             // Default Grouped
             await municipalityReportService.generateProfessionalProductionPdf(
-               profRecords,
+               normalizedRecords,
                {
                   competence: selectedCompetence,
                   municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',

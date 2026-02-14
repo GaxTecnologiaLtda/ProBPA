@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { goalService, calculateGoalStatus } from '../../services/goalService';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { statsCache } from '../../services/statsCache';
+import { connectorService } from '../../services/connectorService';
 import { useAuth } from '../../context/AuthContext';
 
 export interface DashboardStats {
@@ -58,15 +61,40 @@ export const useDashboardData = () => {
                 ]);
 
                 // 2. Fetch Production (Robust Cache with Promise Deduplication)
-                const productionStats = await statsCache.getOrFetch(claims.entityId, currentYear, async () => {
-                    return await goalService.getEntityProductionStats(
+                // First, determine Entity Type (Public/Private) reliably
+                const entityDocRef = doc(db, 'entities', claims.entityId);
+                const entityDocSnap = await getDoc(entityDocRef);
+                let entityType = 'PUBLIC';
+                if (entityDocSnap.exists()) {
+                    const eData = entityDocSnap.data();
+                    if (eData.type === 'Privada' || eData.type === 'PRIVATE') entityType = 'PRIVATE';
+                }
+
+                // We use goalService for manual data, and connectorService for connector data to ensure separation and accuracy
+                const [goalServiceStats, connectorStats] = await Promise.all([
+                    statsCache.getOrFetch(claims.entityId, currentYear, async () => {
+                        return await goalService.getEntityProductionStats(
+                            claims.entityId,
+                            currentYear,
+                            undefined,
+                            municipalities, // Pass list for extraction querying (used for manual check context)
+                            professionals   // Pass list for filtering extracted records
+                        );
+                    }),
+                    connectorService.fetchAggregateConnectorData(
                         claims.entityId,
                         currentYear,
-                        undefined,
-                        municipalities, // Pass list for extraction querying
-                        professionals   // Pass list for filtering extracted records
-                    );
-                });
+                        municipalities,
+                        professionals,
+                        entityType // Explicitly pass the resolved type
+                    )
+                ]);
+
+                // Filter goalServiceStats to keep ONLY 'manual' (or non-connector) to avoid double counting
+                // effectively treating goalService as the source for Manual data
+                const manualStats = goalServiceStats.filter((r: any) => r.source !== 'connector');
+
+                const productionStats = [...manualStats, ...connectorStats];
 
                 // 2. Process Production (Raw Records -> Aggregated Stats)
                 const aggregatedByMonth: Record<string, number> = {};

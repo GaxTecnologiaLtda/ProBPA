@@ -14,7 +14,7 @@ const memoryCache = new Map<string, ProductionCacheEntry>();
 
 // 30 Minutes Cache (More aggressive since we have invalidations)
 const CACHE_VALIDITY_MS = 30 * 60 * 1000;
-const CACHE_VERSION = 'v1.1'; // Bump this to invalidate all cache
+const CACHE_VERSION = 'v2.0'; // Bumped to invalidate cache after connector query refactor
 
 export const statsCache = {
     /**
@@ -37,14 +37,14 @@ export const statsCache = {
             return cached.data;
         }
 
-        // 2. Check LocalStorage (Cold)
-        const fromStorage = loadFromStorage(key);
-        if (fromStorage) {
-            // console.log(`[StatsCache] Disk Cache HIT for ${key}`);
-            // Hydrate Memory Cache
-            memoryCache.set(key, { data: fromStorage, timestamp: Date.now(), year });
-            return fromStorage;
-        }
+        // 2. LocalStorage DISABLED due to QuotaExceededError with large connector datasets
+        // const fromStorage = loadFromStorage(key);
+        // if (fromStorage) {
+        //     // console.log(`[StatsCache] Disk Cache HIT for ${key}`);
+        //     // Hydrate Memory Cache
+        //     memoryCache.set(key, { data: fromStorage, timestamp: Date.now(), year });
+        //     return fromStorage;
+        // }
         // console.log(`[StatsCache] Cache MISS for ${key} - Fetching...`);
 
         // 3. Check Active Requests (Promise Deduplication)
@@ -60,8 +60,8 @@ export const statsCache = {
             // Save to Memory
             memoryCache.set(key, entry);
 
-            // Save to LS
-            saveToStorage(key, data, year);
+            // Save to LS - DISABLED due to QuotaExceededError with large connector datasets
+            // saveToStorage(key, data, year);
 
             activeRequests.delete(key); // Cleanup
             return data;

@@ -86,15 +86,49 @@ export const ingestPecData = functions
             for (const record of records) {
                 if (!record.externalId) continue;
 
-                // NEW SCHEMA: municipalities/{type}/{entId}/{munId}/extractions/{docId}
-                // munDoc.ref is the reference to the municipality document found in the scan
-                const docRef = munDoc.ref.collection('extractions').doc(record.externalId);
+                // Determine Competence (MM-YYYY) and Year
+                let mm = 'UNKNOWN';
+                let yyyy = 'UNKNOWN';
+                let competence = 'UNKNOWN';
+
+                if (record.productionDate) {
+                    try {
+                        const [year, month] = record.productionDate.split(' ')[0].split('-'); // 2024-02-12
+                        if (year && month) {
+                            yyyy = year;
+                            mm = month;
+                            competence = `${mm}-${yyyy}`;
+                        }
+                    } catch (e) {
+                        competence = 'UNKNOWN';
+                    }
+                }
+
+                if (competence === 'UNKNOWN') {
+                    // Fallback to current date
+                    const now = new Date();
+                    yyyy = now.getFullYear().toString();
+                    mm = (now.getMonth() + 1).toString().padStart(2, '0');
+                    competence = `${mm}-${yyyy}`;
+                }
+
+                // NESTED SCHEMA: municipalities/{type}/{entId}/{munId}/extractions/{YYYY}/competences/{MM-YYYY}/extraction_records/{docId}
+                const docRef = munDoc.ref.collection('extractions')
+                    .doc(yyyy)
+                    .collection('competences')
+                    .doc(competence)
+                    .collection('extraction_records')
+                    .doc(record.externalId);
 
                 const dataToSave = {
                     ...record,
-                    municipalityId: municipalityId, // Keep redundant ID for ease, though implicit in path
+                    municipalityId: municipalityId, // Keep redundant ID for ease
+                    entityId: munData?.linkedEntityId || null, // Critical for Collection Group Queries
                     ingestedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    status: 'PENDING'
+                    status: 'PENDING',
+                    _competence: competence, // Helpers for potential indexing
+                    _year: yyyy,
+                    _month: mm
                 };
 
                 batch.set(docRef, dataToSave, { merge: true }); // Merge updates existing

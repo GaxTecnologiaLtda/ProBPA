@@ -2,9 +2,9 @@ name: Build ProBPA Connector (Windows)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
     paths:
-      - 'connector_app/**'
+      - "connector_app/**"
   workflow_dispatch:
 
 jobs:
@@ -12,41 +12,41 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
 
-    - name: Install Python Dependencies
-      run: |
-        pip install -r connector_app/requirements.txt
-        pip install flet pyinstaller
+      - name: Install Python Dependencies
+        run: |
+          pip install -r connector_app/requirements.txt
+          pip install flet pyinstaller
 
-    - name: Setup Inno Setup
-      uses: minhng99/download-inno-setup@v1
-      with:
-        version: '6.2.2'
+      - name: Setup Inno Setup
+        uses: minhng99/download-inno-setup@v1
+        with:
+          version: "6.2.2"
 
-    - name: Compile App (Flet Pack)
-      # We run from root, but flet pack needs to know where main is.
-      # We replicate compile_build_kit.bat logic using shell commands.
-      run: |
-         cd connector_app
-         python -m flet pack launcher.py --name ProBPA_Connector --product-name "ProBPA Connector" --product-version "1.0.0" --copyright "GAX Tecnologia" --no-console
-    
-    - name: Create Installer (Inno Setup)
-      # The OutputDir in .iss is '..\installer', so relative to 'packaging' folder.
-      # It will end up in connector_app/installer
-      run: |
-         iscc "connector_app\packaging\setup_script.iss"
+      - name: Compile App (Flet Pack)
+        # We run from root, but flet pack needs to know where main is.
+        # We replicate compile_build_kit.bat logic using shell commands.
+        run: |
+          cd connector_app
+          python -m flet pack launcher.py --name ProBPA_Connector --product-name "ProBPA Connector" --product-version "1.0.0" --copyright "GAX Tecnologia" --no-console
 
-    - name: Upload Installer Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Setup_Conector_ProBPA
-        path: connector_app/installer/*.exe
-        if-no-files-found: error
+      - name: Create Installer (Inno Setup)
+        # The OutputDir in .iss is '..\installer', so relative to 'packaging' folder.
+        # It will end up in connector_app/installer
+        run: |
+          iscc "connector_app\packaging\setup_script.iss"
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Setup_Conector_ProBPA
+          path: connector_app/installer/*.exe
+          if-no-files-found: error
