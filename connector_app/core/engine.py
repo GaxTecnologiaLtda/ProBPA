@@ -275,8 +275,8 @@ class PecConnectorEngine:
                         LEFT JOIN tb_dim_cbo cbo ON fad.co_dim_cbo_1 = cbo.co_seq_dim_cbo
                         LEFT JOIN tb_fat_cidadao_pec cid ON fad.co_fat_cidadao_pec = cid.co_seq_fat_cidadao_pec
                         LEFT JOIN tb_dim_unidade_saude unid ON fad.co_dim_unidade_saude_1 = unid.co_seq_dim_unidade_saude
-                        LEFT JOIN tb_dim_tempo tempo ON fao.co_dim_tempo = tempo.co_seq_dim_tempo
-                        LEFT JOIN tb_dim_sexo sex ON fao.co_dim_sexo = sex.co_seq_dim_sexo
+                        LEFT JOIN tb_dim_tempo tempo ON fad.co_dim_tempo = tempo.co_seq_dim_tempo
+                        LEFT JOIN tb_dim_sexo sex ON fad.co_dim_sexo = sex.co_seq_dim_sexo
                         {adpc_join}
                         WHERE tempo.dt_registro >= %s
                     """
@@ -365,6 +365,7 @@ class PecConnectorEngine:
 
 
     def _send_batch(self, rows, mun_config):
+        mun_id = mun_config.get('municipality_id')
         payload = []
         BATCH_SIZE = 100
         for row in rows:
@@ -404,16 +405,16 @@ class PecConnectorEngine:
             
             if len(payload) >= BATCH_SIZE:
                 if self._post_to_api(payload, mun_config):
-                    yield ('INFO', f"   -> Batch of {len(payload)} sent.")
+                    yield ('INFO', f"   -> Batch of {len(payload)} sent.", mun_id)
                 else:
-                    yield ('ERROR', "   -> Upload Failed.")
+                    yield ('ERROR', "   -> Upload Failed.", mun_id)
                 payload = []
         
         if payload:
             if self._post_to_api(payload, mun_config):
-                yield ('INFO', f"   -> Final batch of {len(payload)} sent.")
+                yield ('INFO', f"   -> Final batch of {len(payload)} sent.", mun_id)
             else:
-                 yield ('ERROR', "   -> Final Upload Failed.")
+                 yield ('ERROR', "   -> Final Upload Failed.", mun_id)
 
     def _post_to_api(self, data, mun_config):
         url = DEFAULT_API_URL
