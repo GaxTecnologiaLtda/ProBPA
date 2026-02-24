@@ -237,25 +237,39 @@ class DashboardScreen(ctk.CTkFrame):
 
     def run_process(self):
         records_processed = 0
+        muns_records = {}
         final_status = "ERROR"
         
         try:
-            self.log(">>> Iniciando Ciclo de Extração <<<")
+            self.log(">>> Iniciando Ciclo de Extração <<<", "info", "GERAL")
             success = True
             
             for status_type, message, mun_id in self.engine.extract_and_send():
                 self.after(0, self.log, f"[{status_type}] {message}", "info", mun_id)
-                if "Found" in message and "records" in message:
-                     # Attempt to parse simple count logic if needed, or Engine yields it
-                     pass
+                
+                # Count extractions from messages like "-> Found 2 procedures."
+                if "Found" in message and mun_id:
+                    try:
+                        count = int(message.split("Found ")[1].split(" ")[0])
+                        records_processed += count
+                        muns_records[mun_id] = muns_records.get(mun_id, 0) + count
+                    except: pass
+                    
                 if status_type == 'ERROR': # Error or Abort
                     success = False
+                
+                # Intercept finishing states for each municipality
+                if "=== Extração Finalizada com Sucesso" in message and mun_id:
+                     rc = muns_records.get(mun_id, 0)
+                     self.history_manager.add_entry(mun_id, "SUCESSO", f"Extração OK ({rc} regs)", rc)
+                elif "Erro de extração em" in message and mun_id:
+                     self.history_manager.add_entry(mun_id, "ERRO", "Falha na Extração", 0)
             
             if self.engine.aborted:
                  success = False
                  final_status = "ABORTED"
                  self.after(0, lambda: self.lbl_big_status.configure(text="CANCELADO", text_color="orange"))
-                 self.after(0, self.log, "Processo abortado pelo usuário.", "error")
+                 self.after(0, self.log, "Processo abortado pelo usuário.", "error", "GERAL")
             else:
                 final_status = "SUCCESS" if success else "ERROR"
                 if success:
@@ -268,12 +282,12 @@ class DashboardScreen(ctk.CTkFrame):
                         self.notify_callback("Conector ProBPA", "Erro durante a extração. Verifique o app.")
 
         except Exception as e:
-            self.after(0, self.log, f"CRITICAL: {e}")
+            self.after(0, self.log, f"CRITICAL: {e}", "error", "GERAL")
             self.after(0, lambda: self.lbl_big_status.configure(text="FALHA CRÍTICA", text_color="red"))
         finally:
             self.is_running = False
             self.last_run_time = datetime.now()
-            self.history_manager.add_entry(final_status, "Ciclo finalizado", records_processed)
+            self.history_manager.add_entry("GERAL", final_status, "Ciclo finalizado", records_processed)
             self.after(0, lambda: self.btn_run_now.configure(state="normal"))
             self.after(0, lambda: self.btn_stop.configure(state="disabled", text="PARAR")) # Reset STOP button
             self.after(0, self.refresh_history)
