@@ -27,7 +27,7 @@ class PecConnectorEngine:
         except Exception:
             return set()
 
-    def extract_and_send(self, days_back: int = 30) -> Generator[tuple, None, None]:
+    def extract_and_send(self) -> Generator[tuple, None, None]:
         self.aborted = False
         has_error = False
         
@@ -41,6 +41,7 @@ class PecConnectorEngine:
             
             mun_name = mun.get('municipality_name', 'Desconhecido')
             mun_id = mun.get('municipality_id', '???')
+            days_back = mun.get('days_back', 30)
             yield ('HIGHLIGHT', f"\n=== Iniciando Cliente Extração: {mun_name} ({mun_id}) ===", mun_id)
             
             # --- CONTEXTUAL INCREMENTAL LOGIC FOR THIS MUNICIPALITY ---

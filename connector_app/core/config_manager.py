@@ -93,7 +93,7 @@ class ConfigManager:
             print(f"Error saving global config: {e}")
             return False
 
-    def add_municipality(self, municipality_id, api_key, db_host, db_port, db_name, db_user, db_pass, municipality_name):
+    def add_municipality(self, municipality_id, api_key, db_host, db_port, db_name, db_user, db_pass, municipality_name, **kwargs):
         try:
             if self.config_cache is None:
                 self.config_cache = self._load_config_internal()
@@ -113,6 +113,7 @@ class ConfigManager:
                 "db_name": db_name,
                 "db_user": db_user,
                 "db_pass": db_pass,
+                "days_back": kwargs.get("days_back", 30),
                 "last_run_success": None
             }
             muns.append(new_mun)
@@ -188,6 +189,7 @@ class ConfigManager:
                         "db_name": data.get("db_name", "esus"),
                         "db_user": data.get("db_user", "postgres"),
                         "db_pass": data.get("db_pass", "postgres"),
+                        "days_back": data.get("days_back", 30),
                         "last_run_success": data.get("last_run_success", None)
                     }
                     migrated["municipalities"].append(mun)

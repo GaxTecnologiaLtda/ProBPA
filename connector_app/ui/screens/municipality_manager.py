@@ -61,6 +61,12 @@ class MunicipalityManager(ctk.CTkToplevel):
         self.entry_user.insert(0, "postgres")
         self.entry_pass = ctk.CTkEntry(row2_frame, placeholder_text="Senha", width=145, show="*")
         self.entry_pass.pack(side="left")
+        
+        # Row for Initial Extraction (Days Back)
+        ctk.CTkLabel(self.frame_form, text="Período - 1ª Extração (Dias)", font=("Roboto", 14, "bold"), text_color="#00E676").pack(pady=(20, 5))
+        self.combo_days = ctk.CTkComboBox(self.frame_form, values=["30", "60", "90", "180", "365", "730"], width=300)
+        self.combo_days.pack(pady=5)
+        self.combo_days.set("30")
 
         self.lbl_status = ctk.CTkLabel(self.frame_form, text="")
         self.lbl_status.pack(pady=10)
@@ -97,7 +103,7 @@ class MunicipalityManager(ctk.CTkToplevel):
             info_frame.pack(side="left", padx=10, pady=10, fill="both", expand=True)
             
             ctk.CTkLabel(info_frame, text=m.get('municipality_name', 'Sem Nome'), font=("Roboto", 16, "bold")).pack(anchor="w")
-            ctk.CTkLabel(info_frame, text=f"ID: {m.get('municipality_id')} | Host: {m.get('db_host')}", text_color="gray", font=("Roboto", 12)).pack(anchor="w")
+            ctk.CTkLabel(info_frame, text=f"ID: {m.get('municipality_id')} | Host: {m.get('db_host')} | {m.get('days_back', 30)} dias (1ª Carga)", text_color="gray", font=("Roboto", 12)).pack(anchor="w")
             
             last_run = m.get('last_run_success')
             if last_run:
@@ -147,6 +153,8 @@ class MunicipalityManager(ctk.CTkToplevel):
         self.entry_pass.delete(0, 'end')
         if m_data.get('db_pass'):
             self.entry_pass.insert(0, m_data.get('db_pass'))
+            
+        self.combo_days.set(str(m_data.get('days_back', 30)))
 
         self.lbl_status.configure(text="Modo Edição Carregado", text_color="#0277BD")
 
@@ -160,6 +168,11 @@ class MunicipalityManager(ctk.CTkToplevel):
         user = self.entry_user.get()
         pwd = self.entry_pass.get()
 
+        try:
+            days_back = int(self.combo_days.get())
+        except ValueError:
+            days_back = 30
+
         if not m_name or not m_id or not api_key or not host:
             self.lbl_status.configure(text="Preencha pelo menos Nome, ID, API e Host.", text_color="red")
             return
@@ -167,7 +180,7 @@ class MunicipalityManager(ctk.CTkToplevel):
         success = self.config_manager.add_municipality(
             municipality_id=m_id, api_key=api_key, 
             db_host=host, db_port=port, db_name=dbname, db_user=user, db_pass=pwd, 
-            municipality_name=m_name
+            municipality_name=m_name, days_back=days_back
         )
         
         if success:
