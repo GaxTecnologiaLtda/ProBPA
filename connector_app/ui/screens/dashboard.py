@@ -58,32 +58,48 @@ class DashboardScreen(ctk.CTkFrame):
 
     def _setup_status_tab(self):
         self.tab_status.grid_columnconfigure(0, weight=1)
+        self.tab_status.grid_rowconfigure(2, weight=1)
         
         # Big Status Badge
         self.lbl_big_status = ctk.CTkLabel(self.tab_status, text="AGUARDANDO", font=("Roboto", 32, "bold"), text_color="gray")
-        self.lbl_big_status.pack(pady=40)
+        self.lbl_big_status.pack(pady=20)
 
         self.lbl_timer = ctk.CTkLabel(self.tab_status, text="Próxima execução em: --:--")
-        self.lbl_timer.pack(pady=10)
+        self.lbl_timer.pack(pady=5)
 
         self.btn_run_now = ctk.CTkButton(self.tab_status, text="EXECUTAR AGORA", command=self.start_extraction_thread, width=200, height=50, fg_color="#2962FF")
-        self.btn_run_now.pack(pady=10)
+        self.btn_run_now.pack(pady=5)
 
-        # Stop Button (New in v3.4.0)
+        # Stop Button
         self.btn_stop = ctk.CTkButton(self.tab_status, text="PARAR", command=self.stop_extraction, width=200, height=40, fg_color="#C62828", state="disabled")
         self.btn_stop.pack(pady=5)
         
-        # Live Log Box
-        self.log_box = ctk.CTkTextbox(self.tab_status, height=200, state="disabled")
-        self.log_box.pack(fill="both", expand=True, padx=10, pady=10)
+        # --- DYNAMIC MUNICIPALITY LOG TABS ---
+        self.mun_log_tabs = ctk.CTkTabview(self.tab_status)
+        self.mun_log_tabs.pack(fill="both", expand=True, padx=10, pady=10)
+        self.log_boxes = {} # Store log boxes by mun_id
         
-        # Config Log Tags (Accessing underlying tkinter widget)
+        # Add a "Geral" tab for system messages
+        tab_geral = self.mun_log_tabs.add("Geral")
+        self.log_boxes["GERAL"] = self._create_log_box(tab_geral)
+        
+        muns = self.config_manager.get_municipalities()
+        for mun in muns:
+            mun_name = mun.get('municipality_name', 'Desconhecido')
+            mun_id = mun.get('municipality_id', '???')
+            tab = self.mun_log_tabs.add(mun_name)
+            self.log_boxes[mun_id] = self._create_log_box(tab)
+
+    def _create_log_box(self, parent):
+        log_box = ctk.CTkTextbox(parent, state="disabled")
+        log_box.pack(fill="both", expand=True, padx=5, pady=5)
         try:
-            self.log_box._textbox.tag_config("highlight", foreground="yellow")
-            self.log_box._textbox.tag_config("error", foreground="#FF5252")
-            self.log_box._textbox.tag_config("update", foreground="#00E5FF") # Cyan for updates
+            log_box._textbox.tag_config("highlight", foreground="yellow")
+            log_box._textbox.tag_config("error", foreground="#FF5252")
+            log_box._textbox.tag_config("update", foreground="#00E5FF")
         except:
             pass
+        return log_box
 
     def _setup_history_tab(self):
         self.tab_history.grid_columnconfigure(0, weight=1)
@@ -92,8 +108,23 @@ class DashboardScreen(ctk.CTkFrame):
         btn_refresh = ctk.CTkButton(self.tab_history, text="Atualizar Lista", command=self.refresh_history, height=30)
         btn_refresh.grid(row=0, column=0, pady=10, sticky="e", padx=10)
 
-        self.history_text = ctk.CTkTextbox(self.tab_history, state="disabled")
-        self.history_text.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        # --- DYNAMIC MUNICIPALITY HISTORY TABS ---
+        self.mun_hist_tabs = ctk.CTkTabview(self.tab_history)
+        self.mun_hist_tabs.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        self.history_boxes = {} # Store history text boxes by mun_id
+        
+        muns = self.config_manager.get_municipalities()
+        if not muns:
+            # Fallback
+            tab = self.mun_hist_tabs.add("Sem Municípios")
+            self.history_boxes["GERAL"] = self._create_log_box(tab)
+        else:
+            for mun in muns:
+                mun_name = mun.get('municipality_name', 'Desconhecido')
+                mun_id = mun.get('municipality_id', '???')
+                tab = self.mun_hist_tabs.add(mun_name)
+                self.history_boxes[mun_id] = self._create_log_box(tab)
+
         self.refresh_history()
 
     def _setup_config_tab(self):
@@ -128,22 +159,26 @@ class DashboardScreen(ctk.CTkFrame):
 
     # --- LOGIC ---
     
-    def log(self, message, level="info"):
-        self.log_box.configure(state="normal")
+    def log(self, message, level="info", mun_id=None):
+        target_box = self.log_boxes.get(mun_id, self.log_boxes.get("GERAL"))
+        if not target_box:
+            return # Should not happen if UI is built
+            
+        target_box.configure(state="normal")
         ts = datetime.now().strftime("%H:%M:%S")
         full_msg = f"[{ts}] {message}\n"
         
         if level == "highlight":
-            self.log_box.insert("end", full_msg, "highlight")
+            target_box.insert("end", full_msg, "highlight")
         elif level == "error":
-            self.log_box.insert("end", full_msg, "error")
+            target_box.insert("end", full_msg, "error")
         elif level == "update":
-            self.log_box.insert("end", full_msg, "update")
+            target_box.insert("end", full_msg, "update")
         else:
-            self.log_box.insert("end", full_msg)
+            target_box.insert("end", full_msg)
             
-        self.log_box.see("end")
-        self.log_box.configure(state="disabled")
+        target_box.see("end")
+        target_box.configure(state="disabled")
 
     def scheduler_loop(self):
         while not self.stop_event.is_set():
@@ -208,8 +243,8 @@ class DashboardScreen(ctk.CTkFrame):
             self.log(">>> Iniciando Ciclo de Extração <<<")
             success = True
             
-            for status_type, message in self.engine.extract_and_send():
-                self.after(0, self.log, f"[{status_type}] {message}")
+            for status_type, message, mun_id in self.engine.extract_and_send():
+                self.after(0, self.log, f"[{status_type}] {message}", "info", mun_id)
                 if "Found" in message and "records" in message:
                      # Attempt to parse simple count logic if needed, or Engine yields it
                      pass
@@ -244,20 +279,28 @@ class DashboardScreen(ctk.CTkFrame):
             self.after(0, self.refresh_history)
 
     def refresh_history(self):
-        entries = self.history_manager.get_entries()
-        self.history_text.configure(state="normal")
-        self.history_text.delete("1.0", "end")
+        muns = self.config_manager.get_municipalities()
+        if not muns: return
         
-        header = f"{'DATA':<20} | {'STATUS':<10} | {'MSG'}\n"
-        self.history_text.insert("end", header)
-        self.history_text.insert("end", "-"*60 + "\n")
-        
-        for e in entries:
-            # Simple text table
-            line = f"{e['timestamp']:<20} | {e['status']:<10} | {e['message']}\n"
-            self.history_text.insert("end", line)
+        for mun in muns:
+            mun_id = mun.get('municipality_id')
+            target_box = self.history_boxes.get(mun_id)
+            if not target_box: continue
             
-        self.history_text.configure(state="disabled")
+            entries = self.history_manager.get_entries(mun_id)
+            target_box.configure(state="normal")
+            target_box.delete("1.0", "end")
+            
+            header = f"{'DATA':<20} | {'STATUS':<10} | {'MSG'}\n"
+            target_box.insert("end", header)
+            target_box.insert("end", "-"*60 + "\n")
+            
+            for e in entries:
+                # Simple text table
+                line = f"{e['timestamp']:<20} | {e['status']:<10} | {e['message']}\n"
+                target_box.insert("end", line)
+                
+            target_box.configure(state="disabled")
 
     def _ask_password(self):
         """Secure password prompt."""
@@ -309,6 +352,10 @@ class DashboardScreen(ctk.CTkFrame):
         muns = self.config_manager.get_municipalities()
         count = len(muns)
         self.lbl_mun.configure(text=f"Modo Centralizado: {count} Municípios Integrados")
+        # Ideal: trigger a full UI reload to update the tabs if muns were changed.
+        # But for now, restart the app will apply it, or we could destroy and recreate tabs.
+        # Implementing basic message for user.
+        self.log("As Configurações de Municípios foram atualizadas. Reinicie o App para ver as novas abas.", "highlight", "GERAL")
 
     # --- UPDATE LOGIC ---
     def check_for_updates(self):

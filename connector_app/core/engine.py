@@ -33,7 +33,7 @@ class PecConnectorEngine:
         
         municipalities = self.config.get_municipalities()
         if not municipalities:
-            yield ('ERROR', "Nenhum município configurado. Processo encerrado.")
+            yield ('ERROR', "Nenhum município configurado. Processo encerrado.", None)
             return
 
         for mun in municipalities:
@@ -41,7 +41,7 @@ class PecConnectorEngine:
             
             mun_name = mun.get('municipality_name', 'Desconhecido')
             mun_id = mun.get('municipality_id', '???')
-            yield ('HIGHLIGHT', f"\n=== Iniciando Cliente Extração: {mun_name} ({mun_id}) ===")
+            yield ('HIGHLIGHT', f"\n=== Iniciando Cliente Extração: {mun_name} ({mun_id}) ===", mun_id)
             
             # --- CONTEXTUAL INCREMENTAL LOGIC FOR THIS MUNICIPALITY ---
             interval_setting = self.config.get_global("scheduler_interval", "15")
@@ -55,11 +55,11 @@ class PecConnectorEngine:
                     last_run_dt = datetime.fromisoformat(last_run)
                     start_date = last_run_dt
                     is_incremental = True
-                    yield ('INFO', f"Incremental Mode: Starting from last success ({start_date})")
+                    yield ('INFO', f"Incremental Mode: Starting from last success ({start_date})", mun_id)
                 except:
-                    yield ('WARNING', "Failed to parse last run time. Defaulting to full days back.")
+                    yield ('WARNING', "Failed to parse last run time. Defaulting to full days back.", mun_id)
             else:
-                yield ('INFO', f"Full Load Mode: Starting from {days_back} days ago ({start_date.date()})")
+                yield ('INFO', f"Full Load Mode: Starting from {days_back} days ago ({start_date.date()})", mun_id)
 
             conn = None
             try:
@@ -69,7 +69,7 @@ class PecConnectorEngine:
                 db_user = mun.get('db_user', 'postgres')
                 db_pass = mun.get('db_pass', 'postgres')
                 
-                yield ('INFO', f"Connecting to DB {db_host}:{db_port}...")
+                yield ('INFO', f"Connecting to DB {db_host}:{db_port}...", mun_id)
                 conn = psycopg2.connect(
                     host=db_host,
                     port=db_port,
@@ -85,7 +85,7 @@ class PecConnectorEngine:
                 
                 # QUERY 1: PROCEDIMENTOS REALIZADOS
                 if self.aborted: return
-                yield ('INFO', "[1/7] Querying Procedures...")
+                yield ('INFO', "[1/7] Querying Procedures...", mun_id)
                 sql_proc = """
                     SELECT pap.nu_uuid_ficha as id, prof.no_profissional, prof.nu_cns, cbo.nu_cbo,
                            cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
@@ -103,12 +103,12 @@ class PecConnectorEngine:
                 """
                 cur.execute(sql_proc, (start_date.date(),))
                 rows = cur.fetchall()
-                yield ('INFO', f"   -> Found {len(rows)} procedures.")
+                yield ('INFO', f"   -> Found {len(rows)} procedures.", mun_id)
                 all_rows.extend(rows)
 
                 # QUERY 2: CONSULTAS + DIAGNOSTICOS
                 if self.aborted: return
-                yield ('INFO', "[2/7] Querying Consultations...")
+                yield ('INFO', "[2/7] Querying Consultations...", mun_id)
                 sql_consult = """
                     SELECT fai.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, cbo.nu_cbo,
                            cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
@@ -128,12 +128,12 @@ class PecConnectorEngine:
                 """
                 cur.execute(sql_consult, (start_date.date(),))
                 rows = cur.fetchall()
-                yield ('INFO', f"   -> Found {len(rows)} consultations.")
+                yield ('INFO', f"   -> Found {len(rows)} consultations.", mun_id)
                 all_rows.extend(rows)
 
                 # QUERY 3: ODONTOLOGIA
                 if self.aborted: return
-                yield ('INFO', "[3/7] Querying Odontology (Attendance)...")
+                yield ('INFO', "[3/7] Querying Odontology (Attendance)...", mun_id)
                 sql_odonto = """
                     SELECT fao.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, cbo.nu_cbo,
                            cid.no_cidadao, cid.nu_cns, sex.ds_sexo, cid.nu_cpf_cidadao, 
@@ -150,12 +150,12 @@ class PecConnectorEngine:
                 """
                 cur.execute(sql_odonto, (start_date.date(),))
                 rows = cur.fetchall()
-                yield ('INFO', f"   -> Found {len(rows)} dental attendances.")
+                yield ('INFO', f"   -> Found {len(rows)} dental attendances.", mun_id)
                 all_rows.extend(rows)
 
                 # QUERY 4: VACINAÇÃO
                 if self.aborted: return
-                yield ('INFO', "[4/7] Querying Vaccination (Detailed)...")
+                yield ('INFO', "[4/7] Querying Vaccination (Detailed)...", mun_id)
                 vac_cols = self.get_table_columns(cur, 'tb_fat_vacinacao_vacina')
                 via_join = ""
                 local_join = ""
@@ -203,12 +203,12 @@ class PecConnectorEngine:
                 """
                 cur.execute(sql_vac, (start_date.date(),))
                 rows = cur.fetchall()
-                yield ('INFO', f"   -> Found {len(rows)} vaccinations.")
+                yield ('INFO', f"   -> Found {len(rows)} vaccinations.", mun_id)
                 all_rows.extend(rows)
 
                 # QUERY 5: ODONTO PROCEDURES
                 if self.aborted: return
-                yield ('INFO', "[5/7] Querying Odonto Procedures...")
+                yield ('INFO', "[5/7] Querying Odonto Procedures...", mun_id)
                 try:
                     sql_odonto_proc = """
                         SELECT fao.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, cbo.nu_cbo,
@@ -228,15 +228,15 @@ class PecConnectorEngine:
                     """
                     cur.execute(sql_odonto_proc, (start_date.date(),))
                     rows = cur.fetchall()
-                    yield ('INFO', f"   -> Found {len(rows)} dental procedures.")
+                    yield ('INFO', f"   -> Found {len(rows)} dental procedures.", mun_id)
                     all_rows.extend(rows)
                 except Exception as e:
                     conn.rollback()
-                    yield ('WARNING', f"Skipping Odonto Procedures (Error): {e}")
+                    yield ('WARNING', f"Skipping Odonto Procedures (Error): {e}", mun_id)
 
                 # QUERY 6: ATENDIMENTO DOMICILIAR
                 if self.aborted: return
-                yield ('INFO', "[6/7] Querying Home Visits...")
+                yield ('INFO', "[6/7] Querying Home Visits...", mun_id)
                 try:
                     dom_cols = self.get_table_columns(cur, 'tb_fat_atendimento_domiciliar')
                     dom_pk = next((c for c in dom_cols if c.startswith('co_seq_')), 'co_seq_fat_atendimento_domiciliar')
@@ -260,7 +260,7 @@ class PecConnectorEngine:
                                 LEFT JOIN tb_dim_ciap dim_ciap ON adpc.co_dim_ciap = dim_ciap.co_seq_dim_ciap
                             """
                         else:
-                             yield ('WARNING', f"Skipping Home Visit Details: FK not found. Avail: {str(list(adpc_cols))}")
+                             yield ('WARNING', f"Skipping Home Visit Details: FK not found. Avail: {str(list(adpc_cols))}", mun_id)
                              adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
                     else:
                         adpc_selects = "NULL as nu_cid, NULL as nu_ciap"
@@ -282,15 +282,15 @@ class PecConnectorEngine:
                     """
                     cur.execute(sql_domiciliar, (start_date.date(),))
                     rows = cur.fetchall()
-                    yield ('INFO', f"   -> Found {len(rows)} home visits.")
+                    yield ('INFO', f"   -> Found {len(rows)} home visits.", mun_id)
                     all_rows.extend(rows)
                 except Exception as e:
                     conn.rollback()
-                    yield ('WARNING', f"Skipping Home Visits (Error): {e}")
+                    yield ('WARNING', f"Skipping Home Visits (Error): {e}", mun_id)
 
                 # QUERY 7: ATIVIDADE COLETIVA
                 if self.aborted: return
-                yield ('INFO', "[7/7] Querying Collective Activity...")
+                yield ('INFO', "[7/7] Querying Collective Activity...", mun_id)
                 try:
                     fac_cols = self.get_table_columns(cur, 'tb_fat_atividade_coletiva')
                     part_cols = self.get_table_columns(cur, 'tb_fat_atvdd_coletiva_part')
@@ -313,7 +313,7 @@ class PecConnectorEngine:
                             proc_select_name = "COALESCE(proc.ds_proced, 'ATIVIDADE COLETIVA')"
                         
                         if not prof_col:
-                             yield ('WARNING', "Skipping Collective: Could not find professional column.")
+                             yield ('WARNING', "Skipping Collective: Could not find professional column.", mun_id)
                         else:
                             sql_collective = f"""
                                 SELECT fac.nu_uuid_ficha, prof.no_profissional, prof.nu_cns, NULL,
@@ -332,15 +332,15 @@ class PecConnectorEngine:
                             """
                             cur.execute(sql_collective, (start_date.date(),))
                             rows = cur.fetchall()
-                            yield ('INFO', f"   -> Found {len(rows)} collective participants.")
+                            yield ('INFO', f"   -> Found {len(rows)} collective participants.", mun_id)
                             all_rows.extend(rows)
                 except Exception as e:
                     conn.rollback()
-                    yield ('WARNING', f"Skipping Collective Activity (Error/Schema): {e}")
+                    yield ('WARNING', f"Skipping Collective Activity (Error/Schema): {e}", mun_id)
 
                 # --- SENDING ---
                 if self.aborted: return
-                yield ('INFO', f"[TOTAL] Processing {len(all_rows)} records for {mun_name}...")
+                yield ('INFO', f"[TOTAL] Processing {len(all_rows)} records for {mun_name}...", mun_id)
                 
                 for msg in self._send_batch(all_rows, mun):
                     if msg[0] == 'ERROR': has_error = True
@@ -348,20 +348,20 @@ class PecConnectorEngine:
                 
                 if not self.aborted and not has_error:
                     self.config.set_municipality_last_run(mun_id, datetime.now().isoformat())
-                    yield ('INFO', f"=== Extração Finalizada com Sucesso para {mun_name} ===")
+                    yield ('INFO', f"=== Extração Finalizada com Sucesso para {mun_name} ===", mun_id)
 
             except Exception as e:
                 has_error = True
-                yield ('ERROR', f"Erro de extração em {mun_name}: {e}")
+                yield ('ERROR', f"Erro de extração em {mun_name}: {e}", mun_id)
                 if conn: conn.rollback()
             finally:
                 if conn: conn.close()
                 if self.aborted:
-                    yield ('WARNING', "Processo abortado pelo usuário durante a iteração.")
+                    yield ('WARNING', "Processo abortado pelo usuário durante a iteração.", mun_id)
                     break
 
         if not self.aborted:
-            yield ('SUCCESS', "Ciclo de Extração Centralizada Completo.")
+            yield ('SUCCESS', "Ciclo de Extração Centralizada Completo.", None)
 
 
     def _send_batch(self, rows, mun_config):
