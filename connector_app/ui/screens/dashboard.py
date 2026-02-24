@@ -32,8 +32,9 @@ class DashboardScreen(ctk.CTkFrame):
         self.lbl_title = ctk.CTkLabel(self.header_frame, text=f"Conector ProBPA v{__version__}", font=("Roboto", 20, "bold"))
         self.lbl_title.pack(side="left")
         
-        mun_name = self.config_manager.get("municipality_name", "Desconhecido")
-        self.lbl_mun = ctk.CTkLabel(self.header_frame, text=f"{mun_name} ({self.config_manager.get('municipality_id')})", font=("Roboto", 16), text_color="gray")
+        muns = self.config_manager.get_municipalities()
+        count = len(muns)
+        self.lbl_mun = ctk.CTkLabel(self.header_frame, text=f"Modo Centralizado: {count} Municípios Integrados", font=("Roboto", 16), text_color="gray")
         self.lbl_mun.pack(side="left", padx=10)
 
         # Tabs
@@ -112,7 +113,7 @@ class DashboardScreen(ctk.CTkFrame):
         self.btn_check_update = ctk.CTkButton(frm_maint, text="Verificar Atualizações", command=self.check_for_updates, fg_color="#00897B", height=40)
         self.btn_check_update.pack(pady=10, padx=20, fill="x")
 
-        self.btn_change_db = ctk.CTkButton(frm_maint, text="Reconfigurar Banco de Dados", command=lambda: self.request_admin_action("edit_db"), fg_color="#546E7A")
+        self.btn_change_db = ctk.CTkButton(frm_maint, text="Gerenciar Municípios (Centralizado)", command=lambda: self.request_admin_action("manage_muns"), fg_color="#546E7A")
         self.btn_change_db.pack(pady=10, padx=20, fill="x")
 
         # Danger Zone
@@ -147,7 +148,7 @@ class DashboardScreen(ctk.CTkFrame):
     def scheduler_loop(self):
         while not self.stop_event.is_set():
             try:
-                interval_str = self.config_manager.get("scheduler_interval", "15")
+                interval_str = self.config_manager.get_global("scheduler_interval", "15")
                 
                 # Handle extended intervals
                 if interval_str == "12 hours":
@@ -292,20 +293,22 @@ class DashboardScreen(ctk.CTkFrame):
         
         if not pwd: return
 
-        real_pass = self.config_manager.get("admin_password")
+        real_pass = self.config_manager.get_global("admin_password")
         
         if pwd == real_pass:
             if action_type == "reset":
                 self.config_manager.clear_config()
                 self.on_reset()
-            elif action_type == "edit_db":
-                # Ideal would be to open a settings dialog.
-                # For MVP v3.1, let's just say "Reset to edit" or maybe simple popup
-                # Actually, simplest is to Reset logic to allow full reconfig on Activation Screen
-                self.config_manager.clear_config()
-                self.on_reset() 
+            elif action_type == "manage_muns":
+                from ui.screens.municipality_manager import MunicipalityManager
+                MunicipalityManager(self, self.config_manager, on_close=self._update_header_count).grab_set()
         else:
             self.log("Tentativa de acesso não autorizado nas configs.")
+
+    def _update_header_count(self):
+        muns = self.config_manager.get_municipalities()
+        count = len(muns)
+        self.lbl_mun.configure(text=f"Modo Centralizado: {count} Municípios Integrados")
 
     # --- UPDATE LOGIC ---
     def check_for_updates(self):

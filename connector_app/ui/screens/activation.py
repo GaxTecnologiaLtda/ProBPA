@@ -97,14 +97,18 @@ class ActivationScreen(ctk.CTkScrollableFrame):
         self.label_status.configure(text="Validando e Salvando...", text_color="yellow")
         self.update()
 
-        success = self.config_manager.save_config(
-            municipality_id=m_id,
-            api_key=api_key,
-            db_host=host, db_port=port, db_name=dbname, db_user=user, db_pass=pwd,
-            municipality_name=m_name,
+        success = self.config_manager.save_global_config(
             admin_password=admin_pass,
             scheduler_interval=interval
         )
+
+        if success:
+             self.config_manager.add_municipality(
+                 municipality_id=m_id,
+                 api_key=api_key,
+                 db_host=host, db_port=port, db_name=dbname, db_user=user, db_pass=pwd,
+                 municipality_name=m_name
+             )
 
         if success:
              self.label_status.configure(text="Configurado com Sucesso! Iniciando...", text_color="green")
