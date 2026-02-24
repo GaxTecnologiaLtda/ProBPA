@@ -183,46 +183,59 @@ class DashboardScreen(ctk.CTkFrame):
     def scheduler_loop(self):
         while not self.stop_event.is_set():
             try:
-                interval_str = self.config_manager.get_global("scheduler_interval", "15")
-                
-                # Handle extended intervals
-                if interval_str == "12 hours":
-                    interval_min = 720
-                elif interval_str == "24 hours":
-                    interval_min = 1440
-                elif interval_str == "Manual Only" or not interval_str.isdigit():
-                    self.lbl_timer.configure(text="Agendamento: Manual")
-                    time.sleep(10)
-                    continue
-                else:
-                    interval_min = int(interval_str)
-
+                muns = self.config_manager.get_municipalities()
                 now = datetime.now()
-
-                if self.last_run_time:
-                    delta = now - self.last_run_time
-                    minutes_since = delta.total_seconds() / 60
-                    remaining = interval_min - minutes_since
+                min_remaining = float('inf')
+                all_manual = True
+                
+                for mun in muns:
+                    interval_str = mun.get("scheduler_interval", "1 hora")
+                    if interval_str == "Manual": continue
+                    all_manual = False
                     
-                    if remaining <= 0 and not self.is_running:
-                        self.start_extraction_thread()
-                    elif remaining > 0:
-                        self.lbl_timer.configure(text=f"Próxima execução em: {int(remaining)} min")
+                    minutes = 60
+                    if "minuto" in interval_str: minutes = int(interval_str.split()[0])
+                    elif "hora" in interval_str:
+                        val = interval_str.split()[0]
+                        minutes = int(val) * 60 if val.isdigit() else 60
+                    else:
+                        try: minutes = int(interval_str)
+                        except: pass
+
+                    last_run = mun.get("last_run_success")
+                    if not last_run:
+                        remaining = 0
+                    else:
+                        try:
+                            last_run_dt = datetime.fromisoformat(last_run)
+                            elapsed = (now - last_run_dt).total_seconds() / 60
+                            remaining = minutes - elapsed
+                        except:
+                            remaining = 0
+                            
+                    if remaining < min_remaining:
+                        min_remaining = remaining
+                        
+                if not muns:
+                    self.lbl_timer.configure(text="Nenhum município configurado")
+                elif all_manual:
+                    self.lbl_timer.configure(text="Agendamento: Manual")
+                elif min_remaining <= 0:
+                    self.lbl_timer.configure(text="Iniciando ciclo agendado...")
+                    if not self.is_running:
+                        self.start_extraction_thread(force=False)
                 else:
-                    # First run? Maybe wait or run immediately? Let's run immediately on startup if configured
-                    if not self.is_running: 
-                         # Delay slightly to let UI render
-                         time.sleep(5)
-                         self.start_extraction_thread()
+                    self.lbl_timer.configure(text=f"Próxima execução em: {int(min_remaining)} min")
 
             except Exception as e:
                 print(f"Scheduler Error: {e}")
             
             time.sleep(60) # Check every minute
 
-    def start_extraction_thread(self):
+    def start_extraction_thread(self, force=True):
         if self.is_running: return
         self.is_running = True
+        self.force_extraction = force
         self.btn_run_now.configure(state="disabled")
         self.btn_stop.configure(state="normal") # Enable STOP
         self.lbl_big_status.configure(text="EXECUTANDO...", text_color="yellow")
@@ -244,7 +257,7 @@ class DashboardScreen(ctk.CTkFrame):
             self.log(">>> Iniciando Ciclo de Extração <<<", "info", "GERAL")
             success = True
             
-            for status_type, message, mun_id in self.engine.extract_and_send():
+            for status_type, message, mun_id in self.engine.extract_and_send(force=self.force_extraction):
                 self.after(0, self.log, f"[{status_type}] {message}", "info", mun_id)
                 
                 # Count extractions from messages like "-> Found 2 procedures."

@@ -27,7 +27,7 @@ class PecConnectorEngine:
         except Exception:
             return set()
 
-    def extract_and_send(self) -> Generator[tuple, None, None]:
+    def extract_and_send(self, force: bool = False) -> Generator[tuple, None, None]:
         self.aborted = False
         has_error = False
         
@@ -45,13 +45,32 @@ class PecConnectorEngine:
             yield ('HIGHLIGHT', f"\n=== Iniciando Cliente Extração: {mun_name} ({mun_id}) ===", mun_id)
             
             # --- CONTEXTUAL INCREMENTAL LOGIC FOR THIS MUNICIPALITY ---
-            interval_setting = self.config.get_global("scheduler_interval", "15")
+            interval_setting = mun.get("scheduler_interval", "1 hora")
             last_run = mun.get("last_run_success")
             
+            # Check if execution is due
+            if not force and last_run and interval_setting != "Manual":
+                try:
+                    last_run_dt = datetime.fromisoformat(last_run)
+                    minutes = 60
+                    if "minuto" in interval_setting: minutes = int(interval_setting.split()[0])
+                    elif "hora" in interval_setting:
+                        val = interval_setting.split()[0]
+                        minutes = int(val) * 60 if val.isdigit() else 60
+                    else:
+                        try: minutes = int(interval_setting)
+                        except: pass
+                    
+                    if (datetime.now() - last_run_dt).total_seconds() / 60 < minutes:
+                        yield ('INFO', f"Aguardando próximo ciclo agendado...", mun_id)
+                        continue
+                except:
+                    pass
+
             start_date = datetime.now() - timedelta(days=days_back)
             is_incremental = False
             
-            if interval_setting in ["12 hours", "24 hours"] and last_run:
+            if last_run:
                 try:
                     last_run_dt = datetime.fromisoformat(last_run)
                     start_date = last_run_dt

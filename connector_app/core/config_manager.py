@@ -114,6 +114,7 @@ class ConfigManager:
                 "db_user": db_user,
                 "db_pass": db_pass,
                 "days_back": kwargs.get("days_back", 30),
+                "scheduler_interval": kwargs.get("scheduler_interval", "1 hora"),
                 "last_run_success": None
             }
             muns.append(new_mun)
@@ -190,6 +191,7 @@ class ConfigManager:
                         "db_user": data.get("db_user", "postgres"),
                         "db_pass": data.get("db_pass", "postgres"),
                         "days_back": data.get("days_back", 30),
+                        "scheduler_interval": data.get("scheduler_interval", "1 hora"),
                         "last_run_success": data.get("last_run_success", None)
                     }
                     migrated["municipalities"].append(mun)

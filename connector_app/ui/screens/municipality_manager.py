@@ -62,11 +62,21 @@ class MunicipalityManager(ctk.CTkToplevel):
         self.entry_pass = ctk.CTkEntry(row2_frame, placeholder_text="Senha", width=145, show="*")
         self.entry_pass.pack(side="left")
         
-        # Row for Initial Extraction (Days Back)
-        ctk.CTkLabel(self.frame_form, text="Período - 1ª Extração (Dias)", font=("Roboto", 14, "bold"), text_color="#00E676").pack(pady=(20, 5))
-        self.combo_days = ctk.CTkComboBox(self.frame_form, values=["30", "60", "90", "180", "365", "730"], width=300)
-        self.combo_days.pack(pady=5)
+        # Row for Initial Extraction and Schedule
+        ctk.CTkLabel(self.frame_form, text="Configurações de Extração", font=("Roboto", 14, "bold"), text_color="#00E676").pack(pady=(20, 5))
+        
+        row3_frame = ctk.CTkFrame(self.frame_form, fg_color="transparent")
+        row3_frame.pack(pady=5)
+        
+        ctk.CTkLabel(row3_frame, text="1ª Carga:").pack(side="left", padx=(0, 5))
+        self.combo_days = ctk.CTkComboBox(row3_frame, values=["30", "60", "90", "180", "365", "730"], width=80)
+        self.combo_days.pack(side="left", padx=(0, 10))
         self.combo_days.set("30")
+
+        ctk.CTkLabel(row3_frame, text="Intervalo:").pack(side="left", padx=(0, 5))
+        self.combo_interval = ctk.CTkComboBox(row3_frame, values=["15 minutos", "30 minutos", "1 hora", "6 horas", "12 horas", "24 horas", "Manual"], width=110)
+        self.combo_interval.pack(side="left")
+        self.combo_interval.set("1 hora")
 
         self.lbl_status = ctk.CTkLabel(self.frame_form, text="")
         self.lbl_status.pack(pady=10)
@@ -103,7 +113,7 @@ class MunicipalityManager(ctk.CTkToplevel):
             info_frame.pack(side="left", padx=10, pady=10, fill="both", expand=True)
             
             ctk.CTkLabel(info_frame, text=m.get('municipality_name', 'Sem Nome'), font=("Roboto", 16, "bold")).pack(anchor="w")
-            ctk.CTkLabel(info_frame, text=f"ID: {m.get('municipality_id')} | Host: {m.get('db_host')} | {m.get('days_back', 30)} dias (1ª Carga)", text_color="gray", font=("Roboto", 12)).pack(anchor="w")
+            ctk.CTkLabel(info_frame, text=f"ID: {m.get('municipality_id')} | Host: {m.get('db_host')} | {m.get('scheduler_interval', '1 hora')} ({m.get('days_back', 30)}d 1ª Carga)", text_color="gray", font=("Roboto", 12)).pack(anchor="w")
             
             last_run = m.get('last_run_success')
             if last_run:
@@ -155,6 +165,7 @@ class MunicipalityManager(ctk.CTkToplevel):
             self.entry_pass.insert(0, m_data.get('db_pass'))
             
         self.combo_days.set(str(m_data.get('days_back', 30)))
+        self.combo_interval.set(m_data.get('scheduler_interval', '1 hora'))
 
         self.lbl_status.configure(text="Modo Edição Carregado", text_color="#0277BD")
 
@@ -172,6 +183,8 @@ class MunicipalityManager(ctk.CTkToplevel):
             days_back = int(self.combo_days.get())
         except ValueError:
             days_back = 30
+            
+        interval = self.combo_interval.get()
 
         if not m_name or not m_id or not api_key or not host:
             self.lbl_status.configure(text="Preencha pelo menos Nome, ID, API e Host.", text_color="red")
@@ -180,7 +193,7 @@ class MunicipalityManager(ctk.CTkToplevel):
         success = self.config_manager.add_municipality(
             municipality_id=m_id, api_key=api_key, 
             db_host=host, db_port=port, db_name=dbname, db_user=user, db_pass=pwd, 
-            municipality_name=m_name, days_back=days_back
+            municipality_name=m_name, days_back=days_back, scheduler_interval=interval
         )
         
         if success:
