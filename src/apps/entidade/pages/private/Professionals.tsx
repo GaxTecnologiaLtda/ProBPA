@@ -108,6 +108,25 @@ const Professionals: React.FC = () => {
     }
   };
 
+  const handleToggleChecked = async (prof: Professional, checked: boolean) => {
+    // Optimistic UI Update
+    setHierarchicalData(prev => prev.map(group => ({
+      ...group,
+      units: group.units.map(u => ({
+        ...u,
+        professionals: u.professionals.map(p => p.id === prof.id ? { ...p, isChecked: checked } : p)
+      }))
+    })));
+
+    try {
+      await updateProfessional(prof.id, { isChecked: checked });
+    } catch (error) {
+      console.error("Erro ao alterar status checado:", error);
+      alert("Erro ao alterar status checado.");
+      loadData(); // Revert on error
+    }
+  };
+
   const handleOpenModal = (professional?: Professional) => {
     if (professional) {
       setEditingId(professional.id);
@@ -637,6 +656,21 @@ const Professionals: React.FC = () => {
                               return (
                                 <div key={prof.id} className="min-w-[260px] w-[260px] flex-shrink-0">
                                   <Card className="h-full hover:shadow-md transition-shadow border border-gray-100 dark:border-gray-700 flex flex-col relative group bg-gray-50/50 dark:bg-gray-800/50">
+                                    {/* Checado Checkbox */}
+                                    {claims?.role === 'MASTER' && (
+                                      <div className="absolute top-3 left-3 z-10">
+                                        <label className="flex items-center gap-1.5 cursor-pointer bg-white/80 dark:bg-gray-900/80 px-2 py-1 rounded-md shadow-sm border border-gray-200 dark:border-gray-600 hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                                          <input
+                                            type="checkbox"
+                                            checked={!!prof.isChecked}
+                                            onChange={(e) => handleToggleChecked(prof, e.target.checked)}
+                                            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                                          />
+                                          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300">Checado</span>
+                                        </label>
+                                      </div>
+                                    )}
+
                                     {/* Status Badge */}
                                     <div className="absolute top-3 right-3 z-10">
                                       <Badge type={assignment.active ? 'success' : 'neutral'} className="text-[10px]">

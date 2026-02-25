@@ -10,7 +10,57 @@ import { db, storage } from '../../firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Unit, Professional } from '../../types';
 
+const compressImage = async (file: File): Promise<{ base64: string; file: File }> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 800;
+                const MAX_HEIGHT = 800;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height = Math.round((height * MAX_WIDTH) / width);
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width = Math.round((width * MAX_HEIGHT) / height);
+                        height = MAX_HEIGHT;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+                    fetch(dataUrl)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
+                            resolve({ base64: dataUrl, file: compressedFile });
+                        });
+                } else {
+                    resolve({ base64: event.target?.result as string, file: file });
+                }
+            };
+            img.onerror = (error) => reject(error);
+        };
+        reader.onerror = (error) => reject(error);
+    });
+};
+
 const ProfessionalRegistration: React.FC = () => {
+
     const { entityId, municipalityId } = useParams<{ entityId: string; municipalityId: string }>();
     const navigate = useNavigate();
 
@@ -186,17 +236,14 @@ const ProfessionalRegistration: React.FC = () => {
             // So if doc exists, setDoc attempts UPDATE, which fails (no permission).
             // So this IS the deduplication check!
 
-            // 1. Upload Signature
-            const timestamp = Date.now();
-            const fileRef = ref(storage, `signatures/temp/${entityId}_${timestamp}_${signatureFile.name}`);
-            await uploadBytes(fileRef, signatureFile);
-            const signatureUrl = await getDownloadURL(fileRef);
+            // 1. Compress Image
+            const { base64, file: compressedFile } = await compressImage(signatureFile);
 
-            const base64 = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result as string);
-                reader.readAsDataURL(signatureFile);
-            });
+            // 2. Upload Signature
+            const timestamp = Date.now();
+            const fileRef = ref(storage, `signatures/temp/${entityId}_${timestamp}_${compressedFile.name}`);
+            await uploadBytes(fileRef, compressedFile);
+            const signatureUrl = await getDownloadURL(fileRef);
 
             // 2. Prepare Assignments
             const assignmentsData = assignments.map(a => {
@@ -298,7 +345,8 @@ const ProfessionalRegistration: React.FC = () => {
                         professionalId: customId,
                         name: formData.name,
                         cbo: primary.occupation,
-                        municipality: primary.municipalityName
+                        municipality: primary.municipalityName,
+                        municipalityId: primary.municipalityId
                     }
                 });
 

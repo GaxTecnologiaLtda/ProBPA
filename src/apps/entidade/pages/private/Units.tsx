@@ -86,11 +86,11 @@ const Units: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, municipalityId: string) => {
+  const handleDelete = async (unit: Unit) => {
     if (confirm('Tem certeza que deseja excluir esta unidade?')) {
       try {
-        await deleteUnit(id, municipalityId);
-        setUnits(prev => prev.filter(u => u.id !== id));
+        await deleteUnit(unit);
+        setUnits(prev => prev.filter(u => u.id !== unit.id));
         setOpenMenuId(null);
       } catch (error) {
         console.error("Error deleting unit:", error);
@@ -409,7 +409,7 @@ const Units: React.FC = () => {
                                                   <Copy className="w-3 h-3" /> Duplicar
                                                 </button>
                                                 <button
-                                                  onClick={() => handleDelete(unit.id, unit.municipalityId)}
+                                                  onClick={() => handleDelete(unit)}
                                                   className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                                 >
                                                   <Trash2 className="w-3 h-3" /> Excluir

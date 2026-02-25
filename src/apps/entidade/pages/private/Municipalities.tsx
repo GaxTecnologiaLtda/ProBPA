@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Badge, Modal, Input, Select } from '../../components/ui/Components';
 import { MOCK_UNITS, MOCK_PROFESSIONALS, BRAZILIAN_STATES } from '../../constants'; // Keep stats mocks for now
 import { Municipality, MunicipalityInput, LicenseStatus } from '../../types';
-import { Users, Edit2, Trash2, MapPin, Phone, Plus, Building2, Stethoscope, RefreshCw, Activity, Crown, Briefcase, Eye, AlertTriangle, ShieldCheck, Search, LayoutTemplate } from 'lucide-react';
+import { Users, Edit2, Trash2, MapPin, Phone, Plus, Building2, Stethoscope, RefreshCw, Activity, Crown, Briefcase, Eye, AlertTriangle, ShieldCheck, Search, LayoutTemplate, Key } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useEntityData } from '../../hooks/useEntityData';
 import { fetchMunicipalitiesByEntity, createMunicipality, updateMunicipality, deleteMunicipality } from '../../services/municipalitiesService';
@@ -12,6 +12,9 @@ import { goalService } from '../../services/goalService';
 import { connectorService } from '../../services/connectorService';
 import { statsCache } from '../../services/statsCache';
 import { Unit, Professional } from '../../types';
+import { UserData, subscribeToEntityUsers, createUser, resetUserPassword, toggleUserStatus } from '../../services/usersService';
+import { functions } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
 
 const Municipalities: React.FC = () => {
   const { user, claims, logout } = useAuth();
@@ -22,11 +25,13 @@ const Municipalities: React.FC = () => {
   const [units, setUnits] = useState<Unit[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [productionStats, setProductionStats] = useState<Record<string, number>>({});
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
 
   const [loading, setLoading] = useState(true); // Structure loading
   const [loadingStats, setLoadingStats] = useState(false); // Stats loading (background)
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubsedeModalOpen, setIsSubsedeModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +43,10 @@ const Municipalities: React.FC = () => {
 
   // Form State
   const [formData, setFormData] = useState<Partial<MunicipalityInput>>({});
+  const [subsedeEmail, setSubsedeEmail] = useState('');
+  const [subsedeName, setSubsedeName] = useState('');
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Security Check
   useEffect(() => {
@@ -72,45 +81,17 @@ const Municipalities: React.FC = () => {
 
     setLoadingStats(true);
     try {
-      const [manualProduction, connectorProduction] = await Promise.all([
-        statsCache.getOrFetch(claims.entityId, currentYear, async () => {
-          return await goalService.getEntityProductionStats(
-            claims.entityId,
-            currentYear,
-            undefined,
-            municipalities,
-            professionals
-          );
-        }),
-        connectorService.fetchAggregateConnectorData(
-          claims.entityId,
-          currentYear,
-          municipalities,
-          professionals
-        )
-      ]);
+      const getMunicipalitiesStatsFn = httpsCallable(functions, 'getMunicipalitiesStats');
+      const response = await getMunicipalitiesStatsFn({ year: currentYear });
+      const data = response.data as any;
 
-      const manualFiltered = (manualProduction || []).filter((r: any) => r.source !== 'connector');
-      const allProduction = [...manualFiltered, ...connectorProduction];
-
-      processAndSetStats(allProduction);
+      setProductionStats(data.statsByMun || {});
 
     } catch (error) {
       console.error("Error loading production stats:", error);
     } finally {
       setLoadingStats(false);
     }
-  };
-
-  const processAndSetStats = (rawProduction: any[]) => {
-    const statsByMun: Record<string, number> = {};
-    rawProduction.forEach(record => {
-      if (record.municipalityId) {
-        const qty = record.quantity || 1;
-        statsByMun[record.municipalityId] = (statsByMun[record.municipalityId] || 0) + qty;
-      }
-    });
-    setProductionStats(statsByMun);
   };
 
   // Initial Load (Structure)
@@ -124,6 +105,15 @@ const Municipalities: React.FC = () => {
       loadProduction();
     }
   }, [loading, municipalities]); // Triggered after structure loads
+
+  // Load Users
+  useEffect(() => {
+    if (!claims?.entityId) return;
+    const unsubscribe = subscribeToEntityUsers(claims.entityId, (fetchedUsers) => {
+      setAllUsers(fetchedUsers);
+    });
+    return () => unsubscribe();
+  }, [claims?.entityId]);
 
   const handleOpenModal = (municipality?: Municipality, viewMode: boolean = false) => {
     setIsViewMode(viewMode);
@@ -160,7 +150,20 @@ const Municipalities: React.FC = () => {
         interfaceType: 'PEC'
       });
     }
+
+    // Reset subsede form fields
+    setSubsedeEmail('');
+    setSubsedeName('');
+    setGeneratedPassword(null);
     setIsModalOpen(true);
+  };
+
+  const handleOpenSubsedeModal = (municipality: Municipality) => {
+    setEditingId(municipality.id);
+    setSubsedeEmail('');
+    setSubsedeName('');
+    setGeneratedPassword(null);
+    setIsSubsedeModalOpen(true);
   };
 
   const handleDelete = async (id: string) => {
@@ -255,6 +258,74 @@ const Municipalities: React.FC = () => {
     return { unitsCount, prosCount, productionCount };
   };
 
+  // Funções de Gestão SUBSEDE
+  const currentSubsedeUser = editingId ? allUsers.find(u => u.organizationId === editingId && u.role === 'SUBSEDE') : null;
+
+  const handleCreateSubsedeAccess = async () => {
+    if (!subsedeEmail || !subsedeName || !editingId || !claims?.entityId) return;
+    setActionLoading(true);
+    setGeneratedPassword(null);
+    try {
+      const muni = municipalities.find(m => m.id === editingId);
+      const orgName = muni ? `Filial: ${muni.name} (${muni.uf})` : 'Desconhecido';
+
+      const dataToSave: Partial<UserData> = {
+        name: subsedeName,
+        email: subsedeEmail,
+        cpf: '000.000.000-00', // Mock CPF since it's required by schema but not relevant here
+        phone: '',
+        role: 'SUBSEDE', // Use the SUBSEDE role
+        organizationId: editingId,
+        organizationName: orgName,
+        status: 'active'
+      };
+
+      const result = await createUser(dataToSave);
+      if (result.password) {
+        setGeneratedPassword(result.password);
+      } else {
+        alert('Usuário criado. Peça para o usuário verificar o e-mail para definir a senha.');
+      }
+    } catch (error: any) {
+      alert(`Erro ao criar acesso: ${error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResetSubsedeAccess = async () => {
+    if (!currentSubsedeUser) return;
+    if (confirm(`Deseja redefinir a senha para ${currentSubsedeUser.email}?`)) {
+      setActionLoading(true);
+      try {
+        const result = await resetUserPassword(currentSubsedeUser.id);
+        if (result.password) {
+          setGeneratedPassword(result.password);
+        } else {
+          alert('Senha redefinida com sucesso! E-mail de recuperação enviado.');
+        }
+      } catch (error: any) {
+        alert(`Erro ao redefinir senha: ${error.message}`);
+      } finally {
+        setActionLoading(false);
+      }
+    }
+  };
+
+  const handleToggleSubsedeStatus = async () => {
+    if (!currentSubsedeUser) return;
+    setActionLoading(true);
+    try {
+      const newStatus = currentSubsedeUser.status === 'active' ? 'suspended' : 'active';
+      await toggleUserStatus(currentSubsedeUser.id, newStatus);
+    } catch (error: any) {
+      alert(`Erro ao alterar status: ${error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+
   if (loading || loadingEntity) {
     return <div className="p-8 text-center text-gray-500">Carregando municípios...</div>;
   }
@@ -298,6 +369,9 @@ const Municipalities: React.FC = () => {
                   </button>
                   {!isCoordenacao && (
                     <>
+                      <button onClick={() => handleOpenSubsedeModal(mun)} className="bg-orange-500/80 backdrop-blur-sm p-1.5 rounded-lg text-white cursor-pointer hover:bg-orange-500 transition-colors shadow-sm" title="Gerenciar Acesso Subsede">
+                        <Key className="w-4 h-4" />
+                      </button>
                       <button onClick={() => handleOpenModal(mun)} className="bg-white/20 backdrop-blur-sm p-1.5 rounded-lg text-white cursor-pointer hover:bg-white/30 transition-colors" title="Editar">
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -620,6 +694,8 @@ const Municipalities: React.FC = () => {
             </div>
           </div>
 
+          {/* The SUBSEDE Access section has been moved to its own quick-access Modal for better UX. */}
+
           <div className="mt-6 flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
               {isViewMode ? 'Fechar' : 'Cancelar'}
@@ -630,6 +706,100 @@ const Municipalities: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Modal Dedicado para Gestão de Acesso SUBSEDE */}
+      <Modal
+        isOpen={isSubsedeModalOpen}
+        onClose={() => setIsSubsedeModalOpen(false)}
+        title="Gestão de Acesso - SUBSEDE"
+      >
+        <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-100 dark:border-orange-800">
+          <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center">
+            <Key className="w-4 h-4 mr-2 text-orange-600" /> Acesso Painel de Coordenação Local (Subsede)
+          </h4>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-6">
+            Crie ou gerencie as credenciais exclusivas para que o Coordenador Local deste município possa acompanhar a produção, as metas e consultar o corpo clínico de forma independente (Read-Only).
+          </p>
+
+          {currentSubsedeUser ? (
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-200 dark:border-gray-700 mt-2 shadow-sm">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 font-bold text-lg border border-orange-200 dark:border-orange-800">
+                    {currentSubsedeUser.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900 dark:text-white">{currentSubsedeUser.name}</p>
+                    <p className="text-xs text-gray-500 font-mono">{currentSubsedeUser.email}</p>
+                  </div>
+                </div>
+                <Badge type={currentSubsedeUser.status === 'active' ? 'success' : 'error'}>
+                  {currentSubsedeUser.status === 'active' ? 'Ativo' : 'Suspenso'}
+                </Badge>
+              </div>
+
+              {generatedPassword && (
+                <div className="mb-5 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 font-mono text-center">
+                  <p className="text-xs text-orange-600 dark:text-orange-400 mb-1">Nova Senha Temporária:</p>
+                  <span className="font-bold text-xl text-orange-700 dark:text-orange-300">{generatedPassword}</span>
+                  <p className="text-[10px] text-gray-400 mt-2">Copie e envie ao coordenador.</p>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 dark:border-gray-700/60 mt-4">
+                <Button type="button" variant="outline" size="sm" onClick={handleResetSubsedeAccess} disabled={actionLoading}>
+                  {actionLoading ? 'Processando...' : 'Zerar Senha'}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={handleToggleSubsedeStatus} disabled={actionLoading} className={currentSubsedeUser.status === 'active' ? "text-red-600 hover:text-red-700 hover:bg-red-50" : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"}>
+                  {currentSubsedeUser.status === 'active' ? 'Suspender Acesso' : 'Reativar Acesso'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4">
+                <Input
+                  label="Nome do Coordenador Local"
+                  value={subsedeName}
+                  onChange={e => setSubsedeName(e.target.value)}
+                  disabled={actionLoading}
+                  placeholder="Ex: João da Silva"
+                />
+                <Input
+                  label="E-mail de Acesso (Login)"
+                  type="email"
+                  value={subsedeEmail}
+                  onChange={e => setSubsedeEmail(e.target.value)}
+                  disabled={actionLoading}
+                  placeholder="coordenador@municipio.gov.br"
+                />
+              </div>
+
+              {generatedPassword && (
+                <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 font-mono text-center mt-4">
+                  <p className="text-xs text-orange-600 dark:text-orange-400 mb-1">Senha Gerada com Sucesso:</p>
+                  <span className="font-bold text-xl text-orange-700 dark:text-orange-300">{generatedPassword}</span>
+                  <p className="text-[10px] text-gray-400 mt-2">Copie e envie ao usuário. Ele poderá logar na aba Acesso Subsede.</p>
+                </div>
+              )}
+
+              {!generatedPassword && (
+                <div className="flex justify-end pt-2">
+                  <Button type="button" variant="secondary" className="bg-orange-600 hover:bg-orange-700 shadow-md shadow-orange-500/20 w-full" onClick={handleCreateSubsedeAccess} disabled={!subsedeEmail || !subsedeName || actionLoading}>
+                    {actionLoading ? 'Gerando Acesso...' : 'Gerar Acesso Subsede'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="mt-6 flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <Button type="button" variant="outline" onClick={() => setIsSubsedeModalOpen(false)}>
+            Fechar
+          </Button>
+        </div>
+      </Modal>
+
     </div >
   );
 };

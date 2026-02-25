@@ -29,6 +29,10 @@ import SettingsPrivate from './pages/private/Settings';
 import SupportPrivate from './pages/private/Support';
 import NotificationsPage from './pages/private/NotificationsPage';
 
+import DashboardSubsede from './pages/subsede/Dashboard';
+import ProfessionalsSubsede from './pages/subsede/Professionals';
+import ProductionSubsede from './pages/subsede/Production';
+
 import { AuthProvider } from './context/AuthContext';
 
 const App: React.FC = () => {
@@ -70,6 +74,13 @@ const App: React.FC = () => {
             <Route path="suporte" element={<SupportPrivate />} />
             <Route path="notificacoes" element={<NotificationsPage />} />
             <Route path="configuracoes" element={<SettingsPrivate />} />
+          </Route>
+
+          {/* Rotas Subsede (Consultivas) */}
+          <Route path="/subsede" element={<Layout type="subsede" />}>
+            <Route path="dashboard" element={<DashboardSubsede />} />
+            <Route path="profissionais" element={<ProfessionalsSubsede />} />
+            <Route path="producao" element={<ProductionSubsede />} />
           </Route>
         </Routes>
       </HashRouter>

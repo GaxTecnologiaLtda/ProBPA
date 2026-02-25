@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Modal, Input, Select, Badge } from '../../components/ui/Components';
-import { Plus, Calendar, MapPin, Users, Activity, Trash2, Edit2, Search, Stethoscope, Save, X, FileText, User } from 'lucide-react';
+import { Plus, Calendar, MapPin, Users, Activity, Trash2, Edit2, Search, Stethoscope, Save, X, FileText, User, Info, AlertTriangle, CheckCircle, Clock, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useEntityData } from '../../hooks/useEntityData';
 import {
@@ -16,6 +16,8 @@ import {
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
 import { SigtapBrowserModal } from './components/SigtapBrowserModal';
+import { susReportService } from '../../services/susReportService';
+import { municipalityReportService } from '../../services/municipalityReportService';
 // import { format } from 'date-fns';
 
 const ActionsAndPrograms: React.FC = () => {
@@ -26,6 +28,9 @@ const ActionsAndPrograms: React.FC = () => {
     const [actions, setActions] = useState<Action[]>([]);
     const [municipalities, setMunicipalities] = useState<any[]>([]);
     const [professionals, setProfessionals] = useState<any[]>([]);
+
+    // Export State
+    const [exportingActionId, setExportingActionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Modals State
@@ -281,6 +286,58 @@ const ActionsAndPrograms: React.FC = () => {
         }
     };
 
+    const handleExportActionReport = async (action: Action) => {
+        try {
+            if (!claims?.entityId || !action.id) return;
+            setExportingActionId(action.id);
+
+            // Fetch production
+            const records = await fetchActionProduction(claims.entityId, action.id);
+            if (records.length === 0) {
+                alert("Nenhuma produção registrada para esta ação.");
+                setExportingActionId(null);
+                return;
+            }
+
+            // Preload Logo Base64
+            let logoBase64 = entity?.logoBase64 || '';
+            if (!logoBase64 && entity?.logoUrl) {
+                try {
+                    logoBase64 = await municipalityReportService.loadImage(entity.logoUrl);
+                } catch (err) {
+                    console.log("Could not load external logo url, proceeding without it.");
+                }
+            }
+
+            // Prepare options
+            await susReportService.generateActionSusProductionPdf(records, {
+                competence: new Date(action.date + 'T12:00:00').toISOString().slice(0, 7).replace('-', '/'),
+                municipalityName: action.municipalityName || 'Não Informado',
+                entityName: entity?.name || 'ENTIDADE NÃO IDENTIFICADA',
+                actionName: action.name,
+                logoBase64,
+                professionals: action.professionals.map(p => ({
+                    name: p.name,
+                    cns: p.cns,
+                    role: p.occupation,
+                    cbo: p.occupation,
+                    unit: action.municipalityName || 'Não identificada'
+                })),
+                entityAddress: entity?.address,
+                entityPhone: entity?.phone,
+                entityCnpj: entity?.cnpj,
+                entityCity: entity?.location || claims?.municipalityName,
+                entityResponsible: entity?.responsible
+            });
+
+        } catch (error) {
+            console.error("Erro ao exportar relatório:", error);
+            alert("Erro ao exportar relatório da ação.");
+        } finally {
+            setExportingActionId(null);
+        }
+    };
+
     if (loading) return <div className="p-8 text-center text-gray-500">Carregando...</div>;
 
     return (
@@ -345,6 +402,19 @@ const ActionsAndPrograms: React.FC = () => {
                                     className="flex-1 text-xs shadow-sm hover:shadow-md transition-all active:scale-95"
                                 >
                                     <Activity className="w-3.5 h-3.5 mr-2" /> Produção
+                                </Button>
+                                <Button
+                                    onClick={() => handleExportActionReport(action)}
+                                    variant="outline"
+                                    className="px-3 shadow-sm border border-gray-200 dark:border-gray-700"
+                                    disabled={exportingActionId === action.id}
+                                    title="Exportar Relatório BDPA SUS"
+                                >
+                                    {exportingActionId === action.id ? (
+                                        <Activity className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+                                    ) : (
+                                        <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                    )}
                                 </Button>
                                 {claims?.role === 'MASTER' && (
                                     <>
@@ -546,15 +616,19 @@ const ActionsAndPrograms: React.FC = () => {
                 isOpen={isProductionModalOpen}
                 onClose={() => setIsProductionModalOpen(false)}
                 title={`Registrar Produção: ${selectedAction?.name}`}
+                className="max-w-5xl w-full"
             >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
                     {/* Form Side */}
-                    <form onSubmit={handleRegisterProduction} className="space-y-4">
-                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-lg text-sm text-emerald-800 dark:text-emerald-200 mb-4 border border-emerald-100 dark:border-emerald-800/50">
-                            Lançamento Simplificado: Preencha os dados do paciente para vincular ao procedimento.
+                    <form onSubmit={handleRegisterProduction} className="space-y-6 lg:col-span-3">
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-sm text-emerald-800 dark:text-emerald-200 border border-emerald-100 dark:border-emerald-800/50 flex items-start gap-3">
+                            <Info className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                            <p>
+                                <strong className="font-bold">Lançamento Simplificado:</strong> Preencha os dados do paciente para vincular diretamente ao procedimento selecionado.
+                            </p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-5">
                             <Input
                                 label="Competência"
                                 placeholder="YYYYMM"
@@ -562,14 +636,14 @@ const ActionsAndPrograms: React.FC = () => {
                                 onChange={e => setProductionForm({ ...productionForm, competence: e.target.value })}
                                 maxLength={6}
                                 required
-                                className="dark:text-white dark:bg-gray-800"
+                                className="dark:text-white dark:bg-gray-800 text-lg font-medium"
                             />
                             <Select
                                 label="Procedimento Realizado"
                                 value={productionForm.procedureCode || ''}
                                 onChange={e => setProductionForm({ ...productionForm, procedureCode: e.target.value })}
                                 required
-                                className="dark:text-white dark:bg-gray-800"
+                                className="dark:text-white dark:bg-gray-800 text-sm"
                             >
                                 <option value="">Selecione...</option>
                                 {(selectedAction?.procedures || []).map(p => (
@@ -578,9 +652,9 @@ const ActionsAndPrograms: React.FC = () => {
                             </Select>
                         </div>
 
-                        <div className="space-y-4 p-5 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
-                            <h4 className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 pb-2 mb-2">
-                                Dados do Paciente
+                        <div className="space-y-5 p-6 bg-gray-50 dark:bg-gray-800/40 rounded-2xl border border-gray-200 dark:border-gray-700/60 shadow-inner">
+                            <h4 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2 text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700 pb-3 mb-4">
+                                <User className="w-4 h-4 text-emerald-500" /> Dados do Paciente
                             </h4>
                             <Input
                                 label="Nome Completo"
@@ -589,7 +663,7 @@ const ActionsAndPrograms: React.FC = () => {
                                 required
                                 className="dark:text-white dark:bg-gray-800"
                             />
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-5">
                                 <Input
                                     label="CNS"
                                     value={productionForm.patient?.cns || ''}
@@ -607,8 +681,8 @@ const ActionsAndPrograms: React.FC = () => {
                                     className="dark:text-white dark:bg-gray-800"
                                 />
                             </div>
-                            <p className="text-[11px] text-gray-400 dark:text-gray-500 text-right -mt-2">
-                                *Informe pelo menos um (CNS ou CPF)
+                            <p className="text-xs font-medium text-amber-600 dark:text-amber-500 text-right -mt-3 flex items-center justify-end gap-1">
+                                <AlertTriangle className="w-3.5 h-3.5" /> *Informe pelo menos um identificador
                             </p>
 
                             <Input
@@ -620,47 +694,50 @@ const ActionsAndPrograms: React.FC = () => {
                             />
                         </div>
 
-                        <Button type="submit" variant="secondary" className="w-full h-10 font-bold shadow-md hover:shadow-lg transition-all">
-                            Registrar Atendimento
+                        <Button type="submit" variant="secondary" className="w-full h-12 text-lg font-bold shadow-lg hover:shadow-emerald-500/20 hover:-translate-y-0.5 transition-all mt-4 rounded-xl">
+                            <CheckCircle className="w-5 h-5 mr-2" /> Registrar Atendimento
                         </Button>
                     </form>
 
                     {/* History Side */}
-                    <div className="border-l border-gray-100 dark:border-gray-700 pl-8 hidden lg:block">
-                        <h4 className="font-bold mb-4 flex items-center gap-2 text-gray-800 dark:text-gray-200">
-                            <FileText className="w-4 h-4" /> Últimos Registros
+                    <div className="border-l border-gray-100 dark:border-gray-700 pl-8 lg:col-span-2 hidden lg:flex flex-col">
+                        <h4 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-800 dark:text-gray-100">
+                            <Clock className="w-5 h-5 text-gray-400" /> Últimos Registros
                         </h4>
-                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="space-y-4 max-h-[550px] overflow-y-auto pr-3 custom-scrollbar flex-1">
                             {productionHistory.map(prod => (
-                                <div key={prod.id} className="text-sm p-3 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:border-emerald-200 dark:hover:border-emerald-800 transition-colors">
-                                    <p className="font-bold text-gray-900 dark:text-white truncate" title={prod.patient.name}>
+                                <div key={prod.id} className="p-4 bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:border-emerald-300 dark:hover:border-emerald-700 transition-all hover:shadow-md group">
+                                    <p className="font-bold text-base text-gray-900 dark:text-white mb-2 truncate" title={prod.patient.name}>
                                         {prod.patient.name}
                                     </p>
-                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                        <span className="flex items-center gap-1">
-                                            <span className="font-medium text-gray-700 dark:text-gray-300">CNS:</span> {prod.patient.cns || '-'}
-                                        </span>
-                                        <span className="flex items-center gap-1">
-                                            <span className="font-medium text-gray-700 dark:text-gray-300">CPF:</span> {prod.patient.cpf || '-'}
-                                        </span>
-                                        <span className="flex items-center gap-1 col-span-2">
-                                            <span className="font-medium text-gray-700 dark:text-gray-300">Nascimento:</span>
-                                            {prod.patient.birthDate ? new Date(prod.patient.birthDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
-                                        </span>
+                                    <div className="grid grid-cols-1 gap-y-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-lg">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium">Identificação:</span>
+                                            <span className="font-mono text-xs">{prod.patient.cns || prod.patient.cpf || 'Não informada'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="font-medium">Nascimento:</span>
+                                            <span>
+                                                {prod.patient.birthDate ? new Date(prod.patient.birthDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50 flex justify-between items-center">
-                                        <span className="text-xs font-mono bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
+                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                                        <span className="text-xs font-bold tracking-wide bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800/60">
                                             {prod.procedureCode}
                                         </span>
-                                        <span className="text-[10px] text-gray-400">
+                                        <span className="text-[11px] font-medium text-gray-400 flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" />
                                             {prod.createdAt ? new Date(prod.createdAt.seconds * 1000).toLocaleDateString('pt-BR') : '-'}
                                         </span>
                                     </div>
                                 </div>
                             ))}
                             {productionHistory.length === 0 && (
-                                <div className="text-center py-8">
-                                    <p className="text-gray-400 dark:text-gray-600 italic text-sm">Nenhum registro encontrado.</p>
+                                <div className="text-center py-12 flex flex-col items-center justify-center h-full opacity-60">
+                                    <Activity className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-3" />
+                                    <p className="text-gray-500 dark:text-gray-400 font-medium">Nenhum registro ainda</p>
+                                    <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">Os atendimentos aparecerão aqui</p>
                                 </div>
                             )}
                         </div>

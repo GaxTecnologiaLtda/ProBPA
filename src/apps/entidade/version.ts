@@ -1,10 +1,19 @@
-export const APP_VERSION = '1.7.7';
+export const APP_VERSION = '1.7.8';
 
 export const getVersionString = () => {
     return APP_VERSION;
 };
 
 export const LATEST_CHANGES = [
+    {
+        version: '1.7.8',
+        date: '20/02/2026',
+        title: 'Correção na Exclusão de Metas',
+        changes: [
+            'Metas Pactuadas: Corrigido erro de permissão que impedia a exclusão e edição em lote de metas.',
+            'Segurança: A exclusão agora garante a correspondência estrita com a sua Entidade, eliminando os bloqueios de segurança do Firebase.'
+        ]
+    },
     {
         version: '1.7.7',
         date: '10/02/2026',

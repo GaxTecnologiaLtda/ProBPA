@@ -35,7 +35,12 @@ const NotificationMenu: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const filteredNotifications = notifications.filter(n => {
+        if (claims?.role !== 'SUBSEDE') return true;
+        return n.data?.municipalityId === claims?.municipalityId;
+    });
+
+    const unreadCount = filteredNotifications.filter(n => !n.read).length;
 
     const handleMarkAsRead = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -81,7 +86,7 @@ const NotificationMenu: React.FC = () => {
             'Antigas': []
         };
 
-        notifications.forEach(notification => {
+        filteredNotifications.forEach(notification => {
             if (!notification.createdAt) return;
             const date = new Date(notification.createdAt.seconds * 1000); // Firestore timestamp
 
@@ -133,7 +138,7 @@ const NotificationMenu: React.FC = () => {
                         </div>
 
                         <div className="overflow-y-auto flex-1 custom-scrollbar">
-                            {notifications.length === 0 ? (
+                            {filteredNotifications.length === 0 ? (
                                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                                     <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
                                     <p className="text-sm">Nenhuma notificação recente.</p>

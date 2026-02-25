@@ -14,14 +14,16 @@ import {
     Timestamp,
     writeBatch,
     getDoc,
-    setDoc as firebaseSetDoc
+    setDoc as firebaseSetDoc,
+    onSnapshot
 } from "firebase/firestore";
 import { db, functions } from "../firebase";
 import { Professional, ProfessionalAssignment } from "../types";
 import { httpsCallable } from "firebase/functions";
 
 const COLLECTION_NAME = "professionals";
-const UNITS_COLLECTION = "units";
+
+import { fetchUnitsByEntity } from "./unitsService";
 
 // Estrutura de dados hierárquica para o frontend
 export type HierarchicalData = {
@@ -56,8 +58,8 @@ export async function fetchProfessionalsGrouped(entityId: string): Promise<Hiera
     const result: Record<string, HierarchicalData> = {};
 
     // Buscar unidades para enriquecer dados (CNES)
-    const unitsSnapshot = await getDocs(query(collection(db, UNITS_COLLECTION), where("entityId", "==", entityId)));
-    const unitsMap = new Map(unitsSnapshot.docs.map(d => [d.id, d.data()]));
+    const unitsData = await fetchUnitsByEntity(entityId);
+    const unitsMap = new Map(unitsData.map(u => [u.id, u]));
 
     console.log(`[DEBUG] Found ${professionals.length} professionals for entity ${entityId}`);
 
@@ -109,6 +111,81 @@ export async function fetchProfessionalsGrouped(entityId: string): Promise<Hiera
     return Object.values(result).sort((a, b) => a.municipalityName.localeCompare(b.municipalityName));
 }
 
+export async function subscribeToProfessionalsGrouped(
+    entityId: string,
+    municipalityId: string | null | undefined,
+    onUpdate: (data: HierarchicalData[]) => void
+): Promise<() => void> {
+    // 1. Fetch units to enrich data
+    const unitsData = await fetchUnitsByEntity(entityId);
+    const unitsMap = new Map(unitsData.map(u => [u.id, u]));
+
+    // 2. Setup subscription
+    let q;
+    if (municipalityId) {
+        // Assume PRIVATE path based on app structure for SUBSEDE
+        q = collection(db, `municipalities/PRIVATE/${entityId}/${municipalityId}/professionals`);
+    } else {
+        // Root query
+        q = query(collection(db, COLLECTION_NAME), where("entityId", "==", entityId));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const professionals = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Professional));
+        const result: Record<string, HierarchicalData> = {};
+
+        professionals.forEach(prof => {
+            const assignments: ProfessionalAssignment[] = prof.assignments && prof.assignments.length > 0
+                ? prof.assignments
+                : (prof.unitId && prof.municipalityId ? [{
+                    unitId: prof.unitId,
+                    unitName: prof.unitName || 'Desconhecida',
+                    municipalityId: prof.municipalityId,
+                    municipalityName: prof.municipalityName || 'Desconhecido',
+                    occupation: prof.occupation || '',
+                    registerClass: prof.registerClass || '',
+                    active: prof.active ?? true
+                }] : []);
+
+            assignments.forEach(assignment => {
+                const munId = assignment.municipalityId;
+                if (!munId) return;
+
+                if (municipalityId && munId !== municipalityId) return;
+
+                if (!result[munId]) {
+                    result[munId] = {
+                        municipalityId: munId,
+                        municipalityName: assignment.municipalityName || 'Desconhecido',
+                        units: []
+                    };
+                }
+
+                let unitEntry = result[munId].units.find(u => u.unitId === assignment.unitId);
+                if (!unitEntry) {
+                    const unitData = unitsMap.get(assignment.unitId);
+                    unitEntry = {
+                        unitId: assignment.unitId,
+                        unitName: assignment.unitName || 'Desconhecida',
+                        cnes: unitData ? unitData.cnes : 'N/A',
+                        professionals: []
+                    };
+                    result[munId].units.push(unitEntry);
+                }
+
+                unitEntry.professionals.push(prof);
+            });
+        });
+
+        const finalData = Object.values(result).sort((a, b) => a.municipalityName.localeCompare(b.municipalityName));
+        onUpdate(finalData);
+    }, (error) => {
+        console.error("Error subscribing to professionals:", error);
+    });
+
+    return unsubscribe;
+}
+
 export async function createProfessional(data: Omit<Professional, 'id'>): Promise<string> {
     if (!data.entityId) throw new Error("entityId é obrigatório.");
 
@@ -141,9 +218,19 @@ export async function createProfessional(data: Omit<Professional, 'id'>): Promis
     const docRef = doc(collection(db, COLLECTION_NAME));
     batch.set(docRef, docData);
 
+    let resolvedType = "PRIVATE";
+    try {
+        const eSnap = await getDoc(doc(db, 'entities', data.entityId));
+        if (eSnap.exists()) {
+            const t = eSnap.data().type;
+            if (t === 'Pública' || t === 'PUBLIC') resolvedType = 'PUBLIC';
+        }
+    } catch (e) { }
+
     // Atualiza contadores nas unidades
     data.assignments.forEach(assignment => {
-        const unitRef = doc(db, UNITS_COLLECTION, assignment.unitId);
+        if (!assignment.municipalityId || !assignment.unitId) return;
+        const unitRef = doc(db, `municipalities/${resolvedType}/${data.entityId}/${assignment.municipalityId}/units`, assignment.unitId);
         batch.update(unitRef, { professionalsCount: increment(1) });
     });
 
@@ -199,19 +286,43 @@ export async function updateProfessional(
     const currentUnitIds = new Set(currentAssignments.map(a => a.unitId));
     const newUnitIds = new Set(newAssignments.map(a => a.unitId));
 
+    let resolvedType = "PRIVATE";
+    if (currentData.entityId) {
+        try {
+            const eSnap = await getDoc(doc(db, 'entities', currentData.entityId));
+            if (eSnap.exists()) {
+                const t = eSnap.data().type;
+                if (t === 'Pública' || t === 'PUBLIC') resolvedType = 'PUBLIC';
+            }
+        } catch (e) { }
+    }
+
+    const getUnitPath = (unitId: string) => {
+        // Find the municipality for this unit taking assignments
+        const assignment = newAssignments.find(a => a.unitId === unitId) || currentAssignments.find(a => a.unitId === unitId);
+        if (!assignment || !assignment.municipalityId) return null;
+        return `municipalities/${resolvedType}/${currentData.entityId}/${assignment.municipalityId}/units`;
+    };
+
     // Decrementar removidas
     currentUnitIds.forEach(unitId => {
         if (!newUnitIds.has(unitId)) {
-            const unitRef = doc(db, UNITS_COLLECTION, unitId);
-            batch.update(unitRef, { professionalsCount: increment(-1) });
+            const path = getUnitPath(unitId);
+            if (path) {
+                const unitRef = doc(db, path, unitId);
+                batch.update(unitRef, { professionalsCount: increment(-1) });
+            }
         }
     });
 
     // Incrementar novas
     newUnitIds.forEach(unitId => {
         if (!currentUnitIds.has(unitId)) {
-            const unitRef = doc(db, UNITS_COLLECTION, unitId);
-            batch.update(unitRef, { professionalsCount: increment(1) });
+            const path = getUnitPath(unitId);
+            if (path) {
+                const unitRef = doc(db, path, unitId);
+                batch.update(unitRef, { professionalsCount: increment(1) });
+            }
         }
     });
 

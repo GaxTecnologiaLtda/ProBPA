@@ -1,12 +1,12 @@
 import React from 'react';
-import { Activity, Users, Map, TrendingUp } from 'lucide-react';
+import { Activity, Users, Map, TrendingUp, RefreshCw } from 'lucide-react';
 import { StatCard, Card } from '../../components/ui/Components';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { CHART_COLORS_PRIVATE } from '../../constants';
 import { useDashboardData } from './useDashboardData';
 
 const Dashboard: React.FC = () => {
-  const { production, professionals, municipalities, goals, loading } = useDashboardData();
+  const { production, professionals, municipalities, goals, loading, syncing, syncData } = useDashboardData();
   const colors = CHART_COLORS_PRIVATE;
   const accentColorClass = 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400';
 
@@ -35,7 +35,16 @@ const Dashboard: React.FC = () => {
             Visão Geral Institucional
           </h1>
           <div className="flex space-x-2">
-            <select className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-3 py-1.5 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500 outline-none">
+            <button
+              onClick={syncData}
+              disabled={syncing || loading}
+              className={`flex items-center px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 shadow-sm outline-none transition-colors 
+                ${(syncing || loading) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-emerald-600 dark:hover:text-emerald-400 focus:ring-2 focus:ring-emerald-500'}`}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${(syncing) ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Atualizar Dados'}
+            </button>
+            <select className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md text-sm px-3 py-1.5 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500 outline-none h-[38px]">
               <option>Este Ano</option>
             </select>
           </div>

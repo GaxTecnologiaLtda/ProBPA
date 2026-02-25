@@ -10,11 +10,13 @@ import {
     orderBy,
     collectionGroup,
     getDoc,
-    setDoc
+    setDoc,
+    deleteDoc
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 import { Goal } from '../types';
-import { normalizeVaccine } from './municipalityReportService';
+import { resolveSigtapCode } from './municipalityReportService';
 
 const COLLECTION_GROUP_NAME = 'goals';
 
@@ -310,6 +312,66 @@ export const goalService = {
     },
 
     /**
+     * Delete a goal by its ID across all legacy and new paths
+     */
+    deleteGoal: async (goalId: string, userClaims: any): Promise<void> => {
+        try {
+            // Find all instances of this goal across the database
+            const q = query(
+                collectionGroup(db, COLLECTION_GROUP_NAME),
+                where('id', '==', goalId),
+                where('entityId', '==', userClaims.entityId)
+            );
+
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                console.warn(`No goal found with ID ${goalId} to delete.`);
+                return;
+            }
+
+            const promises = snapshot.docs.map(docSnap => deleteDoc(docSnap.ref));
+            await Promise.all(promises);
+
+            // Log Action
+            try {
+                // @ts-ignore
+                const { logAction } = await import('./logsService');
+                await logAction({
+                    action: 'DELETE',
+                    target: 'GOAL',
+                    description: `Pactuação de meta removida`,
+                    entityId: userClaims?.entityId,
+                    municipalityId: userClaims?.municipalityId || 'unknown'
+                });
+            } catch (e) { console.error(e); }
+
+        } catch (error) {
+            console.error('Error deleting goal:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Call Cloud Function to aggregate production against Goals for performance and accuracy.
+     */
+    getAggregatedGoalsProgress: async (year: string, goals: Partial<Goal>[]): Promise<Record<string, { total: number, byMonth: Record<string, number> }>> => {
+        try {
+            const calculateFn = httpsCallable(functions, 'getGoalsProgress');
+            const result = await calculateFn({ year, goals });
+            const data = result.data as any;
+            if (data?.success && data?.results) {
+                return data.results;
+            }
+            return {};
+        } catch (error) {
+            console.error('Error fetching aggregated goals progress:', error);
+            // Return empty map on error to not crash the UI
+            return {};
+        }
+    },
+
+    /**
      * Fetch all production records for an entity to calculate progress on frontend.
      */
     /**
@@ -497,40 +559,11 @@ export const goalService = {
                         }
 
                         // Normalize properties
-                        const proc = data.procedure || {};
-                        let procedureCode = data.procedureCode || proc.code || '';
-                        let procedureName = data.procedureName || proc.name || 'Procedimento sem nome';
-                        const procedureType = data.procedureType || proc.type || '';
+                        const resolved = resolveSigtapCode(data);
+                        if (!resolved) return null; // Ignore rule matched (e.g. CONSULTA generic)
 
-                        // --- IGNORE INTERNAL PEC PROCEDURES ---
-                        const rawCodeUpper = String(procedureCode).toUpperCase();
-                        const rawNameUpper = String(procedureName).toUpperCase();
-
-                        const hasValidCode = /^\d+$/.test(procedureCode) && procedureCode.length >= 7;
-
-                        // Check if it's a vaccine (by Type or Name) to allow small codes
-                        const isVaccine = procedureType === 'VACCINATION' || rawNameUpper.includes('VACINA') || rawNameUpper.includes('IMUNIZA');
-
-                        if (!hasValidCode && !isVaccine) {
-                            if (rawCodeUpper.includes('CONSULTA') && rawNameUpper.includes('ATENDIMENTO INDIVIDUAL')) {
-                                return null;
-                            }
-                            // Also ignore completely invalid things that are NOT vaccines
-                            if (procedureCode.length < 3) return null;
-                        }
-
-                        // Case 2: Code=ODONTO, Name=ATENDIMENTO ODONTOLOGICO -> MAP to 0301010030
-                        if (rawCodeUpper.includes('ODONTO') && rawNameUpper.includes('ATENDIMENTO ODONTOLOGICO')) {
-                            procedureCode = '0301010030';
-                            procedureName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
-                        }
-
-                        // Case 3: VACCINE Normalization
-                        const vacNorm = normalizeVaccine(procedureName, procedureType);
-                        if (vacNorm) {
-                            procedureCode = vacNorm.code;
-                            procedureName = vacNorm.name;
-                        }
+                        let procedureCode = resolved.code;
+                        let procedureName = resolved.name;
 
                         // Map professional CNS to professionalId for report aggregation
                         let professionalId = data.professionalId; // May already exist from manual data
@@ -577,7 +610,7 @@ export const goalService = {
                             _isNewPath: true,
                             procedureCode: String(procedureCode).replace(/\D/g, ''),
                             procedureName,
-                            procedureType
+                            procedureType: data.procedureType || data.procedure?.type || ''
                         };
                     }).filter(item => item !== null) as any[];
 

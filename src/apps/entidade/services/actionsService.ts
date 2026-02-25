@@ -84,12 +84,6 @@ export const createAction = async (data: Action) => {
         // 2. Set data in Entity Collection
         batch.set(entityActionRef, payload);
 
-        // 3. Dual Write: If municipalityId is present (Registered Municipality)
-        if (data.municipalityId) {
-            const muniActionRef = doc(db, 'municipalities', data.municipalityId, 'actions', actionId);
-            batch.set(muniActionRef, payload);
-        }
-
         await batch.commit();
         return actionId;
     } catch (error) {
@@ -106,36 +100,6 @@ export const updateAction = async (actionId: string, data: Partial<Action>, orig
         const entityActionRef = doc(db, 'entities', originalAction.entityId, 'actions', actionId);
         batch.update(entityActionRef, data);
 
-        // 2. Handle Dual Write logic for Municipality
-
-        // Scenario A: Municipality didn't change, just update existing Linked Doc if it exists
-        if (originalAction.municipalityId && data.municipalityId === originalAction.municipalityId) {
-            const muniActionRef = doc(db, 'municipalities', originalAction.municipalityId, 'actions', actionId);
-            batch.update(muniActionRef, data);
-        }
-
-        // Scenario B: Municipality Changed (Old -> New)
-        // We need to DELETE from Old and CREATE in New
-        else if (originalAction.municipalityId && data.municipalityId && data.municipalityId !== originalAction.municipalityId) {
-            const oldMuniRef = doc(db, 'municipalities', originalAction.municipalityId, 'actions', actionId);
-            batch.delete(oldMuniRef);
-
-            const newMuniRef = doc(db, 'municipalities', data.municipalityId, 'actions', actionId);
-            batch.set(newMuniRef, { ...originalAction, ...data }); // Need full data for set
-        }
-
-        // Scenario C: Changed from Linked -> Unlinked
-        else if (originalAction.municipalityId && !data.municipalityId && data.municipalityId !== undefined) {
-            const oldMuniRef = doc(db, 'municipalities', originalAction.municipalityId, 'actions', actionId);
-            batch.delete(oldMuniRef);
-        }
-
-        // Scenario D: Changed from Unlinked -> Linked
-        else if (!originalAction.municipalityId && data.municipalityId) {
-            const newMuniRef = doc(db, 'municipalities', data.municipalityId, 'actions', actionId);
-            batch.set(newMuniRef, { ...originalAction, ...data });
-        }
-
         await batch.commit();
     } catch (error) {
         console.error("Error updating action:", error);
@@ -150,12 +114,6 @@ export const deleteAction = async (actionId: string, entityId: string, municipal
         // 1. Delete from Entity
         const entityActionRef = doc(db, 'entities', entityId, 'actions', actionId);
         batch.delete(entityActionRef);
-
-        // 2. Delete from Municipality if linked
-        if (municipalityId) {
-            const muniActionRef = doc(db, 'municipalities', municipalityId, 'actions', actionId);
-            batch.delete(muniActionRef);
-        }
 
         await batch.commit();
     } catch (error) {
@@ -177,12 +135,6 @@ export const registerProduction = async (actionId: string, entityId: string, mun
         const prodId = entityProdRef.id;
 
         batch.set(entityProdRef, payload);
-
-        // 2. Add to Municipality Subcollection if linked
-        if (municipalityId) {
-            const muniProdRef = doc(db, 'municipalities', municipalityId, 'actions', actionId, 'production', prodId);
-            batch.set(muniProdRef, payload);
-        }
 
         await batch.commit();
         return prodId;

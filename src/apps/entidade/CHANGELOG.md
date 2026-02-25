@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.8] - 20/02/2026
+### Corrigido
+- **Metas Pactuadas**: Resolvido erro de permissão (`permission-denied`) ao tentar excluir uma meta individual ou durante a edição em lote.
+- **Segurança (Firestore)**: Refinada a consulta de segurança na deleção de metas. Agora a busca exige correspondência estrita com a ID da Entidade, satisfazendo as regras de segurança sem bloquear o usuário.
+
 ## [1.7.7] - 10/02/2026
 ### Adicionado
 - **Filtros Avançados**: Novo painel na listagem de profissionais permitindo filtrar por intervalo de datas, unidade específica e cargo (CBO).

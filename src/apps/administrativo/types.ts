@@ -355,7 +355,8 @@ export enum LogLevel {
 export enum LogSource {
   ADMIN_PANEL = 'Admin Panel',
   ENTITY_PANEL = 'Entity Panel',
-  PRODUCTION_PANEL = 'Production Panel'
+  PRODUCTION_PANEL = 'Production Panel',
+  CLOUD_FUNCTIONS = 'Cloud Functions'
 }
 
 export interface LogEntry {

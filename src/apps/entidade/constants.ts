@@ -467,6 +467,12 @@ export const CHART_COLORS_PRIVATE = {
   tertiary: '#6ee7b7',
 };
 
+export const CHART_COLORS_SUBSEDE = {
+  primary: '#ea580c',
+  secondary: '#f97316',
+  tertiary: '#fdba74',
+};
+
 export const CBO_LIST = [
   {
     group: 'Médicos',

@@ -25,6 +25,7 @@ import ConnectorDashboard from './ConnectorDashboard';
 // import LediDashboard from './LediDashboard';
 
 import { useDashboardData } from './useDashboardData';
+import { UnitComparativeReport } from '../../components/reports/UnitComparativeReport';
 
 // ... (keep imports)
 
@@ -306,10 +307,11 @@ const Production: React.FC = () => {
 
    }, [fetchedRecords, appliedStartDate, appliedEndDate]);
 
-   // Carregar Municípios globalmente (necessário para filtros e LEDI)
+   // Carregar Municípios e Unidades globalmente (necessário para filtros, relatórios e LEDI)
    useEffect(() => {
       if (claims?.entityId) {
          fetchMunicipalitiesByEntity(claims.entityId).then(setAllMunicipalities).catch(console.error);
+         fetchUnitsByEntity(claims.entityId).then(setAllUnits).catch(console.error);
       }
    }, [claims?.entityId]);
 
@@ -1020,35 +1022,13 @@ const Production: React.FC = () => {
 
          case 'unidades': // Comparativo de Unidades
             return (
-               <div className="space-y-6">
-                  <div className="h-96 w-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={UNIT_COMPARISON}>
-                           <CartesianGrid stroke="#f5f5f5" />
-                           <XAxis dataKey="name" scale="band" tick={{ fontSize: 10 }} />
-                           <YAxis yAxisId="left" orientation="left" stroke="#3b82f6" />
-                           <YAxis yAxisId="right" orientation="right" stroke="#10b981" />
-                           <Tooltip />
-                           <Legend />
-                           <Bar yAxisId="left" dataKey="producao" name="Volume (Qtd)" barSize={30} fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                           <Line yAxisId="right" type="monotone" dataKey="faturamento" name="Faturamento (R$)" stroke="#10b981" strokeWidth={3} />
-                        </ComposedChart>
-                     </ResponsiveContainer>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     {UNIT_COMPARISON.map((u, i) => (
-                        <div key={i} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/30 rounded border border-gray-100 dark:border-gray-700">
-                           <span className="font-medium text-sm">{u.name}</span>
-                           <div className="text-right">
-                              <div className="text-xs text-gray-500">Ticket Médio</div>
-                              <div className="font-bold text-emerald-600">
-                                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(u.faturamento / u.producao)}
-                              </div>
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               </div>
+               <UnitComparativeReport
+                  municipalityId={filterMunicipality}
+                  onMunicipalityChange={setFilterMunicipality}
+                  allMunicipalities={allMunicipalities}
+                  competence={selectedCompetence}
+                  allUnits={allUnits}
+               />
             );
 
          case 'procedimentos': // Top Procedimentos
@@ -1390,26 +1370,28 @@ const Production: React.FC = () => {
                      >
                         <Eye className="w-3 h-3 mr-2" /> Visualizar
                      </Button>
-                     <Button
-                        variant="secondary"
-                        className="flex-1 text-xs"
-                        onClick={() => {
-                           if (rep.id === 'profissional') {
-                              handleExportUnifiedReport();
-                           } else {
-                              // Simulation for others
-                              handleGenerate('PDF');
-                           }
-                        }}
-                        disabled={rep.id === 'profissional' ? exportingUnified : false}
-                     >
-                        {rep.id === 'profissional' && exportingUnified ? (
-                           <Activity className="w-3 h-3 mr-2 animate-spin" />
-                        ) : (
-                           <Download className="w-3 h-3 mr-2" />
-                        )}
-                        PDF
-                     </Button>
+                     {rep.id !== 'unidades' && rep.id !== 'profissional' && (
+                        <Button
+                           variant="secondary"
+                           className="flex-1 text-xs"
+                           onClick={() => {
+                              if (rep.id === 'profissional') {
+                                 handleExportUnifiedReport();
+                              } else {
+                                 // Simulation for others
+                                 handleGenerate('PDF');
+                              }
+                           }}
+                           disabled={rep.id === 'profissional' ? exportingUnified : false}
+                        >
+                           {rep.id === 'profissional' && exportingUnified ? (
+                              <Activity className="w-3 h-3 mr-2 animate-spin" />
+                           ) : (
+                              <Download className="w-3 h-3 mr-2" />
+                           )}
+                           PDF
+                        </Button>
+                     )}
                   </div>
                </Card>
             )
@@ -1671,6 +1653,7 @@ const Production: React.FC = () => {
             isOpen={isReportModalOpen}
             onClose={() => setIsReportModalOpen(false)}
             title={selectedReport?.title || 'Detalhes do Relatório'}
+            className={selectedReport?.id === 'unidades' || selectedReport?.id === 'profissional' ? 'max-w-[95vw]' : 'max-w-5xl'}
          >
             <div className="mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
                <p className="text-gray-500 dark:text-gray-400">{selectedReport?.desc}</p>

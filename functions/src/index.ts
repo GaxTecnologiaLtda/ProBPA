@@ -75,3 +75,17 @@ export { testLediConnection, scheduledLediSender, resendPendingLediRecords } fro
 
 // PEC Connector Ingestion
 export { ingestPecData } from "./pecIngestion";
+
+// Dashboard Aggregation
+export { aggregateManualProduction } from "./aggregation/aggregateManualProduction";
+export { debugManualAggregation } from "./aggregation/debugManualAggregation";
+export { aggregateConnectorProduction, scheduledConnectorAggregation } from "./aggregation/aggregateConnectorProduction";
+
+// Dashboard API (Phase 3)
+export { getDashboardStats } from "./api/getDashboardStats";
+export { getGoalsProgress } from "./api/getGoalsProgress";
+export { triggerDashboardRefresh } from "./api/triggerDashboardRefresh";
+export { getDashboardSubsedeStats } from "./api/getDashboardSubsedeStats";
+export { triggerDashboardSubsedeRefresh } from "./api/triggerDashboardSubsedeRefresh";
+export { getMunicipalitiesStats } from "./api/getMunicipalitiesStats";
+export { getUnitComparativeStats } from "./api/getUnitComparativeStats";

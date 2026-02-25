@@ -17,7 +17,8 @@ import {
   Map,
   LifeBuoy,
   AlertTriangle,
-  Calendar
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EntityType } from '../types';
@@ -27,7 +28,7 @@ import { getVersionString, LATEST_CHANGES, APP_VERSION } from '../version';
 import NotificationMenu from './NotificationMenu';
 
 interface LayoutProps {
-  type: EntityType;
+  type: EntityType | 'subsede';
 }
 
 const Layout: React.FC<LayoutProps> = ({ type }) => {
@@ -37,6 +38,25 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, claims, loading: authLoading, logout } = useAuth();
+
+  const generateCompetenceOptions = () => {
+    const options = [];
+    const today = new Date();
+    for (let i = -6; i < 18; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+      const yyyy = d.getFullYear();
+      options.push(`${mm}/${yyyy}`);
+    }
+    const finalOptions = options.reverse();
+    finalOptions.unshift('Ano Atual');
+    finalOptions.unshift('Global'); // Keep both Global and Ano Atual at top if user wants it, or wait, user said "adicione a opcao Ano Atual". Let's put both.
+    return finalOptions;
+  };
+
+  const [selectedCompetence, setSelectedCompetence] = useState('Global');
+
+  const competenceOptions = generateCompetenceOptions();
 
   // Fetch entity data based on claims
   const { entity, loading: entityLoading } = useEntityData(claims?.entityId);
@@ -77,9 +97,12 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
       }
 
       // Check if user entity type matches the layout type
-      // claims.entityType should be "PUBLIC" or "PRIVATE"
-      // type prop is "public" or "private"
-      const userType = claims.entityType === 'PUBLIC' ? 'public' : 'private';
+      let userType = '';
+      if (claims.role === 'SUBSEDE') {
+        userType = 'subsede';
+      } else {
+        userType = claims.entityType === 'PUBLIC' ? 'public' : 'private';
+      }
 
       if (userType !== type) {
         setAccessDenied(true);
@@ -129,15 +152,37 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
     { icon: Settings, label: 'Configuração', path: '/privado/configuracoes' },
   ];
 
-  // Filter menu items for SUBSEDE
-  const menuItemsPrivate = claims?.role === 'SUBSEDE'
-    ? menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos')
-    : menuItemsPrivateAll;
+  // Filter menu items based on roles
+  let menuItemsPrivate = menuItemsPrivateAll;
+  if (claims?.role === 'SUBSEDE') {
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos');
+  } else if (claims?.role === 'COORDENAÇÃO' || claims?.coordenation) {
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos' && item.label !== 'Logs de Uso');
+  }
 
-  const menuItems = type === 'public' ? menuItemsPublic : menuItemsPrivate;
-  const primaryColor = type === 'public' ? 'bg-blue-600' : 'bg-emerald-600';
-  const primaryColorText = type === 'public' ? 'text-blue-600' : 'text-emerald-600';
-  const hoverColor = type === 'public' ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20' : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20';
+  const menuItemsSubsede = [
+    { icon: LayoutDashboard, label: 'Visão Geral', path: '/subsede/dashboard' },
+    { icon: Users, label: 'Corpo Clínico Local', path: '/subsede/profissionais' },
+    { icon: Activity, label: 'Produção Municipal', path: '/subsede/producao' },
+  ];
+
+  const menuItems = type === 'public' ? menuItemsPublic : type === 'subsede' ? menuItemsSubsede : menuItemsPrivate;
+  const primaryColor = type === 'public' ? 'bg-blue-600' : type === 'subsede' ? 'bg-orange-600' : 'bg-emerald-600';
+  const primaryColorText = type === 'public' ? 'text-blue-600' : type === 'subsede' ? 'text-orange-600' : 'text-emerald-600';
+  const hoverColor = type === 'public' ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20' : type === 'subsede' ? 'hover:bg-orange-50 dark:hover:bg-orange-900/20' : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20';
+
+  const [municipalityName, setMunicipalityName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (claims?.role === 'SUBSEDE' && claims?.entityId && claims?.municipalityId) {
+      import('../services/municipalitiesService').then(({ fetchMunicipalitiesByEntity }) => {
+        fetchMunicipalitiesByEntity(claims.entityId).then(muns => {
+          const mun = muns.find(m => m.id === claims.municipalityId);
+          if (mun) setMunicipalityName(mun.name);
+        }).catch(console.error);
+      });
+    }
+  }, [claims?.role, claims?.entityId, claims?.municipalityId]);
 
   if (authLoading || entityLoading) {
     return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
@@ -153,7 +198,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Acesso Negado</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Seu usuário não tem permissão para acessar o painel de
-            <span className="font-bold"> {type === 'public' ? 'Entidade Pública' : 'Entidade Privada'}</span>.
+            <span className="font-bold"> {type === 'public' ? 'Entidade Pública' : type === 'subsede' ? 'Subsede' : 'Entidade Privada'}</span>.
             Por favor, verifique suas credenciais ou contate o administrador.
           </p>
           <button
@@ -197,7 +242,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
               ProBPA
             </span>
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1 whitespace-nowrap">
-              Painel da Entidade {type === 'public' ? 'Pública' : 'Privada'}
+              Painel {type === 'public' ? 'Público' : type === 'subsede' ? 'Subsede' : 'Privado'}
             </span>
           </div>
         </div>
@@ -263,7 +308,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
             </button>
             {/* Breadcrumb simples */}
             <div className="hidden md:flex items-center text-sm text-gray-500 dark:text-gray-400">
-              <span className="capitalize">{type === 'public' ? 'Entidade Pública' : 'Entidade Privada'}</span>
+              <span className="capitalize">{type === 'public' ? 'Entidade Pública' : type === 'subsede' ? 'Painel Subsede' : 'Entidade Privada'}</span>
               <span className="mx-2">/</span>
               <span className="capitalize text-gray-900 dark:text-white font-medium">
                 {location.pathname.split('/').pop()?.replace('-', ' ') || 'Dashboard'}
@@ -272,6 +317,26 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
           </div>
 
           <div className="flex items-center gap-4">
+            {type === 'subsede' && claims?.role === 'SUBSEDE' && (
+              <div className="hidden sm:flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative">
+                <Calendar className="w-4 h-4 text-orange-500" />
+                <select
+                  value={selectedCompetence}
+                  onChange={(e) => setSelectedCompetence(e.target.value)}
+                  className="appearance-none bg-transparent text-sm font-medium text-gray-700 dark:text-gray-200 capitalize cursor-pointer focus:outline-none pr-4"
+                >
+                  {competenceOptions.map(opt => (
+                    <option key={opt} value={opt} className="text-gray-900 bg-white dark:bg-gray-800 dark:text-gray-100">
+                      {opt === 'Global' ? 'Todas as Competências' : opt}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-500">
+                  <ChevronDown className="w-3 h-3" />
+                </div>
+              </div>
+            )}
+
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
@@ -283,11 +348,12 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
 
             <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700">
               <div className="text-right hidden md:block">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                <p className="text-sm font-bold text-gray-900 dark:text-white uppercase">
                   {user?.displayName || (claims?.role === 'SUBSEDE' ? 'Coordenador Local' : 'Usuário Master/Coordenação')}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {entity?.name || (type === 'public' ? 'Gestão Municipal' : 'Gestão Institucional')}
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase">
+                  {claims?.role === 'SUBSEDE' && municipalityName ? `${municipalityName} • ` : ''}
+                  {entity?.name || (type === 'public' ? 'Gestão Municipal' : type === 'subsede' ? 'Gestão Local' : 'Gestão Institucional')}
                 </p>
               </div>
               <div className={`h-10 w-10 rounded-full ${primaryColor} text-white flex items-center justify-center font-bold shadow-md`}>
@@ -299,7 +365,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
 
         <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
           <div className="max-w-7xl mx-auto">
-            <Outlet />
+            <Outlet context={{ selectedCompetence, setSelectedCompetence }} />
           </div>
         </main>
       </div>

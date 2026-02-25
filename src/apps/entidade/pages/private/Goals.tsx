@@ -51,87 +51,26 @@ const getProdUnitId = (p: EntityProductionRecord) =>
    normalize((p as any).unitId || (p as any).unityId || (p as any).unit?.id);
 
 // Default to current year if goal has weird competence.
-const mergeGoalsWithEntityProduction = (
+const mergeGoalsWithAggregatedProgress = (
    goals: Goal[],
-   production: EntityProductionRecord[]
+   progressMap: Record<string, { total: number, byMonth: Record<string, number> }>,
+   targetYear: string
 ): Goal[] => {
    return goals.map(goal => {
-      // Determine the target YEAR for this goal.
-      // Default to current year if goal has weird competence.
-      const year = getYear(goal.competence || goal.competenceMonth || '');
-
-      const goalUnit = normalize(goal.unitId);
-      const goalCode = normalize(goal.procedureCode);
-
-      // Filter production for this Goal (Code + Unit/Prof) AND Year
-      const annualProduction = production.filter(p => {
-         const pComp = getProdCompetenceKey(p);
-
-         // 1. Period Match (Start/End Range or Year Fallback)
-         if (goal.startMonth && goal.endMonth) {
-            const startRaw = goal.startMonth.substring(0, 7);
-            const endRaw = goal.endMonth.substring(0, 7);
-            if (pComp < startRaw || pComp > endRaw) return false;
-         } else {
-            // 2. Strict Year Match (if no range defined)
-            const pYear = getYear(pComp);
-            if (pYear !== year) return false;
-         }
-         // Hierarchical Matching 
-         const pCode = normalize(p.procedureCode);
-         // Check if goal is macro (Group, SubGroup, Form)
-         // We can use length or stored type. 
-         // Logic: If goalCode < 10 chars, it is macro.
-         const isMacro = goalCode.length < 10 || ["Group", "SubGroup", "Form", "Grupo", "Subgrupo", "Forma"].includes(goal.sigtapTargetType || "");
-
-         if (isMacro) {
-            // Robust SIGTAP Matching: Check dedicated fields if available, else usage startsWith
-            let match = false;
-            if (goalCode.length === 2 && (p as any).groupCode === goalCode) match = true;
-            else if (goalCode.length === 4 && (p as any).groupCode + (p as any).subGroupCode === goalCode) match = true;
-            else if (goalCode.length === 6 && (p as any).groupCode + (p as any).subGroupCode + (p as any).formCode === goalCode) match = true;
-            else if (pCode.startsWith(goalCode)) match = true;
-
-            if (!match) return false;
-         } else {
-            if (pCode !== goalCode) return false;
-         }
-
-         // Unit/Prof Match
-         // If Municipal (Global), we might want ALL production for that code in that Municipality?
-         // Current logic relied on filtering.
-         if (goal.goalType === 'municipal') {
-            // Match Municipality (Normalized)
-            return normalize(p.municipalityId) === normalize(goal.municipalityId);
-         }
-
-         // Match Unit
-         const unitMatch = getProdUnitId(p) === goalUnit;
-         if (!unitMatch) return false;
-
-         // Match Professional (if applicable)
-         if (goal.professionalId && goal.professionalId !== 'team') {
-            return matchProfessional(goal, p);
-         }
-
-         return true;
-      });
+      // Get exact progress object from the API mapping
+      const progress = progressMap[goal.id!] || { total: 0, byMonth: {} };
 
       // Calculate Chart Data (12 months)
       const chartData = Array.from({ length: 12 }, (_, i) => {
          const month = (i + 1).toString().padStart(2, '0');
-         const key = `${year}-${month}`;
-         const value = annualProduction
-            .filter(p => getProdCompetenceKey(p) === key)
-            .reduce((acc, r) => acc + Number(r.quantity || 0), 0);
-
-         return { month: `${month}`, value, label: `${month}/${year.slice(2)}` };
+         const value = progress.byMonth[month] || 0;
+         return { month: `${month}`, value, label: `${month}/${targetYear.slice(2)}` };
       });
 
       // Annual Total
-      const totalAnnual = annualProduction.reduce((acc, r) => acc + Number(r.quantity || 0), 0);
+      const totalAnnual = progress.total || 0;
 
-      const status = calculateGoalStatus(totalAnnual, goal.annualTargetQuantity || goal.targetQuantity * 12);
+      const status = calculateGoalStatus(totalAnnual, goal.annualTargetQuantity || (goal.targetQuantity * 12));
 
       return {
          ...goal,
@@ -177,6 +116,8 @@ interface GroupedMunicipality {
    unitGoals: GroupedByUnit[];
    totalValue: number;
    totalGoals: number;
+   totalAnnualTarget: number;
+   totalMonthlyTarget: number;
 }
 
 interface GroupedUnit {
@@ -309,36 +250,13 @@ const Goals: React.FC = () => {
             // 1. Fetch Goals First
             const goalsData = await goalService.getGoalsForEntityPrivate(claims);
 
-            // 2. Determine Required Production Range
-            // We need production from the Minimum Start Year of any ACTIVE goal that touches the current vigency year.
-            const targetVigencyYear = parseInt(vigencyYear || new Date().getFullYear().toString());
-            let minYear = targetVigencyYear;
+            // 2. Fetch Progress via Cloud Function
+            const targetVigencyYear = vigencyYear || new Date().getFullYear().toString();
+            console.log(`[Goals] Loading aggregated production API for ${targetVigencyYear}`);
+            const progressMap = await goalService.getAggregatedGoalsProgress(targetVigencyYear, goalsData);
 
-            goalsData.forEach(g => {
-               // Only consider goals relevant to the selected view
-               const startYear = parseInt(getYear(g.startMonth) || '9999');
-               const endYear = parseInt(getYear(g.endMonth) || '0');
-
-               // Overlap Check: If goal overlaps with selected year
-               if (startYear <= targetVigencyYear && endYear >= targetVigencyYear) {
-                  if (startYear < minYear) {
-                     minYear = startYear;
-                  }
-               }
-            });
-
-            console.log(`[Goals] Loading production from ${minYear} to ${targetVigencyYear}`);
-
-            // 3. Fetch Production for the Calculated Range
-            const productionData = await goalService.getEntityProductionStatsRange(
-               claims.entityId,
-               minYear.toString(),
-               targetVigencyYear.toString(),
-               claims.municipalityId // Pass municipality context if exists (SUBSEDE)
-            );
-
-            // 4. Merge
-            const merged = mergeGoalsWithEntityProduction(goalsData, productionData);
+            // 3. Merge
+            const merged = mergeGoalsWithAggregatedProgress(goalsData, progressMap, targetVigencyYear);
             setGoals(merged);
          } catch (error) {
             console.error("Error loading goals/production:", error);
@@ -493,6 +411,8 @@ const Goals: React.FC = () => {
       unitGoals: GroupedUnit[];
       totalValue: number;
       totalGoals: number;
+      totalAnnualTarget: number;
+      totalMonthlyTarget: number;
    }
 
    // Agrupa quotas por competência (apenas para seleção se necessário) e estrutura principal por Município
@@ -574,13 +494,22 @@ const Goals: React.FC = () => {
          const totalValueGlobal = group.global.reduce((acc, g) => acc + (g.totalValue || 0), 0);
          const totalValueUnits = unitGoals.reduce((acc, u) => acc + u.totalValue, 0);
 
+         const allGoals = [...group.global, ...unitGoals.flatMap(u => u.goals)];
+         const sumAnnualTargets = allGoals.reduce((acc, g) => acc + (g.annualTargetQuantity || (g.targetQuantity * 12) || 0), 0);
+         const sumMonthlyTargets = allGoals.reduce((acc, g) => {
+            const annual = g.annualTargetQuantity || (g.targetQuantity * 12) || 0;
+            return acc + (annual / 12);
+         }, 0);
+
          return {
             municipalityId: munId,
             municipalityName: munName,
             globalGoals: group.global,
             unitGoals: unitGoals,
             totalValue: totalValueGlobal + totalValueUnits,
-            totalGoals: group.global.length + unitGoals.reduce((acc, u) => acc + u.goals.length, 0)
+            totalGoals: allGoals.length,
+            totalAnnualTarget: sumAnnualTargets,
+            totalMonthlyTarget: sumMonthlyTargets
          };
       });
 
@@ -659,6 +588,7 @@ const Goals: React.FC = () => {
    // --- Bulk Edit Logic ---
    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
    const [bulkEditList, setBulkEditList] = useState<Goal[]>([]);
+   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[]>([]);
    const [currentBulkMunicipalityId, setCurrentBulkMunicipalityId] = useState<string>(''); // For adding new items
 
    const handleOpenBulkEdit = (group: GroupedMunicipality) => {
@@ -666,6 +596,7 @@ const Goals: React.FC = () => {
       const goalsToEdit = [...group.globalGoals, ...group.unitGoals.flatMap(u => u.goals)];
       setBulkEditList(JSON.parse(JSON.stringify(goalsToEdit))); // Deep copy
       setCurrentBulkMunicipalityId(group.municipalityId);
+      setBulkDeleteIds([]);
       setIsBulkEditModalOpen(true);
    };
 
@@ -684,14 +615,25 @@ const Goals: React.FC = () => {
    };
 
    const handleBulkDelete = (id: string) => {
+      if (!id.startsWith('temp_')) {
+         setBulkDeleteIds(prev => [...prev, id]);
+      }
       setBulkEditList(prev => prev.filter(g => g.id !== id));
    };
 
    const handleBulkSave = async () => {
       try {
          setIsLoading(true);
+
+         // First delete removed items
+         if (bulkDeleteIds.length > 0) {
+            const deletePromises = bulkDeleteIds.map(id => goalService.deleteGoal(id, claims));
+            await Promise.all(deletePromises);
+         }
+
          const promises = bulkEditList.map(goal => {
             const goalToSave = {
+
                ...goal,
                totalValue: (goal.annualTargetQuantity || goal.targetQuantity * 12) * (goal.unitValue || 0)
             };
@@ -705,11 +647,9 @@ const Goals: React.FC = () => {
 
          // Refresh
          const currentYear = new Date().getFullYear().toString();
-         const [goalsData, productionData] = await Promise.all([
-            goalService.getGoalsForEntityPrivate(claims),
-            goalService.getEntityProductionStats(claims.entityId, currentYear)
-         ]);
-         setGoals(mergeGoalsWithEntityProduction(goalsData, productionData));
+         const goalsData = await goalService.getGoalsForEntityPrivate(claims);
+         const progressMap = await goalService.getAggregatedGoalsProgress(currentYear, goalsData);
+         setGoals(mergeGoalsWithAggregatedProgress(goalsData, progressMap, currentYear));
 
          setIsBulkEditModalOpen(false);
          setBulkEditList([]);
@@ -895,11 +835,9 @@ const Goals: React.FC = () => {
 
          // Refresh goals (Optimized)
          const currentYear = new Date().getFullYear().toString();
-         const [goalsData, productionData] = await Promise.all([
-            goalService.getGoalsForEntityPrivate(claims),
-            goalService.getEntityProductionStats(claims.entityId, currentYear)
-         ]);
-         setGoals(mergeGoalsWithEntityProduction(goalsData, productionData));
+         const goalsData = await goalService.getGoalsForEntityPrivate(claims);
+         const progressMap = await goalService.getAggregatedGoalsProgress(currentYear, goalsData);
+         setGoals(mergeGoalsWithAggregatedProgress(goalsData, progressMap, currentYear));
 
          // Expand competence (if used)
          // if (formData.competence) { ... } // Removed
@@ -1483,6 +1421,16 @@ const Goals: React.FC = () => {
                               <p className="text-sm text-gray-500 dark:text-gray-400">
                                  {munGroup.totalGoals} metas pactuadas • {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(munGroup.totalValue)}
                               </p>
+                              {(munGroup.totalAnnualTarget > 0) && (
+                                 <div className="flex gap-2 mt-2">
+                                    <span className="text-[11px] font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded border border-indigo-100 dark:border-indigo-800">
+                                       Total Pactuado: <strong>{new Intl.NumberFormat('pt-BR').format(munGroup.totalAnnualTarget)}</strong>
+                                    </span>
+                                    <span className="text-[11px] font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-800">
+                                       Média Mensal: <strong>{new Intl.NumberFormat('pt-BR').format(Math.round(munGroup.totalMonthlyTarget))}</strong>
+                                    </span>
+                                 </div>
+                              )}
                            </div>
                         </div>
 

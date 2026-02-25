@@ -61,9 +61,9 @@ service cloud.firestore {
         // Master: Full Access
         allow read, write: if isMasterOf(entityId);
         
-        // Coordenação: Read/Write (if delegated? Requirement says "Apenas MASTER cria", so Read Only for others?)
-        // Requirement: "Apenas MASTER cria Acoes e Programas"
-        allow read: if isCoordinationOf(entityId);
+        // Coordenação: Read/Write
+        // Requirement: "Preservar funcionalidade total em Ações e Programas"
+        allow read, write: if isCoordinationOf(entityId);
         
         // Subsede: Read Only (Everything or just linked? Usually all entity actions are visible if global, 
         // but if we want to restrict to municipalityId... User didn't specify strict read restriction, just create restriction. 
@@ -163,8 +163,9 @@ service cloud.firestore {
         allow read, write: if isMasterOf(resource.data.entityId) 
                            || isMasterOf(request.resource.data.entityId);
 
-        // Coordenação: Read
-        allow read: if isCoordinationOf(resource.data.entityId);
+        // Coordenação: Read, Write
+        allow read, write: if isCoordinationOf(resource.data.entityId)
+                           || isCoordinationOf(request.resource.data.entityId);
         
         // Subsede: Read restricted to this Municipality
         allow read: if isSubsedeOf(resource.data.entityId) && municipalityId == request.auth.token.municipalityId;
@@ -178,6 +179,7 @@ service cloud.firestore {
              allow read, write: if isMasterOf(request.resource.data.entityId) 
                                 || isMasterOf(resource.data.entityId)
                                 || isCoordinationOf(resource.data.entityId)
+                                || isCoordinationOf(request.resource.data.entityId)
                                 || (isSubsedeOf(resource.data.entityId) && municipalityId == request.auth.token.municipalityId)
                                 || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == (resource.data.entityId || request.resource.data.entityId));
         }
@@ -208,6 +210,31 @@ service cloud.firestore {
         
         // PUBLIC REGISTRATION: Allow read
         allow read: if true;
+
+        // 🔐 Resumo Produção (Agregações Cloud Functions / Client Read)
+        match /{path=**}/resumo_producao/{resumoId} {
+             allow read: if isAdmin()
+                         || isMasterOf(entityId)
+                         || isCoordinationOf(entityId)
+                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
+        }
+
+        // 🔐 Usuarios Subsede (Subcollection)
+        match /users_subsede/{uid} {
+             allow read: if isAdmin() 
+                         || isMasterOf(entityId)
+                         || isCoordinationOf(entityId)
+                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
+            // Write is restricted to Cloud Functions (Admin SDK)
+        }
+
+        // 🔐 Usuarios Coordenacao (Subcollection)
+        match /users_coordenacao/{uid} {
+             allow read: if isAdmin() 
+                         || isMasterOf(entityId)
+                         || isCoordinationOf(entityId);
+            // Write is restricted to Cloud Functions (Admin SDK)
+        }
 
         // 🔐 EXTRACTIONS (Dados do Conector - Nested Structure)
         // Allow reading the old flat structure
@@ -282,6 +309,16 @@ service cloud.firestore {
                                || isCoordinationOf(entityId)
                                || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
                                || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+        }
+
+        // 🔐 Units (Nova Estrutura Hierárquica)
+        match /units/{unitId} {
+            allow read, write: if isAdmin()
+                               || isMasterOf(entityId);
+            allow read: if isCoordinationOf(entityId)
+                        || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
+                        || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+            allow read: if true; // PUBLIC REGISTRATION
         }
 
         // 🔐 Goals (Nova Estrutura Hierárquica)
@@ -771,6 +808,18 @@ service cloud.firestore {
       allow read: if isAdmin() || checkMunicipalityAccess();
       // Write is restricted to Cloud Functions (Admin SDK) usually, or authenticated ingestion if via Client SDK (but we use REST API)
       // So no write rules needed for client.
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 19. Coleção SYSTEM_LOGS (Cloud Functions & System Audit)
+    ///////////////////////////////////////////
+
+    match /system_logs/{logId} {
+      // Only Admins can read system logs
+      allow read: if isAdmin();
+      
+      // Writes are strictly done via Cloud Functions (Admin SDK) bypassing these rules.
+      allow write: if false;
     }
 
     match /{path=**} {

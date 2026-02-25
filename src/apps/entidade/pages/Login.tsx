@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Building2, Globe, Lock, ArrowRight, Activity, Eye, EyeOff, FileText, X } from 'lucide-react';
+import { Building2, Globe, Lock, ArrowRight, Activity, Eye, EyeOff, FileText, X, MapPin } from 'lucide-react';
 import { auth } from '../firebase';
 import { getVersionString } from '../version';
 
 const Login: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'public' | 'private'>('public');
+  const [activeTab, setActiveTab] = useState<'public' | 'private' | 'subsede'>('public');
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -62,6 +62,32 @@ const Login: React.FC = () => {
       if (!token.claims.role || (token.claims.role !== "MASTER" && token.claims.role !== "COORDENAÇÃO" && token.claims.role !== "SUBSEDE")) {
         setError("Acesso restrito. Usuário não possui permissão MASTER, COORDENAÇÃO ou SUBSEDE.");
         await auth.signOut();
+        return;
+      }
+
+      // Check SUBSEDE role first
+      if (token.claims.role === "SUBSEDE") {
+        if (activeTab !== 'subsede') {
+          setError("Acesso negado. Seu usuário possui permissão de Subsede. Por favor, utilize a aba de Acesso Subsede.");
+          await auth.signOut();
+          return;
+        }
+
+        // Log Login
+        try {
+          // @ts-ignore
+          const { logAction } = await import('../services/logsService');
+          await logAction({
+            action: 'LOGIN',
+            target: 'USER',
+            description: 'Usuário realizou login no painel Subsede',
+            user: { uid: user.uid, email: user.email || '', name: user.displayName || user.email || '' },
+            entityId: token.claims.entityId as string,
+            municipalityId: token.claims.municipalityId as string
+          });
+        } catch (e) { console.error(e); }
+
+        navigate("/subsede/dashboard");
         return;
       }
 
@@ -121,14 +147,14 @@ const Login: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 relative overflow-hidden">
       {/* Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-        <div className={`absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob ${activeTab === 'public' ? 'bg-blue-300' : 'bg-emerald-300'}`}></div>
-        <div className={`absolute top-40 -left-20 w-[400px] h-[400px] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 ${activeTab === 'public' ? 'bg-indigo-300' : 'bg-teal-300'}`}></div>
+        <div className={`absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob ${activeTab === 'public' ? 'bg-blue-300' : activeTab === 'private' ? 'bg-emerald-300' : 'bg-orange-300'}`}></div>
+        <div className={`absolute top-40 -left-20 w-[400px] h-[400px] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 ${activeTab === 'public' ? 'bg-indigo-300' : activeTab === 'private' ? 'bg-teal-300' : 'bg-amber-300'}`}></div>
         <div className="absolute -bottom-20 left-1/2 w-[400px] h-[400px] rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000 bg-purple-300"></div>
       </div>
 
       <div className="w-full max-w-md p-4 z-10">
         <div className="text-center mb-8">
-          <div className={`inline-flex p-3 rounded-2xl mb-4 shadow-lg ${activeTab === 'public' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
+          <div className={`inline-flex p-3 rounded-2xl mb-4 shadow-lg ${activeTab === 'public' ? 'bg-blue-600' : activeTab === 'private' ? 'bg-emerald-600' : 'bg-orange-600'}`}>
             <Activity className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">ProBPA</h1>
@@ -141,39 +167,62 @@ const Login: React.FC = () => {
           <div className="flex border-b dark:border-gray-700">
             <button
               onClick={() => setActiveTab('public')}
-              className={`flex-1 py-4 text-sm font-medium text-center transition-colors ${activeTab === 'public'
+              className={`flex-1 py-4 px-2 text-xs sm:text-sm font-medium text-center transition-colors ${activeTab === 'public'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/20'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
                 }`}
             >
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                 <Building2 className="w-4 h-4" />
-                Entidade Pública
+                <span className="hidden sm:inline">Entidade Pública</span>
+                <span className="sm:hidden">Pública</span>
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('private')}
-              className={`flex-1 py-4 text-sm font-medium text-center transition-colors ${activeTab === 'private'
+              onClick={() => {
+                if (activeTab === 'public') setActiveTab('private');
+              }}
+              className={`flex-1 py-4 px-2 text-xs sm:text-sm font-medium text-center transition-colors ${(activeTab === 'private' || activeTab === 'subsede')
                 ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50 dark:bg-emerald-900/20'
                 : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
                 }`}
             >
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                 <Globe className="w-4 h-4" />
-                Entidade Privada
+                <span className="hidden sm:inline">Entidade Privada</span>
+                <span className="sm:hidden">Privada</span>
               </div>
             </button>
           </div>
 
           <div className="p-8">
             <div className="mb-6">
+              {(activeTab === 'private' || activeTab === 'subsede') && (
+                <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg mb-6">
+                  <button
+                    onClick={() => setActiveTab('private')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'private' ? 'bg-white dark:bg-gray-600 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                  >
+                    Login Institucional
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('subsede')}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'subsede' ? 'bg-white dark:bg-gray-600 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+                  >
+                    Login Subsede
+                  </button>
+                </div>
+              )}
+
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                {activeTab === 'public' ? 'Acesso Municipal' : 'Acesso Institucional'}
+                {activeTab === 'public' ? 'Acesso Municipal' : activeTab === 'private' ? 'Acesso Institucional' : 'Acesso Subsede'}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {activeTab === 'public'
                   ? 'Entre com suas credenciais da prefeitura.'
-                  : 'Gerencie múltiplos municípios com sua conta.'}
+                  : activeTab === 'private'
+                    ? 'Gerencie múltiplos municípios com sua conta.'
+                    : 'Gestão visual do seu município na Entidade Privada.'}
               </p>
             </div>
 
@@ -226,7 +275,9 @@ const Login: React.FC = () => {
                 disabled={isLoading}
                 className={`w-full py-2.5 rounded-lg font-medium text-white shadow-lg transform transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 ${activeTab === 'public'
                   ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-                  : 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500'
+                  : activeTab === 'private'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500'
+                    : 'bg-orange-600 hover:bg-orange-700 focus:ring-orange-500'
                   }`}
               >
                 {isLoading ? (

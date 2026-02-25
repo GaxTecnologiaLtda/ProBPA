@@ -129,6 +129,7 @@ export interface Professional {
   phone: string;
 
   accessGranted: boolean;
+  isChecked?: boolean; // Cadastro verificado (MASTER)
   createdAt?: any; // Timestamp
   updatedAt?: any; // Timestamp
 }

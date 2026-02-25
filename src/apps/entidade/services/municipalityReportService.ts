@@ -22,13 +22,46 @@ export interface BpaCReportRow {
 const normalize = (str: string) => String(str || '').trim().toLowerCase();
 const onlyNumbers = (text: string) => String(text).replace(/\D/g, '');
 
+export const SIGTAP_DICTIONARY: Record<string, { code: string, name: string }> = {
+    'ABPG028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
+    '028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
+    'ABPG027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
+    '027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
+    'ABPG033': { code: '0301100039', name: 'AFERIÇÃO DE PRESSÃO ARTERIAL' },
+    '033': { code: '0301100039', name: 'AFERIÇÃO DE PRESSÃO ARTERIAL' },
+    'ABPG038': { code: '0101040075', name: 'MEDIÇÃO DE ALTURA' },
+    '038': { code: '0101040075', name: 'MEDIÇÃO DE ALTURA' },
+    'ABPG039': { code: '0101040083', name: 'MEDIÇÃO DE PESO' },
+    '039': { code: '0101040083', name: 'MEDIÇÃO DE PESO' },
+    'ABPO015': { code: '0101020104', name: 'ORIENTAÇÃO DE HIGIENE BUCAL' },
+    '015': { code: '0101020104', name: 'ORIENTAÇÃO DE HIGIENE BUCAL' },
+    'ABPO005': { code: '0101020074', name: 'APLICAÇÃO TÓPICA DE FLÚOR (INDIVIDUAL POR SESSÃO)' },
+    '005': { code: '0101020074', name: 'APLICAÇÃO TÓPICA DE FLÚOR (INDIVIDUAL POR SESSÃO)' },
+    'ABPO019': { code: '0307030059', name: 'RASPAGEM ALISAMENTO E POLIMENTO SUPRAGENGIVAIS (POR SEXTANTE)' },
+    '019': { code: '0307030059', name: 'RASPAGEM ALISAMENTO E POLIMENTO SUPRAGENGIVAIS (POR SEXTANTE)' },
+    'ABPO016': { code: '0307030040', name: 'PROFILAXIA / REMOÇÃO DA PLACA BACTERIANA' },
+    '016': { code: '0307030040', name: 'PROFILAXIA / REMOÇÃO DA PLACA BACTERIANA' },
+    'ODONTO': { code: '0301010048', name: 'CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)' },
+};
+
 export const normalizeVaccine = (name: string, type: string) => {
-    const nameUpper = String(name || '').toUpperCase();
-    const isVaccine = type === 'VACCINATION' || nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA');
+    const rawNameUpper = String(name || '').toUpperCase();
+    const nameUpper = rawNameUpper.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove accents
+    const isVaccine = type === 'VACCINATION' ||
+        nameUpper.includes('VACINA') ||
+        nameUpper.includes('IMUNIZA') ||
+        nameUpper.includes('TRIPLICE') ||
+        nameUpper.includes('BCG') ||
+        nameUpper.includes('HEPATITE') ||
+        nameUpper.includes('DIFTERIA') ||
+        nameUpper.includes('TETANO') ||
+        nameUpper.includes('ROTAVIRUS') ||
+        nameUpper.includes('POLIOMIELITE') ||
+        nameUpper.includes('MENINGO');
 
     if (isVaccine) {
         // 1. VIA ORAL (03.01.10.021-7)
-        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA')) {
+        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA') || nameUpper.includes('POLIOMIELITE')) {
             return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
         }
 
@@ -48,8 +81,6 @@ export const normalizeVaccine = (name: string, type: string) => {
         }
 
         // 4. VIA INTRAMUSCULAR (03.01.10.020-9) - Broadest Category
-        // Most adult vaccines (Covid, Flu, Hep, DTP, Penta, etc.) are IM.
-        // Also catching 'IM' explicitly.
         if (nameUpper.includes('INTRAMUSCULAR') || nameUpper.includes('IM') ||
             nameUpper.includes('HEPATITE') ||
             nameUpper.includes('PENTA') || nameUpper.includes('DTP') || nameUpper.includes('HIB') ||
@@ -293,68 +324,66 @@ const drawProfessionalPage = async (
     }
 };
 
-const resolveSigtapCode = (rec: any): { code: string, name: string } => {
-    // Robust check for code/name location
+export const resolveSigtapCode = (rec: any): { code: string, name: string } | null => {
     const proc = rec.procedure || {};
-    let code = proc.code ? String(proc.code).replace(/\D/g, '') : (rec.procedureCode ? String(rec.procedureCode).replace(/\D/g, '') : (rec.code ? String(rec.code).replace(/\D/g, '') : ''));
+    let rawCode = proc.code ? String(proc.code) : (rec.procedureCode ? String(rec.procedureCode) : (rec.code ? String(rec.code) : ''));
+    let code = rawCode.replace(/\D/g, ''); // Extract only digits
+    if (!code && rawCode) code = rawCode.toUpperCase(); // Fallback if it's strictly alphabetical like ODONTO
+
     let name = proc.name || rec.procedureName || rec.name || 'Procedimento Sem Nome';
     const type = proc.type || rec.type || '';
     const profCbo = rec.professional?.cbo || rec.cbo || '';
 
-    // If we already have a valid SIGTAP code (10 digits starting with 0), keep it.
-    // BUT: If code is small (e.g. "25", "46") it's likely an internal ID -> FORCE check.
-    const isSmallCode = code.length <= 5;
     const nameUpper = name.toUpperCase();
 
-    // Force Vaccine Check for small codes if name looks like vaccine
+    // REGRA DE IGNORAR
+    if (code === 'CONSULTA' && nameUpper.includes('ATENDIMENTO INDIVIDUAL')) {
+        return null;
+    }
+
+    // 1. SUBSTITUIÇÃO DIRETA PELO DICIONÁRIO E-SUS -> SIGTAP
+    if (SIGTAP_DICTIONARY[code]) {
+        return SIGTAP_DICTIONARY[code];
+    }
+
+    const isSmallCode = code.length <= 5;
+
+    // 2. NORMALIZAÇÃO DE VACINAS COM CÓDIGOS PEQUENOS
     if (isSmallCode && (nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA'))) {
         const vacNorm = normalizeVaccine(name, type);
         if (vacNorm) return vacNorm;
     }
 
-    // Allow 2 digits (Vaccine) or other lengths if they seem valid, but if it's "CONSULTA" or "ODONTO", we map.
-    // Strict Normalization: Check for forbidden codes even if valid-looking
-    // if (code.length === 10 && code.startsWith('0')) return { code, name };
-
-    // --- MAPPING LOGIC ---
-
-    // 1. VACCINATION - Use shared helper
-    // RE-ENABLED: User requires consistency and correct codes for all records in the report.
     const vaccineNormalization = normalizeVaccine(name, type);
-    if (vaccineNormalization) {
-        return vaccineNormalization;
-    }
+    if (vaccineNormalization) return vaccineNormalization;
 
-    // 2. CONSULTATION / ATTENDANCE / ODONTOLOGY
+    // 3. NORMALIZAÇÃO DE ATENDIMENTOS/CONSULTAS
     const isConsultation =
         type === 'CONSULTATION' ||
         code === 'CONSULTA' ||
         type === 'ODONTOLOGY' ||
         type === 'ODONTO_PROCEDURE' ||
-        ['0301010072', '0301010048', '0301010021'].includes(code); // Explicitly target "bad" codes
+        nameUpper.includes('ATENDIMENTO ODONTOLOGICO') ||
+        ['0301010072', '0301010048', '0301010021'].includes(code);
 
     if (isConsultation) {
-        // RULE 1: Medical CBO (Doctors) -> Must be 0301010064 (Primary Care)
+        // Médicos
         if (profCbo.startsWith('225')) {
             return { code: '0301010064', name: 'CONSULTA MÉDICA EM ATENÇÃO PRIMÁRIA' };
         }
 
-        // RULE 2: Non-Medical Higher Level (Nurse, Physio, Odonto, etc.) -> Map to 0301010030
-
-        // Exception: If it's a specific procedure with a VALID code that is NOT one of the "bad" ones, keep it.
+        // Outros Profissionais de Nível Superior (Odonto, Enfermeiros, etc)
         const blacklist = ['0301010072', '0301010048', '0301010021'];
         if (code.length === 10 && code.startsWith('0') && !blacklist.includes(code)) {
             return { code, name };
         }
-
-        // Fallback or Blacklisted -> Map to 0301010030
         return { code: '0301010030', name: 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)' };
     }
 
-
-    // 3. Fallback check for other valid codes not caught above
+    // 4. PRESERVA CÓDIGOS SIGTAP VÁLIDOS (10 DÍGITOS COMEÇANDO COM 0)
     if (code.length === 10 && code.startsWith('0')) return { code, name };
 
+    // 5. CAI AQUI SE FUGIR DE TUDO E NÃO TIVER NO DICIONÁRIO
     return { code: code || 'S/N', name };
 };
 
