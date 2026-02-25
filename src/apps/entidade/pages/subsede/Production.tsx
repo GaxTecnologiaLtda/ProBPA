@@ -12,6 +12,11 @@ import {
 } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
 import { useDashboardSubsedeData } from './useDashboardSubsedeData';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { susReportService } from '../../services/susReportService';
+import { municipalityReportService } from '../../services/municipalityReportService';
+import { Professional, Municipality, Unit } from '../../types';
 
 // Reusing same mock/structural constants for charts if needed
 const COLORS = ['#ea580c', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
@@ -41,6 +46,177 @@ const ProductionSubsede: React.FC = () => {
         setSelectedReport(report);
         setIsReportModalOpen(true);
     };
+
+    // --- State: Relatório Profissional ---
+    const [filterName, setFilterName] = useState('');
+    const [filterUnit, setFilterUnit] = useState('');
+    const [inputStartDate, setInputStartDate] = useState('');
+    const [inputEndDate, setInputEndDate] = useState('');
+    const [appliedStartDate, setAppliedStartDate] = useState('');
+    const [appliedEndDate, setAppliedEndDate] = useState('');
+    const [exportingProfId, setExportingProfId] = useState<string | null>(null);
+
+    const normalize = (str: string) => String(str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    // Clear filters when modal closes
+    useEffect(() => {
+        if (!isReportModalOpen) {
+            setFilterName('');
+            setFilterUnit('');
+            setInputStartDate('');
+            setInputEndDate('');
+            setAppliedStartDate('');
+            setAppliedEndDate('');
+        }
+    }, [isReportModalOpen]);
+
+    // Unique Units based on current user's municipality
+    const uniqueUnits = React.useMemo(() => {
+        return dashboardUnits?.data ? dashboardUnits.data.map(u => u.name).sort() : [];
+    }, [dashboardUnits]);
+
+    // Calculate Production Stats
+    const [productionStats, setProductionStats] = useState<Record<string, number>>({});
+    useEffect(() => {
+        if (!production.rawRecords || production.rawRecords.length === 0) {
+            setProductionStats({});
+            return;
+        }
+        let filtered = production.rawRecords;
+        if (appliedStartDate && appliedEndDate) {
+            filtered = production.rawRecords.filter((r: any) => {
+                const rRaw = r.rawDate;
+                if (!rRaw) return false;
+                return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
+            });
+        }
+        const stats: Record<string, number> = {};
+        filtered.forEach((p: any) => {
+            const pId = p.professionalId;
+            if (pId) {
+                stats[pId] = (stats[pId] || 0) + (Number(p.quantity) || 0);
+            }
+        });
+        setProductionStats(stats);
+    }, [production.rawRecords, appliedStartDate, appliedEndDate]);
+
+    // Filtered Professionals List
+    const filteredProfessionals = React.useMemo(() => {
+        const profsSource = dashboardProfessionals?.data || [];
+        return profsSource.filter((prof: Professional) => {
+            const matchesName = normalize(prof.name).includes(normalize(filterName));
+            const matchesUnit = filterUnit
+                ? prof.assignments?.some(a => normalize(a.unitName || prof.unitName) === normalize(filterUnit))
+                : true;
+            const matchesProduction = (appliedStartDate && appliedEndDate)
+                ? (productionStats[prof.id] || 0) > 0
+                : true;
+            return matchesName && matchesUnit && matchesProduction;
+        });
+    }, [dashboardProfessionals, filterName, filterUnit, appliedStartDate, appliedEndDate, productionStats]);
+
+    // Handle Export Professional
+    const handleExportProfessional = async (prof: Professional, layout: 'grouped' | 'sus' = 'grouped') => {
+        if (!claims?.entityId) return;
+        setExportingProfId(prof.id);
+
+        try {
+            let entityName = claims.entityName || 'Entidade';
+            let entityLogoUrl: string | undefined = undefined;
+            let entityLogoBase64: string | undefined = undefined;
+            let entityData: any = {};
+
+            const entDoc = await getDoc(doc(db, 'entities', claims.entityId));
+            if (entDoc.exists()) {
+                const data = entDoc.data();
+                entityData = data;
+                entityName = data.name || data.fantasyName || entityName;
+                entityLogoUrl = data.logoUrl;
+                entityLogoBase64 = data.logoBase64;
+            }
+
+            let profRecords = production.rawRecords.filter((r: any) => r.professionalId === prof.id);
+            if (appliedStartDate && appliedEndDate) {
+                profRecords = profRecords.filter((r: any) => {
+                    const rRaw = r.rawDate;
+                    if (!rRaw) return false;
+                    return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
+                });
+            }
+
+            if (profRecords.length === 0) {
+                alert('Nenhuma produção encontrada para este profissional nesta competência/período.');
+                setExportingProfId(null);
+                return;
+            }
+
+            const normalizedRecords = profRecords.map((r: any) => ({
+                ...r,
+                patientName: r.patient?.name || r.patientName || 'NÃO IDENTIFICADO',
+                patientCns: r.patient?.cns || r.patientCns || '',
+                patientCpf: r.patient?.cpf || r.patientCpf || '',
+                patientBirthDate: r.patient?.birthDate || r.patientBirthDate || '',
+                procedureCode: r.procedure?.code || r.procedureCode || '',
+                procedureName: r.procedure?.name || r.procedureName || '',
+                professionalName: r.professional?.name || r.professionalName || prof.name,
+                professionalCns: r.professional?.cns || r.professionalCns || prof.cns,
+                attendanceDate: r.productionDate || r.attendanceDate || '',
+                cbo: r.professional?.cbo || r.cbo || prof.cbo || ''
+            }));
+
+            if (layout === 'sus') {
+                await susReportService.generateSusProductionPdf(normalizedRecords, {
+                    competence: selectedCompetence,
+                    municipalityName: prof.assignments?.[0]?.municipalityName || claims.municipalityName || 'Município',
+                    entityName: entityName,
+                    logoUrl: entityLogoUrl,
+                    logoBase64: entityLogoBase64,
+                    professional: {
+                        name: prof.name,
+                        cns: prof.cns || '',
+                        role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                        cbo: prof.assignments?.[0]?.cbo || prof.cbo || '',
+                        unit: prof.assignments?.[0]?.unitName || prof.unitName || '',
+                        unitCnes: (() => {
+                            const uId = prof.assignments?.[0]?.unitId || prof.unitId;
+                            if (!uId) return '';
+                            const unit = dashboardUnits?.data?.find(u => u.id === uId || u.cnes === uId);
+                            return unit?.cnes || uId;
+                        })()
+                    },
+                    signatureUrl: prof.signatureUrl,
+                    signatureBase64: prof.signatureBase64,
+                    entityAddress: entityData.address,
+                    entityPhone: entityData.phone,
+                    entityCnpj: entityData.cnpj,
+                    entityCity: entityData.location || claims.municipalityName,
+                    entityResponsible: entityData.responsible
+                });
+            } else {
+                await municipalityReportService.generateProfessionalProductionPdf(normalizedRecords, {
+                    competence: selectedCompetence,
+                    municipalityName: prof.assignments?.[0]?.municipalityName || claims.municipalityName || 'Município',
+                    entityName: entityName,
+                    logoUrl: entityLogoUrl,
+                    logoBase64: entityLogoBase64,
+                    signatureUrl: prof.signatureUrl,
+                    signatureBase64: prof.signatureBase64,
+                    professional: {
+                        name: prof.name,
+                        cns: prof.cns || '',
+                        role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                        unit: prof.assignments?.[0]?.unitName || prof.unitName || ''
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Error exporting professional report:", error);
+            alert("Ocorreu um erro ao gerar o relatório.");
+        } finally {
+            setExportingProfId(null);
+        }
+    };
+
 
     // --- Renderers ---
     const renderDashboard = () => (
@@ -245,9 +421,193 @@ const ProductionSubsede: React.FC = () => {
         </div>
     );
 
+    const [exportDropdownOpen, setExportDropdownOpen] = useState<string | null>(null);
+
     const renderReportModalContent = () => {
         if (!selectedReport) return null;
-        // For now, Subsede reports will share similar structural mock to show they're read-only views
+
+        if (selectedReport.id === 'profissional') {
+            return (
+                <div className="space-y-6">
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                        <div className="flex flex-col md:flex-row gap-3">
+                            <div className="md:w-1/3">
+                                <label className="text-xs text-gray-500 mb-1 block">Unidade do Município</label>
+                                <select
+                                    value={filterUnit}
+                                    onChange={(e) => setFilterUnit(e.target.value)}
+                                    className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                >
+                                    <option value="">Todas as Unidades</option>
+                                    {uniqueUnits.map(u => (
+                                        <option key={u} value={u}>{u}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex-1">
+                                <label className="text-xs text-gray-500 mb-1 block">Nome do Profissional</label>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Filtrar por nome ou CNS..."
+                                        value={filterName}
+                                        onChange={(e) => setFilterName(e.target.value)}
+                                        className="pl-9 w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-orange-500"
+                                    />
+                                    {filterName && (
+                                        <button onClick={() => setFilterName('')} className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Date Filter */}
+                        <div className="flex flex-col md:flex-row gap-3 items-end">
+                            <div className="md:w-1/3">
+                                <label className="text-xs text-gray-500 mb-1 block">Data Inicial</label>
+                                <input
+                                    type="date"
+                                    value={inputStartDate}
+                                    onChange={(e) => setInputStartDate(e.target.value)}
+                                    className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+                            <div className="md:w-1/3">
+                                <label className="text-xs text-gray-500 mb-1 block">Data Final</label>
+                                <input
+                                    type="date"
+                                    value={inputEndDate}
+                                    onChange={(e) => setInputEndDate(e.target.value)}
+                                    className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+                            <div className="flex-1 flex gap-2">
+                                <button
+                                    onClick={() => {
+                                        setAppliedStartDate(inputStartDate);
+                                        setAppliedEndDate(inputEndDate);
+                                    }}
+                                    disabled={!inputStartDate || !inputEndDate}
+                                    className="flex-1 py-2 px-4 bg-orange-400 hover:bg-orange-500 text-white text-sm font-medium rounded disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Filter className="w-4 h-4" /> Aplicar Filtro
+                                </button>
+                                {(appliedStartDate || appliedEndDate) && (
+                                    <button
+                                        onClick={() => {
+                                            setInputStartDate('');
+                                            setInputEndDate('');
+                                            setAppliedStartDate('');
+                                            setAppliedEndDate('');
+                                        }}
+                                        className="py-2 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded transition-colors"
+                                        title="Limpar Datas"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm flex flex-col min-h-[400px]">
+                        <div className="overflow-auto flex-1 h-[50vh]">
+                            <Table>
+                                <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 w-full table-fixed">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/3 min-w-[200px] shadow-[0_1px_0_0_#e5e7eb]">Profissional</th>
+                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-32 shadow-[0_1px_0_0_#e5e7eb]">CNS</th>
+                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-24 shadow-[0_1px_0_0_#e5e7eb]">Qtd</th>
+                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-40 shadow-[0_1px_0_0_#e5e7eb]">Exportar PDF</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700 w-full table-fixed">
+                                    {filteredProfessionals.length > 0 ? (
+                                        filteredProfessionals.map((prof: Professional) => {
+                                            const qty = productionStats[prof.id] || 0;
+                                            return (
+                                                <tr key={prof.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                                    <td className="px-4 py-4 w-1/3 min-w-[200px]">
+                                                        <div className="flex flex-col truncate">
+                                                            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{prof.name}</span>
+                                                            <span className="text-xs text-gray-500 truncate" title={prof.assignments?.[0]?.unitName || prof.unitName}>
+                                                                {prof.assignments?.[0]?.unitName || prof.unitName || 'Sem Unidade Principal'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center w-32">
+                                                        <span className="text-sm font-mono text-gray-600 dark:text-gray-400">{prof.cns || '—'}</span>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-center w-24">
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="text-lg font-bold text-gray-900 dark:text-white">{qty}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-right align-middle w-40 relative">
+                                                        {exportingProfId === prof.id ? (
+                                                            <div className="inline-flex items-center text-sm text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-md w-[200px] justify-center">
+                                                                <RefreshCw className="w-4 h-4 ml-2 animate-spin mr-2" />
+                                                                Gerando...
+                                                            </div>
+                                                        ) : (
+                                                            <div className="inline-block relative">
+                                                                <button
+                                                                    className="flex items-center justify-between gap-2 px-3 py-1.5 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 min-w-[140px]"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setExportDropdownOpen(exportDropdownOpen === prof.id ? null : prof.id);
+                                                                    }}
+                                                                >
+                                                                    <span>Baixar via...</span>
+                                                                    <ChevronDown className="w-4 h-4" />
+                                                                </button>
+
+                                                                {exportDropdownOpen === prof.id && (
+                                                                    <div
+                                                                        className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-[100] py-1"
+                                                                        onClick={() => setExportDropdownOpen(null)}
+                                                                    >
+                                                                        <button
+                                                                            onClick={() => handleExportProfessional(prof, 'grouped')}
+                                                                            className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 flex items-center group transition-colors"
+                                                                        >
+                                                                            <Building2 className="w-4 h-4 mr-2 text-indigo-500 group-hover:text-indigo-600" />
+                                                                            Prefeitura/Entidade
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleExportProfessional(prof, 'sus')}
+                                                                            className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 flex items-center group border-t border-gray-100 dark:border-gray-700 transition-colors"
+                                                                        >
+                                                                            <Download className="w-4 h-4 mr-2 text-blue-500 group-hover:text-blue-600" />
+                                                                            Padrão BDPA (SUS)
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={4} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
+                                                Nenhum profissional encontrado com os filtros atuais.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </Table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // For now, other reports will share similar structural mock to show they're read-only views
         return (
             <div className="p-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
                 <Activity className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -303,7 +663,7 @@ const ProductionSubsede: React.FC = () => {
                 isOpen={isReportModalOpen}
                 onClose={() => setIsReportModalOpen(false)}
                 title={selectedReport?.title || 'Relatório'}
-                size="xl"
+                className={selectedReport?.id === 'profissional' ? 'max-w-[95vw]' : 'max-w-5xl'}
             >
                 {renderReportModalContent()}
             </Modal>
