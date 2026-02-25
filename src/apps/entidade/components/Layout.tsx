@@ -18,7 +18,8 @@ import {
   LifeBuoy,
   AlertTriangle,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EntityType } from '../types';
@@ -148,6 +149,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
     { icon: Activity, label: 'Produção Global', path: '/privado/producao' },
     { icon: FileText, label: 'Logs de Uso', path: '/privado/logs' },
     { icon: Users, label: 'Gestão Acessos', path: '/privado/usuarios' },
+    { icon: History, label: 'Cadastros Originais', path: '/privado/cadastros-originais' },
     { icon: LifeBuoy, label: 'Suporte Técnico', path: '/privado/suporte' },
     { icon: Settings, label: 'Configuração', path: '/privado/configuracoes' },
   ];
@@ -155,9 +157,11 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
   // Filter menu items based on roles
   let menuItemsPrivate = menuItemsPrivateAll;
   if (claims?.role === 'SUBSEDE') {
-    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos');
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos' && item.label !== 'Cadastros Originais');
   } else if (claims?.role === 'COORDENAÇÃO' || claims?.coordenation) {
-    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos' && item.label !== 'Logs de Uso');
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos' && item.label !== 'Cadastros Originais' && item.label !== 'Logs de Uso');
+  } else if (claims?.role !== 'MASTER') {
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Cadastros Originais');
   }
 
   const menuItemsSubsede = [

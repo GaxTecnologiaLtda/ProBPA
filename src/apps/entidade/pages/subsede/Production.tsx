@@ -4,7 +4,7 @@ import { Card, Button, Badge, Modal, Table, Skeleton } from '../../components/ui
 import {
     CheckCircle, FileText, Users, Filter, ArrowUpRight,
     Download, BarChart2, PieChart, Activity, Eye, Target, Building2, TrendingUp, Search, X,
-    ChevronDown, RefreshCw
+    ChevronDown, RefreshCw, Loader2
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -16,6 +16,9 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { susReportService } from '../../services/susReportService';
 import { municipalityReportService } from '../../services/municipalityReportService';
+import { fetchProfessionalsByEntity } from '../../services/professionalsService';
+import { fetchUnitsByEntity } from '../../services/unitsService';
+import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { Professional, Municipality, Unit } from '../../types';
 
 // Reusing same mock/structural constants for charts if needed
@@ -48,6 +51,12 @@ const ProductionSubsede: React.FC = () => {
     };
 
     // --- State: Relatório Profissional ---
+    const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
+    const [allUnits, setAllUnits] = useState<Unit[]>([]);
+    const [allMunicipalities, setAllMunicipalities] = useState<Municipality[]>([]);
+    const [fetchedRecords, setFetchedRecords] = useState<any[]>([]);
+    const [loadingReport, setLoadingReport] = useState(false);
+
     const [filterName, setFilterName] = useState('');
     const [filterUnit, setFilterUnit] = useState('');
     const [inputStartDate, setInputStartDate] = useState('');
@@ -70,21 +79,60 @@ const ProductionSubsede: React.FC = () => {
         }
     }, [isReportModalOpen]);
 
+    // Data Load Effect: Fetch raw details internally only when report opens and requires them
+    useEffect(() => {
+        const loadManagementData = async () => {
+            if (!claims?.entityId || !claims?.municipalityId) return;
+            setLoadingReport(true);
+            try {
+                const [profs, munis, units] = await Promise.all([
+                    fetchProfessionalsByEntity(claims.entityId),
+                    fetchMunicipalitiesByEntity(claims.entityId),
+                    fetchUnitsByEntity(claims.entityId)
+                ]);
+
+                setAllProfessionals(profs);
+                setAllMunicipalities(munis);
+                setAllUnits(units.filter(u => u.municipalityId === claims.municipalityId));
+
+                const productionData = await municipalityReportService.fetchMunicipalityProduction(
+                    claims.municipalityId,
+                    selectedCompetence,
+                    [],
+                    claims.entityId,
+                    profs,
+                    munis
+                );
+
+                setFetchedRecords(productionData);
+            } catch (error) {
+                console.error("Error loading subsede report mapping data:", error);
+            } finally {
+                setLoadingReport(false);
+            }
+        };
+
+        if (isReportModalOpen && selectedReport?.id === 'profissional') {
+            loadManagementData();
+        }
+    }, [isReportModalOpen, selectedReport, selectedCompetence, claims?.entityId, claims?.municipalityId]);
+
+
     // Unique Units based on current user's municipality
     const uniqueUnits = React.useMemo(() => {
-        return dashboardUnits?.data ? dashboardUnits.data.map(u => u.name).sort() : [];
-    }, [dashboardUnits]);
+        return allUnits.map(u => u.name).sort();
+    }, [allUnits]);
 
     // Calculate Production Stats
     const [productionStats, setProductionStats] = useState<Record<string, number>>({});
     useEffect(() => {
-        if (!production.rawRecords || production.rawRecords.length === 0) {
+        if (!fetchedRecords || fetchedRecords.length === 0) {
             setProductionStats({});
             return;
         }
-        let filtered = production.rawRecords;
+        let filtered = fetchedRecords;
         if (appliedStartDate && appliedEndDate) {
-            filtered = production.rawRecords.filter((r: any) => {
+            filtered = fetchedRecords.filter((r: any) => {
                 const rRaw = r.rawDate;
                 if (!rRaw) return false;
                 return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
@@ -98,12 +146,15 @@ const ProductionSubsede: React.FC = () => {
             }
         });
         setProductionStats(stats);
-    }, [production.rawRecords, appliedStartDate, appliedEndDate]);
+    }, [fetchedRecords, appliedStartDate, appliedEndDate]);
 
     // Filtered Professionals List
     const filteredProfessionals = React.useMemo(() => {
-        const profsSource = dashboardProfessionals?.data || [];
-        return profsSource.filter((prof: Professional) => {
+        return allProfessionals.filter((prof: Professional) => {
+            // Must belong to this Sub-Sede's Municipality!
+            const isInMunicipality = prof.assignments?.some(a => a.municipalityId === claims?.municipalityId);
+            if (!isInMunicipality) return false;
+
             const matchesName = normalize(prof.name).includes(normalize(filterName));
             const matchesUnit = filterUnit
                 ? prof.assignments?.some(a => normalize(a.unitName || prof.unitName) === normalize(filterUnit))
@@ -113,7 +164,7 @@ const ProductionSubsede: React.FC = () => {
                 : true;
             return matchesName && matchesUnit && matchesProduction;
         });
-    }, [dashboardProfessionals, filterName, filterUnit, appliedStartDate, appliedEndDate, productionStats]);
+    }, [allProfessionals, filterName, filterUnit, appliedStartDate, appliedEndDate, productionStats, claims?.municipalityId]);
 
     // Handle Export Professional
     const handleExportProfessional = async (prof: Professional, layout: 'grouped' | 'sus' = 'grouped') => {
@@ -135,7 +186,7 @@ const ProductionSubsede: React.FC = () => {
                 entityLogoBase64 = data.logoBase64;
             }
 
-            let profRecords = production.rawRecords.filter((r: any) => r.professionalId === prof.id);
+            let profRecords = fetchedRecords.filter((r: any) => r.professionalId === prof.id);
             if (appliedStartDate && appliedEndDate) {
                 profRecords = profRecords.filter((r: any) => {
                     const rRaw = r.rawDate;
@@ -180,7 +231,7 @@ const ProductionSubsede: React.FC = () => {
                         unitCnes: (() => {
                             const uId = prof.assignments?.[0]?.unitId || prof.unitId;
                             if (!uId) return '';
-                            const unit = dashboardUnits?.data?.find(u => u.id === uId || u.cnes === uId);
+                            const unit = allUnits.find(u => u.id === uId || u.cnes === uId);
                             return unit?.cnes || uId;
                         })()
                     },
@@ -515,92 +566,99 @@ const ProductionSubsede: React.FC = () => {
 
                     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm flex flex-col min-h-[400px]">
                         <div className="overflow-auto flex-1 h-[50vh]">
-                            <Table>
-                                <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 w-full table-fixed">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/3 min-w-[200px] shadow-[0_1px_0_0_#e5e7eb]">Profissional</th>
-                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-32 shadow-[0_1px_0_0_#e5e7eb]">CNS</th>
-                                        <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-24 shadow-[0_1px_0_0_#e5e7eb]">Qtd</th>
-                                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-40 shadow-[0_1px_0_0_#e5e7eb]">Exportar PDF</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700 w-full table-fixed">
-                                    {filteredProfessionals.length > 0 ? (
-                                        filteredProfessionals.map((prof: Professional) => {
-                                            const qty = productionStats[prof.id] || 0;
-                                            return (
-                                                <tr key={prof.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                                    <td className="px-4 py-4 w-1/3 min-w-[200px]">
-                                                        <div className="flex flex-col truncate">
-                                                            <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{prof.name}</span>
-                                                            <span className="text-xs text-gray-500 truncate" title={prof.assignments?.[0]?.unitName || prof.unitName}>
-                                                                {prof.assignments?.[0]?.unitName || prof.unitName || 'Sem Unidade Principal'}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-center w-32">
-                                                        <span className="text-sm font-mono text-gray-600 dark:text-gray-400">{prof.cns || '—'}</span>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-center w-24">
-                                                        <div className="flex flex-col items-center">
-                                                            <span className="text-lg font-bold text-gray-900 dark:text-white">{qty}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-right align-middle w-40 relative">
-                                                        {exportingProfId === prof.id ? (
-                                                            <div className="inline-flex items-center text-sm text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-md w-[200px] justify-center">
-                                                                <RefreshCw className="w-4 h-4 ml-2 animate-spin mr-2" />
-                                                                Gerando...
-                                                            </div>
-                                                        ) : (
-                                                            <div className="inline-block relative">
-                                                                <button
-                                                                    className="flex items-center justify-between gap-2 px-3 py-1.5 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 min-w-[140px]"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setExportDropdownOpen(exportDropdownOpen === prof.id ? null : prof.id);
-                                                                    }}
-                                                                >
-                                                                    <span>Baixar via...</span>
-                                                                    <ChevronDown className="w-4 h-4" />
-                                                                </button>
-
-                                                                {exportDropdownOpen === prof.id && (
-                                                                    <div
-                                                                        className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-[100] py-1"
-                                                                        onClick={() => setExportDropdownOpen(null)}
-                                                                    >
-                                                                        <button
-                                                                            onClick={() => handleExportProfessional(prof, 'grouped')}
-                                                                            className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 flex items-center group transition-colors"
-                                                                        >
-                                                                            <Building2 className="w-4 h-4 mr-2 text-indigo-500 group-hover:text-indigo-600" />
-                                                                            Prefeitura/Entidade
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleExportProfessional(prof, 'sus')}
-                                                                            className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 flex items-center group border-t border-gray-100 dark:border-gray-700 transition-colors"
-                                                                        >
-                                                                            <Download className="w-4 h-4 mr-2 text-blue-500 group-hover:text-blue-600" />
-                                                                            Padrão BDPA (SUS)
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    ) : (
+                            {loadingReport ? (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-500 py-12">
+                                    <Loader2 className="w-8 h-8 animate-spin text-orange-500 mb-4" />
+                                    <p>Carregando registros e profissionais. Por favor, aguarde...</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-left text-sm text-gray-600 dark:text-gray-400">
+                                    <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10 w-full table-fixed">
                                         <tr>
-                                            <td colSpan={4} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
-                                                Nenhum profissional encontrado com os filtros atuais.
-                                            </td>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/3 min-w-[200px] shadow-[0_1px_0_0_#e5e7eb]">Profissional</th>
+                                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-32 shadow-[0_1px_0_0_#e5e7eb]">CNS</th>
+                                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-24 shadow-[0_1px_0_0_#e5e7eb]">Qtd</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-40 shadow-[0_1px_0_0_#e5e7eb]">Exportar PDF</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </Table>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700 w-full table-fixed">
+                                        {filteredProfessionals.length > 0 ? (
+                                            filteredProfessionals.map((prof: Professional) => {
+                                                const qty = productionStats[prof.id] || 0;
+                                                return (
+                                                    <tr key={prof.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                                        <td className="px-4 py-4 w-1/3 min-w-[200px]">
+                                                            <div className="flex flex-col truncate">
+                                                                <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{prof.name}</span>
+                                                                <span className="text-xs text-gray-500 truncate" title={prof.assignments?.[0]?.unitName || prof.unitName}>
+                                                                    {prof.assignments?.[0]?.unitName || prof.unitName || 'Sem Unidade Principal'}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-center w-32">
+                                                            <span className="text-sm font-mono text-gray-600 dark:text-gray-400">{prof.cns || '—'}</span>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-center w-24">
+                                                            <div className="flex flex-col items-center">
+                                                                <span className="text-lg font-bold text-gray-900 dark:text-white">{qty}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-4 text-right align-middle w-40 relative">
+                                                            {exportingProfId === prof.id ? (
+                                                                <div className="inline-flex items-center text-sm text-gray-500 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-md w-[200px] justify-center">
+                                                                    <RefreshCw className="w-4 h-4 ml-2 animate-spin mr-2" />
+                                                                    Gerando...
+                                                                </div>
+                                                            ) : (
+                                                                <div className="inline-block relative">
+                                                                    <button
+                                                                        className="flex items-center justify-between gap-2 px-3 py-1.5 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md shadow-sm transition-colors text-sm font-medium text-gray-700 dark:text-gray-200 min-w-[140px]"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setExportDropdownOpen(exportDropdownOpen === prof.id ? null : prof.id);
+                                                                        }}
+                                                                    >
+                                                                        <span>Baixar via...</span>
+                                                                        <ChevronDown className="w-4 h-4" />
+                                                                    </button>
+
+                                                                    {exportDropdownOpen === prof.id && (
+                                                                        <div
+                                                                            className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 z-[100] py-1"
+                                                                            onClick={() => setExportDropdownOpen(null)}
+                                                                        >
+                                                                            <button
+                                                                                onClick={() => handleExportProfessional(prof, 'grouped')}
+                                                                                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 flex items-center group transition-colors"
+                                                                            >
+                                                                                <Building2 className="w-4 h-4 mr-2 text-indigo-500 group-hover:text-indigo-600" />
+                                                                                Prefeitura/Entidade
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleExportProfessional(prof, 'sus')}
+                                                                                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 flex items-center group border-t border-gray-100 dark:border-gray-700 transition-colors"
+                                                                            >
+                                                                                <Download className="w-4 h-4 mr-2 text-blue-500 group-hover:text-blue-600" />
+                                                                                Padrão BDPA (SUS)
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={4} className="px-4 py-12 text-center text-gray-500 dark:text-gray-400">
+                                                    Nenhum profissional encontrado com os filtros atuais.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
                     </div>
                 </div>

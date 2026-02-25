@@ -491,3 +491,82 @@ export async function toggleAccess(id: string, newStatus: boolean): Promise<void
         updatedAt: serverTimestamp()
     });
 }
+
+// --- BACKUP FEATURES ---
+
+export async function fetchRegistrationBackups(entityId: string, municipalityId: string): Promise<Professional[]> {
+    const entDoc = await getDoc(doc(db, 'entities', entityId));
+    let pathType = 'PUBLIC';
+    if (entDoc.exists() && entDoc.data().type?.toUpperCase().includes('PRIV')) {
+        pathType = 'PRIVATE';
+    }
+
+    const backupPath = `municipalities/${pathType}/${entityId}/${municipalityId}/registration_backups`;
+    const snap = await getDocs(collection(db, backupPath));
+
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Professional));
+}
+
+export async function restoreProfessional(backup: Professional): Promise<void> {
+    const { id, entityId } = backup;
+
+    if (!id || !entityId) {
+        throw new Error("Dados de backup inválidos para restauração.");
+    }
+
+    // Remover flags de backup antes de restaurar
+    const dataToRestore = { ...backup };
+    delete (dataToRestore as any).isBackup;
+    delete (dataToRestore as any).backupCreatedAt;
+
+    // 1. Restore no cache principal ROOT
+    await firebaseSetDoc(doc(db, COLLECTION_NAME, id), { ...dataToRestore, updatedAt: serverTimestamp() });
+
+    // 2. Restore no Context Hierarchy (Subcoleções de município)
+    let pathType = 'PUBLIC';
+    try {
+        const entDoc = await getDoc(doc(db, 'entities', entityId));
+        if (entDoc.exists() && entDoc.data().type?.toUpperCase().includes('PRIV')) {
+            pathType = 'PRIVATE';
+        }
+    } catch (e) {
+        console.warn("Could not fetch entity type for restore, defaulting to PUBLIC", e);
+    }
+
+    const assignments = backup.assignments || [];
+
+    // Fallback caso seja um backup legado sem assignments array (usa root fields)
+    if (assignments.length === 0 && backup.municipalityId && backup.unitId) {
+        assignments.push({
+            municipalityId: backup.municipalityId,
+            municipalityName: backup.municipalityName || '',
+            unitId: backup.unitId,
+            unitName: backup.unitName || '',
+            occupation: backup.occupation || '',
+            registerClass: backup.registerClass || '',
+            active: true
+        });
+    }
+
+    const uniqueMunIds = Array.from(new Set(assignments.map(a => a.municipalityId).filter(Boolean)));
+
+    const promises = uniqueMunIds.map(async (munId) => {
+        if (!munId) return;
+        const subPath = `municipalities/${pathType}/${entityId}/${munId}/professionals`;
+        await firebaseSetDoc(doc(db, subPath, id), { ...dataToRestore, updatedAt: serverTimestamp() }, { merge: true });
+    });
+
+    await Promise.all(promises);
+
+    // 3. Log
+    try {
+        // @ts-ignore
+        const { logAction } = await import('./logsService');
+        await logAction({
+            action: 'UPDATE',
+            target: 'PROFESSIONAL',
+            description: `Restaurou o profissional ${backup.name} a partir do backup de segurança`,
+            entityId: entityId
+        });
+    } catch (e) { console.error(e); }
+}

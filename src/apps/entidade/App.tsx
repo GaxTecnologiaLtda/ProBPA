@@ -28,6 +28,7 @@ import UsersPrivate from './pages/private/Users';
 import SettingsPrivate from './pages/private/Settings';
 import SupportPrivate from './pages/private/Support';
 import NotificationsPage from './pages/private/NotificationsPage';
+import RegistrationBackups from './pages/private/RegistrationBackups';
 
 import DashboardSubsede from './pages/subsede/Dashboard';
 import ProfessionalsSubsede from './pages/subsede/Professionals';
@@ -74,6 +75,7 @@ const App: React.FC = () => {
             <Route path="suporte" element={<SupportPrivate />} />
             <Route path="notificacoes" element={<NotificationsPage />} />
             <Route path="configuracoes" element={<SettingsPrivate />} />
+            <Route path="cadastros-originais" element={<RegistrationBackups />} />
           </Route>
 
           {/* Rotas Subsede (Consultivas) */}
