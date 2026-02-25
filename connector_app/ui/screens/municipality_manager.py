@@ -69,7 +69,7 @@ class MunicipalityManager(ctk.CTkToplevel):
         row3_frame.pack(pady=5)
         
         ctk.CTkLabel(row3_frame, text="1ª Carga:").pack(side="left", padx=(0, 5))
-        self.combo_days = ctk.CTkComboBox(row3_frame, values=["30", "60", "90", "180", "365", "730"], width=80)
+        self.combo_days = ctk.CTkComboBox(row3_frame, values=["1", "5", "30", "60", "90", "180", "365", "730"], width=80)
         self.combo_days.pack(side="left", padx=(0, 10))
         self.combo_days.set("30")
 
