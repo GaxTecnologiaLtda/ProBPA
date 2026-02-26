@@ -90,6 +90,13 @@ sudo systemctl restart postgresql
 sudo systemctl restart e-sus-pec-database
 ```
 
+> ⚠️ **Atenção: O Serviço Não Inicia Mais?**
+> Se ao tentar Reiniciar o serviço do PostgreSQL ele falhar ou "desligar" sozinho, isso significa que ocorreu um erro de digitação de sintaxe (espaçamento ou falta de máscara) no arquivo `pg_hba.conf`. 
+> 1. Volte ao arquivo `pg_hba.conf`.
+> 2. Verifique se a linha do IP possui a máscara de rede (exemplo: `100.0.0.0/8` ou `100.x.x.x/32`). O PostgreSQL rejeita IPs puros sem a barra (ex: `100.122.66.44` causará pane; o certo é `100.122.66.44/32`).
+> 3. Verifique se você usou a tecla `TAB` do teclado ou espaços simples para afastar as palavras. Letras coladas causam erro.
+> 4. Salve o arquivo e tente Iniciar/Reiniciar o serviço novamente.
+
 ---
 
 ## ✅ Passo 4: Retorno ao Suporte ProBPA
