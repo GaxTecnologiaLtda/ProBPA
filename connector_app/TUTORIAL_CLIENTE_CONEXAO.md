@@ -19,6 +19,8 @@ Utilizaremos uma Rede Virtual Privada (VPN) chamada **Tailscale**, que implement
    ```bash
    tailscale up --authkey=CHAVE_FORNECIDA_PELO_SUPORTE
    ```
+   > ⚠️ **Atenção**: Se o terminal disser que `'tailscale' não é reconhecido como um comando interno`, feche o terminal CMD e abra-o novamente como Administrador. Se o erro persistir, digite `cd "C:\Program Files\Tailscale"` e tente o comando `tailscale up` novamente.
+
 6. Aguarde processar. Se não houver erros, obtenha seu **IP Criptografado** com o comando:
    ```bash
    tailscale ip -4
