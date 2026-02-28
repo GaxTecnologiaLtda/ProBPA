@@ -64,10 +64,12 @@ Agora que as máquinas estão na mesma rede privada, precisamos avisar o Postgre
 
 3. Na mesma pasta, localize o arquivo **`pg_hba.conf`**:
    - Abra-o com o **Bloco de Notas** (ou preferencialmente **Notepad++**).
-   - Vá até a última linha do arquivo. Adicione a regra abaixo para permitir conexões do Servidor Central do ProBPA:
+   - Vá até a última linha do arquivo. Adicione as duas regras abaixo. Na segunda regra, substitua o `100.x.x.x` pelo IP do Tailscale **desta máquina** (que você anotou no Passo 1):
      ```conf
      # Liberacao para o Servidor Central - ProBPA
      host    all             all             100.81.221.58/32        md5
+     # Liberacao para o proprio Servidor Local (e-SUS) - IP do TailScale gerado no seu lado
+     host    all             all             100.x.x.x/32            md5
      ```
    - *Nota: Caso sua instalação exija `scram-sha-256` no lugar de `md5`, pode utilizar.*
    - Salve e feche o arquivo.
