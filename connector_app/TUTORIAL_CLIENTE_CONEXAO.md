@@ -63,11 +63,11 @@ Agora que as máquinas estão na mesma rede privada, precisamos avisar o Postgre
    - Salve e feche o arquivo.
 
 3. Na mesma pasta, localize o arquivo **`pg_hba.conf`**:
-   - Abra-o com o **Bloco de Notas**.
-   - Vá até a última linha do arquivo. Adicione a regra abaixo para permitir conexões da rede do Tailscale (`100.x.x.x`):
+   - Abra-o com o **Bloco de Notas** (ou preferencialmente **Notepad++**).
+   - Vá até a última linha do arquivo. Adicione a regra abaixo para permitir conexões do Servidor Central do ProBPA. Substitua o IP `100.x.x.x` pelo **IP exato do Servidor Central** (ex: `100.81.221.58/32`) que nós lhe informaremos:
      ```conf
-     # Liberacao para a Rede Tailscale - ProBPA
-     host    all             all             100.0.0.0/8             md5
+     # Liberacao para o Servidor Central - ProBPA
+     host    all             all             100.x.x.x/32            md5
      ```
    - *Nota: Caso sua instalação exija `scram-sha-256` no lugar de `md5`, pode utilizar.*
    - Salve e feche o arquivo.
