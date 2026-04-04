@@ -29,7 +29,6 @@ class PecConnectorEngine:
 
     def extract_and_send(self, force: bool = False) -> Generator[tuple, None, None]:
         self.aborted = False
-        has_error = False
         
         municipalities = self.config.get_municipalities()
         if not municipalities:
@@ -38,6 +37,7 @@ class PecConnectorEngine:
 
         for mun in municipalities:
             if self.aborted: return
+            has_error = False
             
             mun_name = mun.get('municipality_name', 'Desconhecido')
             mun_id = mun.get('municipality_id', '???')
