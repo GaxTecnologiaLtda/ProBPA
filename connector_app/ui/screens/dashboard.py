@@ -202,12 +202,12 @@ class DashboardScreen(ctk.CTkFrame):
                         try: minutes = int(interval_str)
                         except: pass
 
-                    last_run = mun.get("last_run_success")
-                    if not last_run:
+                    last_run_attempt = mun.get("last_run_attempt") or mun.get("last_run_success")
+                    if not last_run_attempt:
                         remaining = 0
                     else:
                         try:
-                            last_run_dt = datetime.fromisoformat(last_run)
+                            last_run_dt = datetime.fromisoformat(last_run_attempt)
                             elapsed = (now - last_run_dt).total_seconds() / 60
                             remaining = minutes - elapsed
                         except:
