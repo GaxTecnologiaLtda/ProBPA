@@ -4,7 +4,7 @@ import { logSystemEvent, LogLevel } from '../utils/logger';
 
 export const getMunicipalitiesStats = functions
     .region("southamerica-east1")
-    .runWith({ memory: "512MB", timeoutSeconds: 120 })
+    .runWith({ memory: "1GB", timeoutSeconds: 540 })
     .https.onCall(async (data, context) => {
         if (!context.auth || !context.auth.token.entityId) {
             throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated and associated with an entity.');
@@ -28,6 +28,12 @@ export const getMunicipalitiesStats = functions
                     activeProfIds.add(doc.id);
                 }
             });
+
+            // Fetch Units to filter production
+            const activeUnitIds = new Set<string>();
+            const unitsSnap = await db.collectionGroup('units').get();
+            const entityUnitsDocs = unitsSnap.docs.filter(d => d.ref.path.includes(`/${entityId}/`));
+            entityUnitsDocs.forEach(d => activeUnitIds.add(d.id));
 
             const allSummariesSnap = await db.collectionGroup('resumo_producao').get();
 
@@ -70,6 +76,9 @@ export const getMunicipalitiesStats = functions
                 let docTotalQty = 0;
 
                 for (const uId of Object.keys(data.units)) {
+                    // Filter unregistered units (allow entity itself if it appears)
+                    if (!activeUnitIds.has(uId) && uId !== entityId) continue;
+                    
                     const unitData = data.units[uId];
                     if (!unitData.professionals) continue;
 

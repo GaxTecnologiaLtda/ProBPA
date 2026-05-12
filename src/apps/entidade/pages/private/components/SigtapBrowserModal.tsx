@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Input, Select, Badge } from '../../../components/ui/Components'; // Adjusted path
 import { Search, Loader2, FolderTree, FileText, CornerDownRight, Check, X, Info, Database } from 'lucide-react';
-import { sigtapService, searchProcedures, getAvailableCompetences, SigtapProcedureRow } from '../../../services/sigtapService'; // Local import
+import { sigtapService, SigtapProcedureDetail } from '../../../services/sigtapService'; // Local import
 import { ProcedureDetailModal } from './ProcedureDetailModal'; // Local import
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SigtapBrowserModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSelect?: (procedure: SigtapProcedureRow) => void;
+    onSelect?: (procedure: SigtapProcedureDetail) => void;
 }
 
 export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, onClose, onSelect }) => {
@@ -28,13 +28,13 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
 
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<SigtapProcedureRow[]>([]);
+    const [searchResults, setSearchResults] = useState<SigtapProcedureDetail[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
     // Detail Modal
     const [viewProcedure, setViewProcedure] = useState<any | null>(null);
 
-    const handleSelectProcedure = (proc: SigtapProcedureRow) => {
+    const handleSelectProcedure = (proc: SigtapProcedureDetail) => {
         if (onSelect) {
             onSelect(proc);
             onClose();
@@ -44,7 +44,7 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
     // Load Competences
     useEffect(() => {
         if (isOpen) {
-            getAvailableCompetences().then(comps => {
+            sigtapService.getAvailableCompetences().then(comps => {
                 setCompetences(comps);
                 if (comps.length > 0 && !currentCompetence) {
                     setCurrentCompetence(comps[0].competence);
@@ -121,7 +121,7 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
         setIsSearching(true);
 
         try {
-            const results = await searchProcedures(searchQuery, 50, currentCompetence);
+            const results = await sigtapService.searchProcedures(searchQuery, currentCompetence);
             setSearchResults(results);
         } catch (error: any) {
             console.error("Search error:", error);
@@ -191,6 +191,7 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
             onClose={onClose}
             title="Catálogo SIGTAP (Tabela Unificada)"
             className="max-w-4xl h-[85vh] flex flex-col"
+            zIndex="z-[60]"
         >
             <div className="flex flex-col h-full -mx-6 -mb-6">
 

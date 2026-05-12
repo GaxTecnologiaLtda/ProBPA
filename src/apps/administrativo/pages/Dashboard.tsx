@@ -47,7 +47,9 @@ const Dashboard: React.FC = () => {
   const [financialStats, setFinancialStats] = React.useState<FinancialStats>({
     totalAnnualContracts: 0,
     totalReceived: 0,
+    currentMonthReceived: 0,
     totalPending: 0,
+    currentMonthExpected: 0,
     totalOverdue: 0
   });
   const [revenueData, setRevenueData] = React.useState<RevenueChartData[]>([]);
@@ -113,13 +115,13 @@ const Dashboard: React.FC = () => {
         <StatCard
           title="Recebido (Total)"
           value={formatCurrency(financialStats.totalReceived)}
-          trend="Confirmado" trendUp={true}
+          trend={`Mês Atual: ${formatCurrency(financialStats.currentMonthReceived)}`} trendUp={true}
           icon={Wallet} color="green"
         />
         <StatCard
           title="A Receber (Pendente)"
           value={formatCurrency(financialStats.totalPending)}
-          trend="Aberto" trendUp={true}
+          trend={`Mês Atual: ${formatCurrency(financialStats.currentMonthExpected)}`} trendUp={true}
           icon={CalendarCheck} color="orange"
         />
         <StatCard

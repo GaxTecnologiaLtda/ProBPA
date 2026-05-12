@@ -20,11 +20,12 @@ import { fetchProfessionalsByEntity } from '../../services/professionalsService'
 import { fetchUnitsByEntity } from '../../services/unitsService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { Professional, Municipality, Unit } from '../../types';
+import SubsedeRegisterProduction from './SubsedeRegisterProduction';
 
 // Reusing same mock/structural constants for charts if needed
 const COLORS = ['#ea580c', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
 
-type TabType = 'dashboard' | 'reports';
+type TabType = 'dashboard' | 'reports' | 'register';
 
 interface ReportType {
     id: string;
@@ -131,13 +132,24 @@ const ProductionSubsede: React.FC = () => {
             return;
         }
         let filtered = fetchedRecords;
+
         if (appliedStartDate && appliedEndDate) {
-            filtered = fetchedRecords.filter((r: any) => {
+            filtered = filtered.filter((r: any) => {
                 const rRaw = r.rawDate;
                 if (!rRaw) return false;
                 return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
             });
         }
+
+        if (filterUnit) {
+            const normalizedFilterUnit = normalize(filterUnit);
+            filtered = filtered.filter((r: any) => {
+                const unit = allUnits.find(u => u.id === r.unitId);
+                const unitName = unit ? unit.name : (r.unitName || '');
+                return normalize(unitName) === normalizedFilterUnit;
+            });
+        }
+
         const stats: Record<string, number> = {};
         filtered.forEach((p: any) => {
             const pId = p.professionalId;
@@ -146,7 +158,7 @@ const ProductionSubsede: React.FC = () => {
             }
         });
         setProductionStats(stats);
-    }, [fetchedRecords, appliedStartDate, appliedEndDate]);
+    }, [fetchedRecords, appliedStartDate, appliedEndDate, filterUnit, allUnits]);
 
     // Filtered Professionals List
     const filteredProfessionals = React.useMemo(() => {
@@ -195,6 +207,15 @@ const ProductionSubsede: React.FC = () => {
                 });
             }
 
+            if (filterUnit) {
+                const normalizedFilterUnit = normalize(filterUnit);
+                profRecords = profRecords.filter((r: any) => {
+                    const unit = allUnits.find(u => u.id === r.unitId);
+                    const unitName = unit ? unit.name : (r.unitName || '');
+                    return normalize(unitName) === normalizedFilterUnit;
+                });
+            }
+
             if (profRecords.length === 0) {
                 alert('Nenhuma produção encontrada para este profissional nesta competência/período.');
                 setExportingProfId(null);
@@ -204,8 +225,8 @@ const ProductionSubsede: React.FC = () => {
             const normalizedRecords = profRecords.map((r: any) => ({
                 ...r,
                 patientName: r.patient?.name || r.patientName || 'NÃO IDENTIFICADO',
-                patientCns: r.patient?.cns || r.patientCns || '',
-                patientCpf: r.patient?.cpf || r.patientCpf || '',
+                patientCns: (r.patient?.cns && r.patient.cns !== '-') ? r.patient.cns : (r.patientCns || ''),
+                patientCpf: (r.patient?.cpf && r.patient.cpf !== '-') ? r.patient.cpf : (r.patientCpf || ''),
                 patientBirthDate: r.patient?.birthDate || r.patientBirthDate || '',
                 procedureCode: r.procedure?.code || r.procedureCode || '',
                 procedureName: r.procedure?.name || r.procedureName || '',
@@ -272,9 +293,9 @@ const ProductionSubsede: React.FC = () => {
     // --- Renderers ---
     const renderDashboard = () => (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                 <Card className="p-5 border-l-4 border-orange-500">
-                    <div className="text-sm text-gray-500 font-medium">Produção Local (Qtd)</div>
+                    <div className="text-sm text-gray-500 font-medium">Produção Pactuada (Qtd)</div>
                     <div className="mt-2">
                         {dashboardLoading ? (
                             <Skeleton className="h-8 w-24" />
@@ -284,10 +305,20 @@ const ProductionSubsede: React.FC = () => {
                             </div>
                         )}
                     </div>
-                    <div className="flex items-center mt-2 text-sm text-orange-600 font-medium">
-                        {production.trendUp ? <ArrowUpRight className="w-4 h-4 mr-1" /> : <Activity className="w-4 h-4 mr-1" />}
-                        {production.trend}% vs anterior
+                </Card>
+
+                <Card className="p-5 border-l-4 border-gray-400">
+                    <div className="text-sm text-gray-500 font-medium">Produção Não Pactuada</div>
+                    <div className="mt-2">
+                        {dashboardLoading ? (
+                            <Skeleton className="h-8 w-24" />
+                        ) : (
+                            <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                                {(production.totalNonPactuated || 0).toLocaleString('pt-BR')}
+                            </div>
+                        )}
                     </div>
+                    <div className="text-xs text-gray-500 mt-2 font-medium">Extra-teto</div>
                 </Card>
 
                 <Card className="p-5 border-l-4 border-amber-500">
@@ -709,12 +740,18 @@ const ProductionSubsede: React.FC = () => {
                         >
                             Painel de Monitoramento
                         </button>
+                        <button
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'register' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 shadow-sm' : 'text-gray-600 hover:text-orange-600 dark:text-gray-400'}`}
+                            onClick={() => setActiveTab('register')}
+                        >
+                            Lançamento de Produção
+                        </button>
                     </div>
                 </div>
             </div>
 
             <div className="mt-6">
-                {activeTab === 'dashboard' ? renderDashboard() : renderReports()}
+                {activeTab === 'dashboard' ? renderDashboard() : activeTab === 'reports' ? renderReports() : <SubsedeRegisterProduction />}
             </div>
 
             <Modal

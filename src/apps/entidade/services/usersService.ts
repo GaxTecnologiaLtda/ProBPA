@@ -14,6 +14,7 @@ export interface UserData {
     status: 'active' | 'pending' | 'suspended';
     lastAccess?: any;
     entityId: string;
+    entityType?: string;
 }
 
 const manageEntityUser = httpsCallable(functions, 'manageEntityUser');

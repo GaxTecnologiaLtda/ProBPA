@@ -120,6 +120,8 @@ export const Dashboard: React.FC = () => {
         }));
 
         historyData.forEach(record => {
+            if (record.status === 'canceled') return; // Ignore canceled records
+
             const rDate = new Date(record.date + 'T12:00:00'); // Fix TZ
             const rDateStr = record.date;
 

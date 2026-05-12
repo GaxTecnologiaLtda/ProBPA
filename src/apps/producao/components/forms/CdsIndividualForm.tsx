@@ -110,7 +110,7 @@ interface CdsIndividualFormProps {
     onRemoveProcedure: (index: number) => void;
     onOpenSigtap: (index: number) => void;
     onToggleExpand: (index: number) => void;
-    onAddProcedure: () => void;
+    onAddProcedure: (proc?: any) => void;
     userCbo: string;
     competence: string;
     isHypertensiveOrDiabetic?: boolean;

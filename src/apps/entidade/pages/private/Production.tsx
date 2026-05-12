@@ -4,7 +4,7 @@ import {
    CheckCircle, FileText, Users, Filter, ArrowUpRight,
    Download, BarChart2, PieChart, AlertTriangle, FileCode, Database,
    Calendar, ChevronRight, TrendingUp, Activity, Eye, Target, Building2, DollarSign, FileSignature, Search, X,
-   Loader2, Upload, ChevronDown
+   Loader2, Upload, ChevronDown, PlusCircle, MapPin, FileSpreadsheet
 } from 'lucide-react';
 import {
    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -15,17 +15,26 @@ import { useAuth } from '../../context/AuthContext';
 import { fetchProfessionalsByEntity, updateProfessional } from '../../services/professionalsService';
 import { municipalityReportService } from '../../services/municipalityReportService';
 import { susReportService } from '../../services/susReportService';
+import { groupedProfessionalReportService } from '../../services/groupedProfessionalReportService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { fetchUnitsByEntity } from '../../services/unitsService';
 import { Professional, Municipality, Unit } from '../../types';
 import { collection, doc, getDocs, getDoc, query, where, writeBatch, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../firebase';
+import { db, storage, functions } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { goalService } from '../../services/goalService';
 import ConnectorDashboard from './ConnectorDashboard';
-// import LediDashboard from './LediDashboard';
+import GlobalRegisterProduction from './GlobalRegisterProduction';
+import GlobalProductionHistory from './GlobalProductionHistory';
+import { useEntityData } from '../../hooks/useEntityData';
 
 import { useDashboardData } from './useDashboardData';
 import { UnitComparativeReport } from '../../components/reports/UnitComparativeReport';
+import { CboMunicipalReport } from '../../components/reports/CboMunicipalReport';
+import { GoalsFulfillmentReport } from '../../components/reports/GoalsFulfillmentReport';
+import { FinancialEvolutionReport } from '../../components/reports/FinancialEvolutionReport';
+import { ProfessionalPerformanceWidget } from '../../components/reports/ProfessionalPerformanceWidget';
 
 // ... (keep imports)
 
@@ -89,7 +98,7 @@ const META_VS_REAL_BY_GROUP = [
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
-type TabType = 'dashboard' | 'reports' | 'technical' | 'ledi';
+type TabType = 'dashboard' | 'reports' | 'connector' | 'lancamento' | 'history';
 
 interface ReportType {
    id: string;
@@ -101,12 +110,50 @@ interface ReportType {
 
 const Production: React.FC = () => {
    const { claims } = useAuth();
-   const { production, professionals: dashboardProfessionals, municipalities: dashboardMunicipalities, goals: dashboardGoals, loading: dashboardLoading, rawRecords } = useDashboardData();
+   const isCoordenacao = !!claims?.coordenation || claims?.role === 'COORDENAÇÃO';
+   const { entity } = useEntityData(claims?.entityId);
+   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+
+   const currentYearNum = new Date().getFullYear();
+   const monthNames = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+   ];
+
+   const getDaysInMonth = (year: string, month: string) => {
+      if (month === 'all') return [];
+      const days = new Date(parseInt(year), parseInt(month), 0).getDate();
+      return Array.from({ length: days }, (_, i) => String(i + 1));
+   };
+
+   // Defaulting to current month dynamically
+   const [selectedYear, setSelectedYear] = useState<string>(currentYearNum.toString());
+   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth() + 1));
+   const [selectedDay, setSelectedDay] = useState<string>('all');
+   const [selectedMunicipality, setSelectedMunicipality] = useState<string>('all');
+
+   // Deriving logical selectedCompetence format (MM/YYYY) for legacy child components
+   const selectedCompetence = selectedMonth === 'all' ? '' : `${selectedMonth.padStart(2, '0')}/${selectedYear}`;
+
+   // Reset day if month changes to 'all', or if day exceeds month length
+   useEffect(() => {
+      if (selectedMonth === 'all') {
+         setSelectedDay('all');
+      } else {
+         const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+         if (selectedDay !== 'all' && !daysInMonth.includes(selectedDay)) {
+            setSelectedDay('all');
+         }
+      }
+   }, [selectedYear, selectedMonth]);
+
+   const { production, professionals: dashboardProfessionals, municipalities: dashboardMunicipalities, goals: dashboardGoals, loading: dashboardLoading, rawRecords } = useDashboardData(selectedYear, selectedMonth, selectedDay, selectedMunicipality);
 
 
    // --- Procedure Breakdown Modal State ---
    const [selectedProcedure, setSelectedProcedure] = useState<string | null>(null);
    const [isProcedureModalOpen, setIsProcedureModalOpen] = useState(false);
+   const [isExportingBatch, setIsExportingBatch] = useState(false);
 
    const handleProcedureClick = (procName: string) => {
       setSelectedProcedure(procName);
@@ -140,28 +187,9 @@ const Production: React.FC = () => {
          .sort((a, b) => b.quantity - a.quantity);
    };
 
-   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-   // Defaulting to current month dynamically
-   const [selectedCompetence, setSelectedCompetence] = useState(() => {
-      const now = new Date();
-      return `${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-   });
 
-   // Generate last 12 months + next 12 months for selector
-   const generateCompetenceOptions = () => {
-      const options = [];
-      const today = new Date();
-      // Start 6 months back, go 18 months forward to cover 2025 amply
-      for (let i = -6; i < 18; i++) {
-         const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-         const mm = (d.getMonth() + 1).toString().padStart(2, '0');
-         const yyyy = d.getFullYear();
-         options.push(`${mm}/${yyyy}`);
-      }
-      return options.reverse(); // Newest first
-   };
 
-   const competenceOptions = generateCompetenceOptions();
+   // Function not needed anymore for competenceOptions, but we keep the structure inside map in the JSX
 
    // Estado para Relatórios
    const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
@@ -169,20 +197,53 @@ const Production: React.FC = () => {
 
    // Estado Real para Relatório Profissional
    const [professionals, setProfessionals] = useState<Professional[]>([]);
-   const [productionStats, setProductionStats] = useState<Record<string, number>>({});
+   const [productionStats, setProductionStats] = useState<Record<string, Record<string, number>>>({});
    const [loadingReport, setLoadingReport] = useState(false);
+
+   // Independent Modal Filters
+   const [modalYear, setModalYear] = useState<string>('');
+   const [modalMonth, setModalMonth] = useState<string>('');
+   const [modalDay, setModalDay] = useState<string>('all');
 
    // States for Filter Options
    const [allMunicipalities, setAllMunicipalities] = useState<Municipality[]>([]);
    const [allUnits, setAllUnits] = useState<Unit[]>([]);
 
    // Helper for normalizing strings
-   const normalize = (str: string) => String(str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+   const normalize = (str: string) => String(str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+   const [loadingStats, setLoadingStats] = useState(false);
 
    // --- Filters ---
    const [filterName, setFilterName] = useState('');
    const [filterMunicipality, setFilterMunicipality] = useState('');
    const [filterUnit, setFilterUnit] = useState('');
+
+   // Export Filters
+   const [exportGoalFilter, setExportGoalFilter] = useState<'all' | 'pactuados' | 'nao_pactuados'>('all');
+   const [municipalityGoals, setMunicipalityGoals] = useState<any[]>([]);
+
+   useEffect(() => {
+      const fetchGoals = async () => {
+         if (!claims?.entityId) return;
+         try {
+            // Se houver um filterMunicipality setado (que é o NOME), resolvemos o ID correspondente
+            let targetMuniId = undefined;
+            if (filterMunicipality) {
+               const found = allMunicipalities.find(m => normalize(m.name) === normalize(filterMunicipality));
+               if (found) targetMuniId = found.id;
+            }
+
+            const goals = await goalService.getGoalsForMunicipalityPublic(claims, targetMuniId);
+            setMunicipalityGoals(goals);
+         } catch (error) {
+            console.error("Error fetching goals for production filter:", error);
+         }
+      };
+      
+      if (selectedReport?.id?.includes('profissional')) {
+         fetchGoals();
+      }
+   }, [claims, filterMunicipality, selectedReport, allMunicipalities]);
 
    // Date Filter State: Input (what user types) vs Applied (what filters data)
    const [inputStartDate, setInputStartDate] = useState('');
@@ -190,10 +251,20 @@ const Production: React.FC = () => {
    const [appliedStartDate, setAppliedStartDate] = useState('');
    const [appliedEndDate, setAppliedEndDate] = useState('');
 
+   const displayCompetenceText = modalMonth === 'all' 
+      ? `Ano Inteiro (${modalYear})` 
+      : modalMonth === 'custom' 
+         ? (appliedStartDate && appliedEndDate ? `${appliedStartDate.split('-').reverse().join('/')} até ${appliedEndDate.split('-').reverse().join('/')}` : 'Período Personalizado')
+         : `${modalMonth.padStart(2, '0')}/${modalYear}`;
+
+
    // Data State
    const [fetchedRecords, setFetchedRecords] = useState<any[]>([]); // Store raw fetched records
+   const [isManagementDataLoaded, setIsManagementDataLoaded] = useState(false);
 
    // Filtered Professionals
+   const latestStatsFetchId = React.useRef(0);
+
    const filteredProfessionals = React.useMemo(() => {
       return professionals.filter(prof => {
          const matchesName = normalize(prof.name).includes(normalize(filterName));
@@ -212,9 +283,22 @@ const Production: React.FC = () => {
          // Only filter by production presence if a date filter is explicitly applied.
          // This ensures that when browsing the full competence (no date filter), we see all professionals (even those with 0).
          // But when drilling down to a date range, we likely only care about those who produced.
-         const matchesProduction = (appliedStartDate && appliedEndDate)
-            ? (productionStats[prof.id] || 0) > 0
-            : true;
+         let hasProduction = false;
+         if (appliedStartDate && appliedEndDate) {
+            const addUnitStats = (pId: string): number => {
+               if (!productionStats[pId]) return 0;
+               let sum = 0;
+               Object.values(productionStats[pId]).forEach(val => sum += Number(val));
+               return sum;
+            };
+            let count = addUnitStats(prof.id);
+            if (prof.cns) count += addUnitStats(prof.cns) + addUnitStats(`ext_${prof.cns}`) + addUnitStats(`ext_name_${prof.name.replace(/\s/g, '')}`);
+            if (prof.cpf) count += addUnitStats(prof.cpf) + addUnitStats(`ext_${prof.cpf}`);
+            hasProduction = count > 0;
+         } else {
+            hasProduction = true;
+         }
+         const matchesProduction = hasProduction;
 
          return matchesName && matchesMunicipality && matchesUnit && matchesProduction;
       });
@@ -236,7 +320,7 @@ const Production: React.FC = () => {
             filteredUnits = [];
          }
       }
-      return filteredUnits.map(u => u.name).sort();
+      return Array.from(new Set(filteredUnits.map(u => u.name.trim()))).sort();
    }, [allUnits, allMunicipalities, filterMunicipality]);
 
 
@@ -251,118 +335,116 @@ const Production: React.FC = () => {
          setInputEndDate('');
          setAppliedStartDate('');
          setAppliedEndDate('');
+         setIsManagementDataLoaded(false);
       }
    }, [isReportModalOpen]);
 
-   // Carregar dados quando o modal abrir e for o relatório correto
+   // Carregar dados quando o modal abrir, for o relatório correto, ou se estiver na aba do conector
    useEffect(() => {
       console.log('[PRODUCTION_REPORT] useEffect triggered!');
       console.log('- isReportModalOpen:', isReportModalOpen);
       console.log('- selectedReport?.id:', selectedReport?.id);
+      console.log('- activeTab:', activeTab);
       console.log('- claims?.entityId:', claims?.entityId);
 
-      if (isReportModalOpen && selectedReport?.id === 'profissional' && claims?.entityId) {
-         console.log('[PRODUCTION_REPORT] ✅ All conditions met - calling loadManagementData()');
-         loadManagementData();
-      } else {
-         console.log('[PRODUCTION_REPORT] ❌ Conditions NOT met - skipping data load');
-      }
-   }, [isReportModalOpen, selectedReport, selectedCompetence, claims?.entityId]);
+      const isReportNeedsData = isReportModalOpen && (selectedReport?.id === 'profissional' || selectedReport?.id === 'profissional_agrupado' || selectedReport?.id === 'unidades' || selectedReport?.id === 'cbo_municipal' || selectedReport?.id === 'metas' || selectedReport?.id === 'financeiro');
+      const isConnectorTabActive = activeTab === 'connector';
+      const isHistoryTabActive = activeTab === 'history';
 
-   // Re-calculate Production Stats when Applied Filter or Records change
-   useEffect(() => {
-      console.log('[PRODUCTION_REPORT] Stats calculation - fetchedRecords:', fetchedRecords.length);
-
-      if (fetchedRecords.length === 0) {
-         setProductionStats({});
-         return;
-      }
-
-      let filtered = fetchedRecords;
-
-      // Apply Date Filter
-      if (appliedStartDate && appliedEndDate) {
-         filtered = fetchedRecords.filter(r => {
-            const rRaw = r.rawDate;
-            if (!rRaw) return false;
-            return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
-         });
-      }
-
-      console.log('[PRODUCTION_REPORT] After date filter:', filtered.length);
-
-      // Aggregate Stats
-      const stats: Record<string, number> = {};
-      filtered.forEach((p: any) => {
-         const pId = p.professionalId;
-         if (pId) {
-            stats[pId] = (stats[pId] || 0) + (Number(p.quantity) || 0);
+      if ((isReportNeedsData || isConnectorTabActive || isHistoryTabActive) && claims?.entityId) {
+         console.log('[PRODUCTION_REPORT] ✅ Conditions met - checking if load is needed');
+         if (!isManagementDataLoaded || isReportNeedsData) {
+            console.log('[PRODUCTION_REPORT] ⏳ Fetching management data (Municipalities/Professionals/Units)');
+            loadManagementData();
          }
-      });
-
-      console.log('[PRODUCTION_REPORT] Calculated stats:', Object.keys(stats).length, 'professionals');
-      console.log('[PRODUCTION_REPORT] Sample stats:', Object.entries(stats).slice(0, 3));
-
-      setProductionStats(stats);
-
-   }, [fetchedRecords, appliedStartDate, appliedEndDate]);
-
-   // Carregar Municípios e Unidades globalmente (necessário para filtros, relatórios e LEDI)
-   useEffect(() => {
-      if (claims?.entityId) {
-         fetchMunicipalitiesByEntity(claims.entityId).then(setAllMunicipalities).catch(console.error);
-         fetchUnitsByEntity(claims.entityId).then(setAllUnits).catch(console.error);
+      } else {
+         console.log('[PRODUCTION_REPORT] ❌ Conditions NOT met or data already loaded via another flow');
       }
-   }, [claims?.entityId]);
+   }, [isReportModalOpen, selectedReport, activeTab, selectedCompetence, claims?.entityId, isManagementDataLoaded]);
 
+   // Load Initial Data (Professionals, Municipalities, Units)
    const loadManagementData = async () => {
       if (!claims?.entityId) return;
       setLoadingReport(true);
-      console.log('[PRODUCTION_REPORT] ===== DIRECT QUERY APPROACH =====');
-
       try {
-         // 1. Fetch Professionals and Municipalities
-         const [profs, munis] = await Promise.all([
+         const [profs, munis, units] = await Promise.all([
             fetchProfessionalsByEntity(claims.entityId),
-            fetchMunicipalitiesByEntity(claims.entityId)
+            fetchMunicipalitiesByEntity(claims.entityId),
+            fetchUnitsByEntity(claims.entityId)
          ]);
-
-         console.log('[PRODUCTION_REPORT] Loaded', profs.length, 'professionals');
-         console.log('[PRODUCTION_REPORT] Loaded', munis.length, 'municipalities');
-
          setProfessionals(profs);
          setAllMunicipalities(munis);
-
-         // 2. Fetch via municipalityReportService (now with cache bypass)
-         console.log('[PRODUCTION_REPORT] Calling municipalityReportService...');
-
-         const [units, production] = await Promise.all([
-            fetchUnitsByEntity(claims.entityId),
-            municipalityReportService.fetchMunicipalityProduction(
-               claims.municipalityId || '',
-               selectedCompetence,
-               [],
-               claims.entityId,
-               profs,
-               munis
-            )
-         ]);
-
          setAllUnits(units);
-         console.log('[PRODUCTION_REPORT] Service returned', production.length, 'normalized records');
-         setFetchedRecords(production);
-
+         setIsManagementDataLoaded(true);
       } catch (error) {
-         console.error("[PRODUCTION_REPORT] Error loading:", error);
+         console.error("[PRODUCTION_REPORT] Error loading reference data:", error);
       } finally {
          setLoadingReport(false);
       }
    };
 
+   // Fetch Production Stats via Cloud Function
+   const fetchProductionStats = async () => {
+      // Must have modalYear defined. (Empty competence is ok, means annual)
+      if (!claims?.entityId || !modalYear) return;
+      
+      const fetchId = ++latestStatsFetchId.current;
+      setLoadingStats(true);
+      try {
+         const getStatsFn = httpsCallable(functions, 'getProfessionalProductionStats', { timeout: 540000 }); // Using correct export format for Cloud Functions
+         
+         const apiCompetence = (modalMonth === 'all' || modalMonth === 'custom') ? '' : `${modalMonth.padStart(2, '0')}/${modalYear}`;
+         const apiMonth = (modalMonth === 'all' || modalMonth === 'custom') ? undefined : `${modalYear}-${modalMonth.padStart(2, '0')}`;
+
+         const response = await getStatsFn({
+            entityId: claims.entityId,
+            year: modalYear,
+            month: apiMonth,
+            day: modalDay === 'all' ? undefined : modalDay.padStart(2, '0'),
+            competence: apiCompetence || undefined, // Fallback purely for backward compat se necessário
+            startDate: appliedStartDate,
+            endDate: appliedEndDate,
+            municipalities: allMunicipalities,
+            professionals: professionals.map(p => ({ id: p.id, name: p.name, cns: p.cns || '', cpf: p.cpf || '' })),
+            goalFilter: exportGoalFilter,
+            goalProcedureCodes: municipalityGoals.map(g => String(g.procedureCode || '').replace(/\D/g, '')).filter(c => c.length > 0)
+         });
+         
+         // Previne Race Conditions (quando o usuário troca rápido de filtro e a requisição antiga chega depois)
+         if (fetchId !== latestStatsFetchId.current) {
+            console.log('[PRODUCTION_REPORT] Ignorando stats desatualizados devido a uma nova requisição em andamento.');
+            return;
+         }
+
+         const stats = response.data as Record<string, number>;
+         console.log('[PRODUCTION_REPORT] Cloud Function Stats returned for', Object.keys(stats).length, 'professionals');
+         setProductionStats({...stats});
+      } catch (error) {
+         console.error("[PRODUCTION_REPORT] Error fetching stats via Cloud Function:", error);
+         alert("Erro ao carregar os totais de produção. Tente novamente.");
+      } finally {
+         if (fetchId === latestStatsFetchId.current) {
+            setLoadingStats(false);
+         }
+      }
+   };
+
+   // Re-fetch Stats when Modal Competence or Date Filters change, if Modal is Open and Data Loaded
+   useEffect(() => {
+      if (isReportModalOpen && isManagementDataLoaded && (selectedReport?.id === 'profissional' || selectedReport?.id === 'profissional_agrupado')) {
+         fetchProductionStats();
+      }
+   }, [isReportModalOpen, isManagementDataLoaded, modalYear, modalMonth, modalDay, appliedStartDate, appliedEndDate, exportGoalFilter, municipalityGoals]);
+
    // Estado de simulação de geração de arquivo
    const [generatingFile, setGeneratingFile] = useState<string | null>(null);
 
    const handleGenerate = (fileType: string) => {
+      if (selectedMonth === 'all') {
+         alert('Para gerar arquivos exportáveis (BPA / Relatórios SUS), selecione um Mês de competência específico no filtro.');
+         return;
+      }
+
       setGeneratingFile(fileType);
       setTimeout(() => {
          setGeneratingFile(null);
@@ -371,6 +453,19 @@ const Production: React.FC = () => {
    };
 
    const handleOpenReport = (report: ReportType) => {
+      // Sync initial modal state with current global selection
+      if (!modalYear && !modalMonth) {
+         setModalYear(selectedYear);
+         setModalMonth(selectedMonth);
+         setModalDay(selectedDay);
+      } else if (report.id === 'profissional' || report.id === 'profissional_agrupado') {
+         // Se já havia sido aberto antes, e estamos apenas reabrindo, podemos opcionalmente forçar sync ou manter a última aba modal.
+         // Para melhor UX, vamos forçar Sync só na primeira vez ou se o usuário quiser. Mas vamos sincronizar sempre para ser previsível.
+         setModalYear(selectedYear);
+         setModalMonth(selectedMonth);
+         setModalDay(selectedDay);
+      }
+
       setSelectedReport(report);
       setIsReportModalOpen(true);
    };
@@ -462,10 +557,33 @@ const Production: React.FC = () => {
    const [exportingProfId, setExportingProfId] = useState<string | null>(null);
    const [exportDropdownOpen, setExportDropdownOpen] = useState<string | null>(null); // Stores ID of prof with open dropdown
 
-   const handleExportProfessional = async (prof: Professional, layout: 'grouped' | 'sus' = 'grouped') => {
+   const handleExportProfessional = async (prof: Professional, layout: 'default' | 'grouped' | 'sus' | 'excel_sus' = 'grouped', targetUnitId?: string) => {
       if (!claims?.entityId) return;
-      setExportingProfId(prof.id);
+      // if (modalMonth === 'all') {
+      //    alert('Para exportar o relatório detalhado deste profissional, selecione um Mês de competência específico no filtro deste painel.');
+      //    return;
+      // }
+      
+      const apiCompetence = (modalMonth === 'all' || modalMonth === 'custom') ? '' : `${modalMonth.padStart(2, '0')}/${modalYear}`;
+      const modalCompetence = modalMonth === 'all' ? '' : modalMonth === 'custom' ? `${appliedStartDate.split('-').reverse().join('/')} até ${appliedEndDate.split('-').reverse().join('/')}` : `${modalMonth.padStart(2, '0')}/${modalYear}`;
+
+      setExportingProfId(`${prof.id}-${targetUnitId || 'all'}`);
       setExportDropdownOpen(null); // Close dropdown
+
+      const getUnitName = () => {
+         if (targetUnitId) {
+            const unit = allUnits.find(u => u.id === targetUnitId || u.cnes === targetUnitId);
+            if (unit) return unit.name;
+            const fallback = prof.assignments?.find(a => a.unitId === targetUnitId);
+            if (fallback) return fallback.unitName;
+         }
+         if (filterUnit) return filterUnit;
+         if (prof.assignments && prof.assignments.length > 0) {
+            const units = Array.from(new Set(prof.assignments.map(a => a.unitName).filter(Boolean)));
+            return units.join(', ');
+         }
+         return prof.unitName || '';
+      };
 
       try {
          // 1. Fetch Entity Name and Logo
@@ -484,68 +602,56 @@ const Production: React.FC = () => {
             entityLogoBase64 = data.logoBase64;
          }
 
-         // 2. Use Production records already loaded in modal
-         console.log('[EXPORT] Using fetchedRecords:', fetchedRecords.length);
+         // 2. Fetch records via Cloud Function
+         console.log('[EXPORT] Fetching records via API for prof:', prof.id);
 
-         // Filter for this professional
-         let profRecords = fetchedRecords.filter((r: any) => r.professionalId === prof.id);
-         console.log('[EXPORT] Filtered for prof:', profRecords.length);
+         const isGrouped = selectedReport?.id === 'profissional_agrupado' || layout === 'default';
+         const apiName = (layout === 'sus' || !isGrouped) ? 'getProfessionalProductionDetailed' : 'getProfessionalProductionGrouped';
 
-         // Apply Date Filter if active
-         if (appliedStartDate && appliedEndDate) {
-            profRecords = profRecords.filter((r: any) => {
-               const rRaw = r.rawDate;
-               if (!rRaw) return false;
-               return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
-            });
-            console.log('[EXPORT] After date filter:', profRecords.length);
-         }
+         const getRecordsFn = httpsCallable(functions, apiName, { timeout: 540000 });
+         const response = await getRecordsFn({
+            entityId: claims.entityId,
+            municipalityId: prof.assignments?.[0]?.municipalityId || claims.municipalityId || '', // Depending on where they work
+            unitId: targetUnitId,
+            competence: apiCompetence,
+            year: modalYear,
+            startDate: appliedStartDate,
+            endDate: appliedEndDate,
+            day: modalDay === 'all' ? undefined : modalDay.padStart(2, '0'),
+            professionalId: prof.id,
+            professionalCns: prof.cns,
+            professionalName: prof.name,
+            municipalities: allMunicipalities,
+            professionals: professionals.map(p => ({ id: p.id, name: p.name, cns: p.cns || '', cpf: p.cpf || '' })),
+            goalFilter: exportGoalFilter,
+            goalProcedureCodes: municipalityGoals.map(g => String(g.procedureCode || '').replace(/\D/g, '')).filter(c => c.length > 0)
+         });
 
-         if (profRecords.length === 0) {
-            alert('Nenhuma produção encontrada para este profissional nesta competência.');
+         let normalizedRecords = response.data as any[];
+         
+         // NEW: Enrich records with missing documents before generating PDF
+         normalizedRecords = await municipalityReportService.enrichMissingManualDocuments(
+            normalizedRecords, 
+            claims.entityId, 
+            allMunicipalities
+         );
+
+         if (!normalizedRecords || normalizedRecords.length === 0) {
+            alert(`Nenhuma produção encontrada para este profissional nesta competência com o filtro de modalidade atual (${exportGoalFilter === 'pactuados' ? 'Pactuados' : exportGoalFilter === 'nao_pactuados' ? 'Não Pactuados' : 'Global'}).`);
             setExportingProfId(null);
             return;
          }
 
-         // 3. NORMALIZE connector data to flat structure (patient.name → patientName)
-         const normalizedRecords = profRecords.map((r: any) => {
-            // Flatten nested patient data
-            const patientName = r.patient?.name || r.patientName || 'NÃO IDENTIFICADO';
-            const patientCns = r.patient?.cns || r.patientCns || '';
-            const patientCpf = r.patient?.cpf || r.patientCpf || '';
-            const patientBirthDate = r.patient?.birthDate || r.patientBirthDate || '';
+         console.log('[EXPORT] Fetched API records length after filters:', normalizedRecords.length);
 
-            // Flatten nested procedure data
-            const procedureCode = r.procedure?.code || r.procedureCode || '';
-            const procedureName = r.procedure?.name || r.procedureName || '';
+         const displayCompetence = modalCompetence + (exportGoalFilter === 'pactuados' ? ' (Pactuados)' : exportGoalFilter === 'nao_pactuados' ? ' (Não Pactuados)' : '');
 
-            // Flatten professional data
-            const professionalName = r.professional?.name || r.professionalName || prof.name;
-            const professionalCns = r.professional?.cns || r.professionalCns || prof.cns;
-
-            return {
-               ...r,
-               patientName,
-               patientCns,
-               patientCpf,
-               patientBirthDate,
-               procedureCode,
-               procedureName,
-               professionalName,
-               professionalCns,
-               attendanceDate: r.productionDate || r.attendanceDate || '',
-               cbo: r.professional?.cbo || r.cbo || prof.cbo || ''
-            };
-         });
-
-         console.log('[EXPORT] Normalized sample:', normalizedRecords[0]);
-
-         // 4. Generate PDF based on Layout
+         // 3. Generate PDF based on Layout
          if (layout === 'sus') {
             await susReportService.generateSusProductionPdf(
                normalizedRecords,
                {
-                  competence: selectedCompetence,
+                  competence: displayCompetence,
                   municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
                   entityName: entityName,
                   logoUrl: entityLogoUrl,
@@ -555,13 +661,21 @@ const Production: React.FC = () => {
                      cns: prof.cns || '',
                      role: prof.assignments?.[0]?.occupation || prof.occupation || '',
                      cbo: prof.assignments?.[0]?.cbo || prof.cbo || '',
-                     unit: prof.assignments?.[0]?.unitName || prof.unitName || '',
+                     unit: (() => {
+                        const units = Array.from(new Set(normalizedRecords.map(r => r.unitName).filter(Boolean)));
+                        return units.length > 0 ? units.join(', ') : getUnitName();
+                     })(),
                      unitCnes: (() => {
-                        const uId = prof.assignments?.[0]?.unitId || prof.unitId;
-                        if (!uId) return '';
-                        // allUnits is already loaded in component state
-                        const unit = allUnits.find(u => u.id === uId || u.cnes === uId);
-                        return unit?.cnes || uId;
+                        const uIds = Array.from(new Set(normalizedRecords.map(r => r.unitId).filter(Boolean)));
+                        if (uIds.length > 0) {
+                           return uIds.map(uId => {
+                              const unit = allUnits.find(u => u.id === uId || u.cnes === uId);
+                              return unit?.cnes || uId;
+                           }).join(', ');
+                        }
+                        const uI = targetUnitId || prof.assignments?.[0]?.unitId || prof.unitId || '';
+                        const u = allUnits.find(u => u.id === uI || u.cnes === uI);
+                        return u?.cnes || uI;
                      })()
                   },
                   signatureUrl: prof.signatureUrl,
@@ -574,23 +688,85 @@ const Production: React.FC = () => {
                   entityResponsible: entityData.responsible
                }
             );
-         } else {
-            // Default Grouped
-            await municipalityReportService.generateProfessionalProductionPdf(
+         } else if (selectedReport?.id === 'profissional_agrupado' || layout === 'default') {
+            await groupedProfessionalReportService.generateGroupedProfessionalPdf(
                normalizedRecords,
                {
-                  competence: selectedCompetence,
+                  competence: displayCompetence || 'Anual',
                   municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
                   entityName: entityName,
                   logoUrl: entityLogoUrl,
                   logoBase64: entityLogoBase64,
                   signatureUrl: prof.signatureUrl,
                   signatureBase64: prof.signatureBase64,
+                  entityAddress: entityData?.address,
+                  entityCnpj: entityData?.cnpj,
+                  entityCity: entityData?.location || claims?.municipalityName || '',
                   professional: {
                      name: prof.name,
                      cns: prof.cns || '',
                      role: prof.assignments?.[0]?.occupation || prof.occupation || '',
-                     unit: prof.assignments?.[0]?.unitName || prof.unitName || ''
+                     unit: (() => {
+                        const units = Array.from(new Set(normalizedRecords.map(r => r.unitName).filter(Boolean)));
+                        return units.length > 0 ? units.join(', ') : getUnitName();
+                     })()
+                  }
+               }
+            );
+         } else if (layout === 'excel_sus') {
+            await susReportService.generateSusProductionExcel(
+               normalizedRecords,
+               {
+                  competence: displayCompetence,
+                  municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
+                  entityName: entityName,
+                  professional: {
+                     name: prof.name,
+                     cns: prof.cns || '',
+                     role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                     cbo: prof.assignments?.[0]?.cbo || prof.cbo || '',
+                     unit: (() => {
+                        const units = Array.from(new Set(normalizedRecords.map(r => r.unitName).filter(Boolean)));
+                        return units.length > 0 ? units.join(', ') : getUnitName();
+                     })(),
+                     unitCnes: (() => {
+                        const uIds = Array.from(new Set(normalizedRecords.map(r => r.unitId).filter(Boolean)));
+                        if (uIds.length > 0) {
+                           return uIds.map(uId => {
+                              const unit = allUnits.find(u => u.id === uId || u.cnes === uId);
+                              return unit?.cnes || uId;
+                           }).join(', ');
+                        }
+                        const uI = targetUnitId || prof.assignments?.[0]?.unitId || prof.unitId || '';
+                        const u = allUnits.find(u => u.id === uI || u.cnes === uI);
+                        return u?.cnes || uI;
+                     })()
+                  }
+               }
+            );
+         } else {
+            // Default Detailed (fallback)
+            await municipalityReportService.generateProfessionalProductionPdf(
+               normalizedRecords,
+               {
+                  competence: displayCompetence,
+                  municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
+                  entityName: entityName,
+                  logoUrl: entityLogoUrl,
+                  logoBase64: entityLogoBase64,
+                  signatureUrl: prof.signatureUrl,
+                  signatureBase64: prof.signatureBase64,
+                  entityAddress: entityData?.address,
+                  entityCnpj: entityData?.cnpj,
+                  entityCity: entityData?.location || claims?.municipalityName || '',
+                  professional: {
+                     name: prof.name,
+                     cns: prof.cns || '',
+                     role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                     unit: (() => {
+                        const units = Array.from(new Set(normalizedRecords.map(r => r.unitName).filter(Boolean)));
+                        return units.length > 0 ? units.join(', ') : getUnitName();
+                     })()
                   }
                }
             );
@@ -604,83 +780,192 @@ const Production: React.FC = () => {
       }
    };
 
-   // --- Unified Export Logic ---
-   const [exportingUnified, setExportingUnified] = useState(false);
-
-   const handleExportUnifiedReport = async () => {
+   const handleBatchExport = async () => {
       if (!claims?.entityId) return;
-      setExportingUnified(true);
-
+      
+      const apiCompetence = (modalMonth === 'all' || modalMonth === 'custom') ? '' : `${modalMonth.padStart(2, '0')}/${modalYear}`;
+      const modalCompetence = modalMonth === 'all' ? '' : modalMonth === 'custom' ? `${appliedStartDate.split('-').reverse().join('/')} até ${appliedEndDate.split('-').reverse().join('/')}` : `${modalMonth.padStart(2, '0')}/${modalYear}`;
+      const layout = selectedReport?.id === 'profissional_agrupado' ? 'grouped' : 'sus';
+      
+      setIsExportingBatch(true);
+      
       try {
          // 1. Fetch Entity Name and Logo
          let entityName = claims.entityName || 'Entidade';
          let entityLogoUrl: string | undefined = undefined;
          let entityLogoBase64: string | undefined = undefined;
+         let entityData: any = {};
 
          const entDoc = await getDoc(doc(db, 'entities', claims.entityId));
          if (entDoc.exists()) {
             const data = entDoc.data();
+            entityData = data;
             entityName = data.name || data.fantasyName || entityName;
             entityLogoUrl = data.logoUrl;
             entityLogoBase64 = data.logoBase64;
          }
 
-         // 2. Fetch All Professionals
-         const allProfs = await fetchProfessionalsByEntity(claims.entityId);
+         const isGrouped = layout === 'grouped';
+         const apiName = isGrouped ? 'getProfessionalProductionGrouped' : 'getProfessionalProductionDetailed';
+         const getRecordsFn = httpsCallable(functions, apiName, { timeout: 540000 });
+         
+         const batchItems = [];
+         
+         const normalizeStr = (str?: string) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : '';
 
-         // 3. Fetch All Production for the competence
-         const records = await municipalityReportService.fetchMunicipalityProduction(
-            claims.municipalityId || '',
-            selectedCompetence,
-            [], // All units
-            claims.entityId,
-            allProfs,
-            allMunicipalities
-         );
+         // Loop filtered professionals that match the selected municipality and unit
+         for (const prof of filteredProfessionals) {
+            
+            const unitSet = new Set<string>();
+            const ids = [prof.id];
+            if (prof.cns) ids.push(prof.cns, `ext_${prof.cns}`, `ext_name_${prof.name.replace(/\s/g, '')}`);
+            if (prof.cpf) ids.push(prof.cpf, `ext_${prof.cpf}`);
+            for (const pId of ids) {
+               if (productionStats[pId]) {
+                  Object.keys(productionStats[pId]).forEach(uId => unitSet.add(uId));
+               }
+            }
 
-         // --- Apply Date Filtering ---
-         // --- Apply Date Filtering (Fixed: String Comparison) ---
-         let filteredRecords = records;
-         // Use Applied Filter for Export, falling back to input if user forgot to click apply?
-         // No, simpler to use applied to match what they see.
-         // Or better: Use Applied. User explicitly asked for "Apply button".
-         if (appliedStartDate && appliedEndDate) {
-            filteredRecords = records.filter((r: any) => {
-               const rRaw = r.rawDate;
-               if (!rRaw) return false;
-               return rRaw >= appliedStartDate && rRaw <= appliedEndDate;
+            let displayUnits = Array.from(unitSet);
+            if (displayUnits.length === 0) {
+               displayUnits = [prof.assignments?.[0]?.unitId || prof.unitId || 'unknown'];
+            }
+
+            const matchedUnitId = displayUnits.find(unitId => {
+               let resolvedUnitName = 'Sem Lotação';
+               const foundUnit = allUnits.find(u => u.id === unitId || u.cnes === unitId);
+               if (foundUnit) {
+                  resolvedUnitName = foundUnit.name;
+               } else {
+                  const assignment = prof.assignments?.find(a => a.unitId === unitId);
+                  if (assignment) {
+                     resolvedUnitName = assignment.unitName || 'Sem Lotação';
+                  } else if (unitId === 'unknown') {
+                     resolvedUnitName = prof.assignments?.[0]?.unitName || prof.unitName || 'Sem Lotação';
+                  }
+               }
+               return filterUnit && normalizeStr(resolvedUnitName) === normalizeStr(filterUnit);
             });
+
+            if (!matchedUnitId && filterUnit) continue;
+
+            const response = await getRecordsFn({
+               entityId: claims.entityId,
+               municipalityId: prof.assignments?.[0]?.municipalityId || claims.municipalityId || '', 
+               unitId: matchedUnitId || undefined,
+               competence: apiCompetence,
+               year: modalYear,
+               startDate: appliedStartDate,
+               endDate: appliedEndDate,
+               day: modalDay === 'all' ? undefined : modalDay.padStart(2, '0'),
+               professionalId: prof.id,
+               professionalCns: prof.cns,
+               professionalName: prof.name,
+               municipalities: allMunicipalities,
+               professionals: professionals.map(p => ({ id: p.id, name: p.name, cns: p.cns || '', cpf: p.cpf || '' })),
+               goalFilter: exportGoalFilter,
+               goalProcedureCodes: municipalityGoals.map(g => String(g.procedureCode || '').replace(/\D/g, '')).filter(c => c.length > 0)
+            });
+
+            let normalizedRecords = response.data as any[];
+            if (normalizedRecords && normalizedRecords.length > 0) {
+                // NEW: Enrich batch records too
+                normalizedRecords = await municipalityReportService.enrichMissingManualDocuments(
+                    normalizedRecords, 
+                    claims.entityId, 
+                    allMunicipalities
+                );
+                
+                const displayCompetence = modalCompetence + (exportGoalFilter === 'pactuados' ? ' (Pactuados)' : exportGoalFilter === 'nao_pactuados' ? ' (Não Pactuados)' : '');
+
+                const getUnitName = () => {
+                    const unit = allUnits.find(u => u.name === filterUnit);
+                    if (unit) return unit.name;
+                    return filterUnit || prof.unitName || '';
+                };
+
+                const optionsOrMeta = isGrouped ? {
+                  competence: displayCompetence || 'Anual',
+                  municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
+                  entityName: entityName,
+                  logoUrl: entityLogoUrl,
+                  logoBase64: entityLogoBase64,
+                  signatureUrl: prof.signatureUrl,
+                  signatureBase64: prof.signatureBase64,
+                  entityAddress: entityData?.address,
+                  entityCnpj: entityData?.cnpj,
+                  entityCity: entityData?.location || claims?.municipalityName || '',
+                  professional: {
+                     name: prof.name,
+                     cns: prof.cns || '',
+                     role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                     unit: (() => {
+                        const units = Array.from(new Set(normalizedRecords.map(r => r.unitName).filter(Boolean)));
+                        return units.length > 0 ? units.join(', ') : getUnitName();
+                     })()
+                  }
+               } : {
+                  competence: displayCompetence,
+                  municipalityName: prof.assignments?.[0]?.municipalityName || 'Município',
+                  entityName: entityName,
+                  logoUrl: entityLogoUrl,
+                  logoBase64: entityLogoBase64,
+                  professional: {
+                     name: prof.name,
+                     cns: prof.cns || '',
+                     role: prof.assignments?.[0]?.occupation || prof.occupation || '',
+                     cbo: prof.assignments?.[0]?.cbo || prof.cbo || '',
+                     unit: (() => {
+                        const units = Array.from(new Set(normalizedRecords.map(r => r.unitName).filter(Boolean)));
+                        return units.length > 0 ? units.join(', ') : getUnitName();
+                     })(),
+                     unitCnes: (() => {
+                        const uIds = Array.from(new Set(normalizedRecords.map(r => r.unitId).filter(Boolean)));
+                        if (uIds.length > 0) {
+                           return uIds.map(uId => {
+                              const unit = allUnits.find(u => u.id === uId || u.cnes === uId);
+                              return unit?.cnes || uId;
+                           }).join(', ');
+                        }
+                        const u = allUnits.find(u => u.name === filterUnit);
+                        return u?.cnes || filterUnit || '';
+                     })()
+                  },
+                  signatureUrl: prof.signatureUrl,
+                  signatureBase64: prof.signatureBase64,
+                  entityAddress: entityData.address,
+                  entityPhone: entityData.phone,
+                  entityCnpj: entityData.cnpj,
+                  entityCity: entityData.location || claims.municipalityName,
+                  entityResponsible: entityData.responsible
+               };
+
+               batchItems.push(isGrouped ? { records: normalizedRecords, meta: optionsOrMeta } : { records: normalizedRecords, options: optionsOrMeta });
+            }
          }
 
-         if (filteredRecords.length === 0) {
-            alert('Nenhuma produção encontrada para esta competência com os filtros selecionados.');
-            setExportingUnified(false);
+         if (batchItems.length === 0) {
+            alert('Nenhuma produção encontrada para os profissionais desta unidade no filtro informado.');
+            setIsExportingBatch(false);
             return;
          }
 
-         // 4. Generate Unified PDF
-         // Only include professionals that are currently in the filtered view
-         await municipalityReportService.generateUnifiedProfessionalProductionPdf(
-            filteredRecords,
-            filteredProfessionals, // Use filtered list instead of allProfs
-            {
-               competence: selectedCompetence,
-               municipalityName: filteredProfessionals[0]?.assignments?.[0]?.municipalityName || 'Município',
-               entityName: entityName,
-               logoUrl: entityLogoUrl,
-               logoBase64: entityLogoBase64
-            }
-         );
-
-         alert('Relatório unificado gerado com sucesso!');
-
+         if (isGrouped) {
+             await groupedProfessionalReportService.generateBatchGroupedProfessionalPdf(batchItems as any[]);
+         } else {
+             await susReportService.generateBatchSusProductionPdf(batchItems as any[]);
+         }
+         
       } catch (error) {
-         console.error("Error exporting unified report:", error);
-         alert("Erro ao exportar relatório unificado.");
+         console.error("Error generating batch PDF:", error);
+         alert("Erro ao exportar lote de relatórios.");
       } finally {
-         setExportingUnified(false);
+         setIsExportingBatch(false);
       }
    };
+
+
+
 
 
    // Calculate Date Constraints based on Competence
@@ -767,46 +1052,107 @@ const Production: React.FC = () => {
       switch (selectedReport.id) {
          case 'metas': // Cumprimento de Metas
             return (
-               <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Meta Global</p>
-                        <h3 className="text-2xl font-bold text-blue-700 dark:text-blue-300">92%</h3>
-                        <p className="text-xs text-blue-600 mt-1">Atingimento médio</p>
-                     </Card>
-                     <Card className="p-4 bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-800">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Grupos na Meta</p>
-                        <h3 className="text-2xl font-bold text-green-700 dark:text-green-300">4/5</h3>
-                        <p className="text-xs text-green-600 mt-1">Grupos de proc.</p>
-                     </Card>
-                     <Card className="p-4 bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-800">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Ponto de Atenção</p>
-                        <h3 className="text-2xl font-bold text-red-700 dark:text-red-300">Cirurgias</h3>
-                        <p className="text-xs text-red-600 mt-1">60% do esperado</p>
-                     </Card>
-                  </div>
-                  <div className="h-80 w-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={META_VS_REAL_BY_GROUP} layout="vertical" margin={{ left: 20 }}>
-                           <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={true} stroke="#e5e7eb" />
-                           <XAxis type="number" domain={[0, 120]} hide />
-                           <YAxis dataKey="group" type="category" width={120} tick={{ fontSize: 12 }} />
-                           <Tooltip cursor={{ fill: 'transparent' }} />
-                           <Legend />
-                           <Bar dataKey="real" name="% Realizado" fill="#10b981" barSize={20} radius={[0, 4, 4, 0]}>
-                           </Bar>
-                           <Bar dataKey="meta" name="Meta (100%)" fill="#e5e7eb" barSize={20} radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                     </ResponsiveContainer>
-                  </div>
-               </div>
+               <GoalsFulfillmentReport
+                  municipalityId={filterMunicipality}
+                  onMunicipalityChange={setFilterMunicipality}
+                  allMunicipalities={allMunicipalities}
+                  year={modalYear}
+               />
+            );
+         case 'financeiro': // Evolução Financeira
+            return (
+               <FinancialEvolutionReport
+                  municipalityId={filterMunicipality}
+                  onMunicipalityChange={setFilterMunicipality}
+                  allMunicipalities={allMunicipalities}
+                  year={modalYear}
+               />
             );
 
-         case 'profissional': // Produção por Profissional
+         case 'profissional':
+         case 'profissional_agrupado': // Produção por Profissional (Ambos os tipos usam a mesma tela de seleção)
             return (
                <div className="space-y-6">
                   {/* Filter Toolbar */}
                   <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+                     
+                     {/* Local Competence Toolbar for this Modal */}
+                     <div className="flex flex-col sm:flex-row gap-3 pb-3 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-2">
+                           <div className={`relative transition-all duration-200 ${modalMonth === 'custom' ? 'hidden' : 'block'}`}>
+                              <Calendar className="w-4 h-4 absolute left-2.5 top-2.5 text-blue-500" />
+                              <select
+                                 value={modalYear}
+                                 onChange={(e) => setModalYear(e.target.value)}
+                                 className="pl-8 pr-8 py-2 border rounded bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium text-sm border-blue-200 dark:border-blue-800 outline-none focus:ring-2 focus:ring-blue-500 h-9"
+                              >
+                                 {Array.from({ length: 5 }, (_, i) => String(currentYearNum - i)).map(y => (
+                                    <option key={y} value={y}>Ano {y}</option>
+                                 ))}
+                              </select>
+                           </div>
+                           <select
+                              value={modalMonth}
+                              onChange={(e) => {
+                                 setModalMonth(e.target.value);
+                                 setModalDay('all');
+                              }}
+                              className="pl-3 pr-8 py-2 border rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm border-gray-300 dark:border-gray-600 outline-none focus:ring-2 focus:ring-blue-500 h-9"
+                           >
+                               <option value="all">Todos os Meses</option>
+                               <option value="custom">Período Personalizado</option>
+                               {monthNames.map((m, i) => (
+                                  <option key={i + 1} value={String(i + 1)}>{m}</option>
+                               ))}
+                           </select>
+                           <select
+                              value={modalDay}
+                              onChange={(e) => setModalDay(e.target.value)}
+                              disabled={modalMonth === 'all' || modalMonth === 'custom'}
+                              className={`pl-3 pr-8 py-2 border rounded text-sm outline-none focus:ring-2 disabled:opacity-50 h-9 transition-colors
+                                 ${modalMonth === 'custom' ? 'hidden' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 focus:ring-blue-500 disabled:cursor-not-allowed'}`}
+                           >
+                              <option value="all">Dias</option>
+                              {modalMonth !== 'all' && modalMonth !== 'custom' && getDaysInMonth(modalYear || String(currentYearNum), modalMonth).map((d: string) => (
+                                 <option key={d} value={d}>{d}</option>
+                              ))}
+                           </select>
+
+                           {modalMonth === 'custom' && (
+                              <div className="flex items-center gap-1 w-full sm:w-auto mt-2 sm:mt-0 animate-fade-in">
+                                 <input
+                                    type="date"
+                                    className="w-full sm:w-auto px-3 py-2 border rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm border-gray-300 dark:border-gray-600 outline-none focus:ring-2 focus:ring-blue-500 h-9"
+                                    value={inputStartDate}
+                                    onChange={(e) => setInputStartDate(e.target.value)}
+                                    title="Data Inicial"
+                                 />
+                                 <span className="text-gray-400 text-xs px-1">até</span>
+                                 <input
+                                    type="date"
+                                    className="w-full sm:w-auto px-3 py-2 border rounded bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm border-gray-300 dark:border-gray-600 outline-none focus:ring-2 focus:ring-blue-500 h-9"
+                                    value={inputEndDate}
+                                    onChange={(e) => setInputEndDate(e.target.value)}
+                                    title="Data Final"
+                                    min={inputStartDate}
+                                 />
+                                 <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-9 ml-1"
+                                    onClick={() => {
+                                       setAppliedStartDate(inputStartDate);
+                                       setAppliedEndDate(inputEndDate);
+                                    }}
+                                    disabled={!inputStartDate && !inputEndDate}
+                                 >
+                                    <Filter className="w-4 h-4 mr-1" /> Aplicar
+                                 </Button>
+                              </div>
+                           )}
+                        </div>
+                     </div>
+
                      <div className="flex flex-col md:flex-row gap-3">
                         <div className="md:w-1/4">
                            <label className="text-xs text-gray-500 mb-1 block">Município</label>
@@ -851,163 +1197,227 @@ const Production: React.FC = () => {
                            </div>
                         </div>
                      </div>
-                     <div className="flex flex-col md:flex-row gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-                        <div className="flex-1 flex gap-3 items-end">
-                           <div className="flex-1">
-                              <label className="text-xs text-gray-500 mb-1 block">Data Inicial</label>
-                              <input
-                                 type="date"
-                                 min={dateConstraints.min}
-                                 max={dateConstraints.max}
-                                 value={inputStartDate}
-                                 onChange={(e) => setInputStartDate(e.target.value)}
-                                 className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700"
-                              />
-                           </div>
-                           <div className="flex-1">
-                              <label className="text-xs text-gray-500 mb-1 block">Data Final</label>
-                              <input
-                                 type="date"
-                                 min={dateConstraints.min}
-                                 max={dateConstraints.max}
-                                 value={inputEndDate}
-                                 onChange={(e) => setInputEndDate(e.target.value)}
-                                 className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700"
-                              />
-                           </div>
-
-                           {/* Actions */}
-                           <Button
-                              variant="primary"
-                              className="bg-blue-600 hover:bg-blue-700 text-white"
-                              onClick={() => {
-                                 setAppliedStartDate(inputStartDate);
-                                 setAppliedEndDate(inputEndDate);
-                              }}
-                              disabled={!inputStartDate || !inputEndDate}
+                     <div className="flex flex-col xl:flex-row gap-3 pt-2 border-t border-gray-100 dark:border-gray-700 items-start xl:items-center justify-between mt-2">
+                        {/* NOVO: Modalidade de Faturamento Mestre */}
+                        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/10 px-3 py-1.5 rounded border border-emerald-100 dark:border-emerald-800/50">
+                           <label className="text-xs font-medium text-emerald-800 dark:text-emerald-200 uppercase shrink-0">Modalidade de Relatório:</label>
+                           <select
+                              value={exportGoalFilter}
+                              onChange={(e) => setExportGoalFilter(e.target.value as 'all' | 'pactuados' | 'nao_pactuados')}
+                              className="bg-transparent border-none text-sm font-semibold text-emerald-900 dark:text-emerald-100 focus:ring-0 cursor-pointer outline-none"
                            >
-                              <Filter className="w-4 h-4 mr-1" /> Aplicar
-                           </Button>
-
-                           {(filterName || filterUnit || filterMunicipality || inputStartDate || inputEndDate || appliedStartDate) && (
-                              <Button
-                                 variant="ghost"
-                                 className="text-gray-500 hover:text-red-500"
-                                 onClick={() => {
-                                    setFilterName('');
-                                    setFilterMunicipality('');
-                                    setFilterUnit('');
-                                    setInputStartDate('');
-                                    setInputEndDate('');
-                                    setAppliedStartDate('');
-                                    setAppliedEndDate('');
-                                 }}
-                              >
-                                 <X className="w-4 h-4 mr-1" /> Limpar
-                              </Button>
-                           )}
+                              <option value="all">Global (Todos os Procedimentos)</option>
+                              <option value="pactuados">Apenas Procedimentos Pactuados (Metas Ativas)</option>
+                              <option value="nao_pactuados">Apenas Procedimentos Não Pactuados</option>
+                           </select>
                         </div>
-                        <div className="flex items-end">
-                           <Button
-                              variant="secondary"
-                              className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white border-none shadow-sm shadow-green-500/30"
-                              onClick={handleExportUnifiedReport}
-                              disabled={exportingUnified || filteredProfessionals.length === 0}
-                           >
-                              {exportingUnified ? <Activity className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-                              Baixar Agrupado ({Object.keys(productionStats).length})
-                           </Button>
+                        
+                        <div className="flex-1 flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-end w-full justify-end">
+                           <div className="flex gap-2 w-full sm:w-auto">
+                              {(filterName || filterUnit || filterMunicipality || exportGoalFilter !== 'all') && (
+                                 <Button
+                                    variant="ghost"
+                                    className="text-gray-500 hover:text-red-500 flex-1 sm:flex-none justify-center"
+                                    onClick={() => {
+                                       setFilterName('');
+                                       setFilterMunicipality('');
+                                       setFilterUnit('');
+                                       setInputStartDate('');
+                                       setInputEndDate('');
+                                       setAppliedStartDate('');
+                                       setAppliedEndDate('');
+                                       setExportGoalFilter('all');
+                                    }}
+                                 >
+                                    <X className="w-4 h-4 mr-1 shrink-0" /> Limpar Filtros
+                                 </Button>
+                              )}
+
+                              {filterMunicipality && filterUnit && (
+                                 <Button 
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm flex-1 sm:flex-none justify-center"
+                                    onClick={handleBatchExport}
+                                    disabled={isExportingBatch || loadingReport}
+                                 >
+                                    {isExportingBatch ? (
+                                       <>
+                                          <Activity className="w-4 h-4 mr-2 animate-spin" /> Gerando Lote...
+                                       </>
+                                    ) : (
+                                       <>
+                                          <Download className="w-4 h-4 mr-2" /> Baixar Agrupado da Unidade
+                                       </>
+                                    )}
+                                 </Button>
+                              )}
+                           </div>
                         </div>
                      </div>
                   </div>
 
                   {loadingReport ? (
-                     <div className="flex justify-center items-center py-10">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+                     <div className="flex flex-col justify-center items-center py-16">
+                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600 mb-4"></div>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Carregando Informações...</h3>
+                        <p className="text-sm text-gray-500 mt-1">Aguarde enquanto os dados são agregados.</p>
                      </div>
                   ) : (
-                     <Table headers={['Profissional', 'Lotação (Principal)', 'Procedimentos', 'Ações']}>
-                        {filteredProfessionals.map((prof) => (
-                           <tr key={prof.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                              <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                 <div>
-                                    {prof.name}
-                                    <span className="block text-xs text-gray-500 font-mono">CNS: {prof.cns}</span>
-                                 </div>
-                              </td>
-                              <td className="px-6 py-4 text-sm text-gray-500">
-                                 {prof.assignments?.[0]?.unitName || prof.unitName || 'Sem Lotação'}
-                                 {prof.assignments?.[0]?.municipalityName && ` (${prof.assignments[0].municipalityName})`}
-                              </td>
-                              <td className="px-6 py-4 font-mono">
-                                 <Badge type="neutral" className="font-mono">
-                                    {productionStats[prof.id] || 0}
-                                 </Badge>
-                              </td>
-                              <td className="px-6 py-4 text-right">
-                                 <div className="flex items-center justify-end gap-2">
-                                    <div className="relative">
-                                       <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="h-8 text-xs gap-1"
-                                          onClick={() => setExportDropdownOpen(exportDropdownOpen === prof.id ? null : prof.id)}
-                                          disabled={exportingProfId === prof.id}
-                                       >
-                                          {exportingProfId === prof.id ? (
-                                             <Activity className="w-3 h-3 animate-spin" />
-                                          ) : (
-                                             <Download className="w-3 h-3" />
-                                          )}
-                                          Exportar
-                                          <ChevronDown className="w-3 h-3 ml-1" />
-                                       </Button>
+                     <Table headers={['Profissional', 'Lotação (Principal)', 'Procedimentos', 'Ações']} wrapperClassName="pb-32 min-h-[250px]">
+                        {filteredProfessionals.flatMap((prof) => {
+                           const getProfUnitCount = (uId: string) => {
+                              let c = 0;
+                              const ids = [prof.id];
+                              if (prof.cns) ids.push(prof.cns, `ext_${prof.cns}`, `ext_name_${prof.name.replace(/\s/g, '')}`);
+                              if (prof.cpf) ids.push(prof.cpf, `ext_${prof.cpf}`);
+                              for (const pId of ids) {
+                                 if (productionStats[pId] && productionStats[pId][uId]) {
+                                    c += productionStats[pId][uId];
+                                 }
+                              }
+                              return c;
+                           };
 
-                                       {exportDropdownOpen === prof.id && (
-                                          <>
-                                             <div
-                                                className="fixed inset-0 z-10"
-                                                onClick={() => setExportDropdownOpen(null)}
-                                             />
-                                             <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 z-20 py-1">
-                                                <button
-                                                   onClick={() => handleExportProfessional(prof, 'grouped')}
-                                                   className="w-full text-left px-4 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
-                                                >
-                                                   <FileText className="w-3 h-3" />
-                                                   Relatório Agrupado
-                                                </button>
-                                                <button
-                                                   onClick={() => handleExportProfessional(prof, 'sus')}
-                                                   className="w-full text-left px-4 py-2 text-xs text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 font-medium"
-                                                >
-                                                   <Building2 className="w-3 h-3" />
-                                                   Boletim BDPA (SUS)
-                                                </button>
-                                             </div>
-                                          </>
-                                       )}
-                                    </div>
+                           const unitSet = new Set<string>();
+                           const ids = [prof.id];
+                           if (prof.cns) ids.push(prof.cns, `ext_${prof.cns}`, `ext_name_${prof.name.replace(/\s/g, '')}`);
+                           if (prof.cpf) ids.push(prof.cpf, `ext_${prof.cpf}`);
+                           for (const pId of ids) {
+                              if (productionStats[pId]) {
+                                 Object.keys(productionStats[pId]).forEach(uId => unitSet.add(uId));
+                              }
+                           }
 
-                                    <Button
-                                       size="sm"
-                                       variant="outline"
-                                       className="h-8 text-xs gap-1 whitespace-nowrap"
-                                       onClick={() => handleAttachSignature(prof)}
-                                       disabled={uploadingSignatureId === prof.id}
-                                       title={prof.signatureUrl ? "Ver/Alterar Assinatura" : "Anexar Assinatura Digitalizada"}
-                                    >
-                                       {uploadingSignatureId === prof.id ? (
-                                          <Activity className="w-3 h-3 animate-spin" />
+                           let displayUnits = Array.from(unitSet);
+                           if (displayUnits.length === 0) {
+                              displayUnits = [prof.assignments?.[0]?.unitId || prof.unitId || 'unknown'];
+                           }
+
+                           return displayUnits.map((unitId) => {
+                              let resolvedUnitName = 'Sem Lotação';
+                              let resolvedMuniName = '';
+
+                              const foundUnit = allUnits.find(u => u.id === unitId || u.cnes === unitId);
+                              if (foundUnit) {
+                                 resolvedUnitName = foundUnit.name;
+                                 resolvedMuniName = allMunicipalities.find(m => m.id === foundUnit.municipalityId)?.name || '';
+                              } else {
+                                 const assignment = prof.assignments?.find(a => a.unitId === unitId);
+                                 if (assignment) {
+                                    resolvedUnitName = assignment.unitName || 'Sem Lotação';
+                                    resolvedMuniName = assignment.municipalityName || '';
+                                 } else if (unitId === 'unknown') {
+                                    resolvedUnitName = prof.assignments?.[0]?.unitName || prof.unitName || 'Sem Lotação';
+                                    resolvedMuniName = prof.assignments?.[0]?.municipalityName || '';
+                                 }
+                              }
+
+                              if (filterUnit && normalize(resolvedUnitName) !== normalize(filterUnit)) {
+                                 return null;
+                              }
+                              
+                              if (filterMunicipality && normalize(resolvedMuniName) !== normalize(filterMunicipality)) {
+                                 return null;
+                              }
+
+                              const rowKey = `${prof.id}-${unitId}`;
+                              const statCount = getProfUnitCount(unitId);
+
+                              return (
+                                 <tr key={rowKey} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+                                       <div>
+                                          {prof.name}
+                                          <span className="block text-xs text-gray-500 font-mono">CNS: {prof.cns}</span>
+                                       </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-500">
+                                       {resolvedUnitName}
+                                       {resolvedMuniName && ` (${resolvedMuniName})`}
+                                    </td>
+                                    <td className="px-6 py-4 font-mono">
+                                       {loadingStats ? (
+                                          <div className="flex items-center gap-2 text-gray-400">
+                                             <Activity className="w-4 h-4 animate-spin" />
+                                             <span className="text-xs">Calculando...</span>
+                                          </div>
                                        ) : (
-                                          <FileSignature className={`w-3 h-3 ${prof.signatureUrl ? 'text-green-600' : 'text-gray-400'}`} />
+                                          <Badge type="neutral" className="font-mono">
+                                             {statCount}
+                                          </Badge>
                                        )}
-                                       {prof.signatureUrl ? 'Ver Assinatura' : 'Anexar Assinatura'}
-                                    </Button>
-                                 </div>
-                              </td>
-                           </tr>
-                        ))}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                       <div className="flex items-center justify-end gap-2">
+                                          <div className="relative border-r border-gray-100 dark:border-gray-700/50 pr-2">
+                                             {selectedReport?.id === 'profissional_agrupado' ? (
+                                                <Button
+                                                   size="sm"
+                                                   variant="outline"
+                                                   className="h-8 text-xs gap-1"
+                                                   onClick={() => handleExportProfessional(prof, 'default', unitId)}
+                                                   disabled={exportingProfId === rowKey}
+                                                >
+                                                   {exportingProfId === rowKey ? <Activity className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                                                   Gerar PDF
+                                                </Button>
+                                             ) : (
+                                                <>
+                                                   <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className="h-8 text-xs gap-1 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                                                      onClick={() => setExportDropdownOpen(exportDropdownOpen === rowKey ? null : rowKey)}
+                                                      disabled={exportingProfId === rowKey}
+                                                   >
+                                                      {exportingProfId === rowKey ? <Activity className="w-3 h-3 animate-spin" /> : <Building2 className="w-3 h-3" />}
+                                                      Boletim BPA
+                                                      <ChevronDown className="w-3 h-3 ml-1" />
+                                                   </Button>
+                                                   {exportDropdownOpen === rowKey && (
+                                                      <>
+                                                         <div className="fixed inset-0 z-10" onClick={() => setExportDropdownOpen(null)} />
+                                                         <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 z-20 py-1">
+                                                            <button
+                                                               onClick={() => { handleExportProfessional(prof, 'sus', unitId); setExportDropdownOpen(null); }}
+                                                               className="w-full text-left px-4 py-2 text-[12px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                                            >
+                                                               <FileText className="w-3 h-3 text-red-500" />
+                                                               Gerar em PDF
+                                                            </button>
+                                                            <button
+                                                               onClick={() => { handleExportProfessional(prof, 'excel_sus', unitId); setExportDropdownOpen(null); }}
+                                                               className="w-full text-left px-4 py-2 text-[12px] text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                                            >
+                                                               <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+                                                               Exportar em Excel
+                                                            </button>
+                                                         </div>
+                                                      </>
+                                                   )}
+                                                </>
+                                             )}
+                                          </div>
+                                          <Button
+                                             size="sm"
+                                             variant="outline"
+                                             className="h-8 text-xs gap-1 whitespace-nowrap"
+                                             onClick={() => handleAttachSignature(prof)}
+                                             disabled={uploadingSignatureId === prof.id}
+                                             title={prof.signatureUrl ? "Ver/Alterar Assinatura" : "Anexar Assinatura Digitalizada"}
+                                          >
+                                             {uploadingSignatureId === prof.id ? (
+                                                <Activity className="w-3 h-3 animate-spin" />
+                                             ) : (
+                                                <FileSignature className={`w-3 h-3 ${prof.signatureUrl ? 'text-green-600' : 'text-gray-400'}`} />
+                                             )}
+                                             {prof.signatureUrl ? 'Ver Assinatura' : 'Anexar Assinatura'}
+                                          </Button>
+                                       </div>
+                                    </td>
+                                 </tr>
+                              );
+                           });
+                        })}
                         {filteredProfessionals.length === 0 && (
                            <tr>
                               <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
@@ -1020,6 +1430,8 @@ const Production: React.FC = () => {
                </div>
             );
 
+
+
          case 'unidades': // Comparativo de Unidades
             return (
                <UnitComparativeReport
@@ -1028,6 +1440,20 @@ const Production: React.FC = () => {
                   allMunicipalities={allMunicipalities}
                   competence={selectedCompetence}
                   allUnits={allUnits}
+                  entityName={entity?.name || entity?.fantasyName || claims?.entityName || 'Entidade Responsável'}
+               />
+            );
+
+         case 'cbo_municipal': // Produção por CBO - Municipal
+            return (
+               <CboMunicipalReport
+                  municipalityId={filterMunicipality}
+                  onMunicipalityChange={setFilterMunicipality}
+                  allMunicipalities={allMunicipalities}
+                  competence={selectedCompetence}
+                  allUnits={allUnits}
+                  professionals={professionals}
+                  entityName={entity?.name || entity?.fantasyName || claims?.entityName || 'Entidade Responsável'}
                />
             );
 
@@ -1151,9 +1577,9 @@ const Production: React.FC = () => {
    const renderDashboard = () => (
       <div className="space-y-6 animate-in fade-in duration-500">
          {/* KPI Cards */}
-         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
             <Card className="p-5 border-l-4 border-blue-500">
-               <div className="text-sm text-gray-500 font-medium">Produção Total (Qtd)</div>
+               <div className="text-sm text-gray-500 font-medium">Produção Pactuada (Qtd)</div>
                <div className="mt-2">
                   {dashboardLoading ? (
                      <Skeleton className="h-8 w-24" />
@@ -1163,9 +1589,21 @@ const Production: React.FC = () => {
                      </div>
                   )}
                </div>
-               <div className="flex items-center mt-2 text-sm text-blue-600 font-medium">
-                  {production.trendUp ? <ArrowUpRight className="w-4 h-4 mr-1" /> : <Activity className="w-4 h-4 mr-1" />}
-                  {production.trend}% vs anterior
+            </Card>
+
+            <Card className="p-5 border-l-4 border-gray-400">
+               <div className="text-sm text-gray-500 font-medium">Produção Não Pactuada</div>
+               <div className="mt-2">
+                  {dashboardLoading ? (
+                     <Skeleton className="h-8 w-24" />
+                  ) : (
+                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {(production.totalNonPactuated || 0).toLocaleString('pt-BR')}
+                     </div>
+                  )}
+               </div>
+               <div className="flex items-center mt-2 text-sm text-red-600 font-medium">
+                  Extra-teto
                </div>
             </Card>
 
@@ -1307,91 +1745,71 @@ const Production: React.FC = () => {
          </div>
 
          {/* Performance por Profissional (Simplificado/Inteligente) */}
-         {(dashboardProfessionals.value > 0 || dashboardLoading) && (
-            <Card className="overflow-hidden">
-               <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                     <Users className="w-5 h-5 text-purple-600" />
-                     Performance por Profissional
-                  </h3>
-                  <Button variant="outline" className="text-xs" onClick={() => setActiveTab('reports')}>
-                     Ver Relatório Completo <ChevronRight className="w-3 h-3 ml-1" />
-                  </Button>
-               </div>
-               <div className="p-6 bg-gray-50 dark:bg-gray-800/50 text-center">
-                  {dashboardLoading ? (
-                     <div className="flex flex-col items-center justify-center py-4">
-                        <Skeleton className="h-4 w-1/2 mb-4" />
-                        <Skeleton className="h-10 w-40" />
-                     </div>
-                  ) : (
-                     <>
-                        <p className="text-sm text-gray-500 mb-4">
-                           A análise detalhada de performance individual, incluindo cumprimento de metas e faturamento, está disponível na aba <strong>Relatórios Gerenciais</strong>.
-                        </p>
-                        <Button onClick={() => handleOpenReport({ id: 'profissional', title: 'Produção por Profissional', desc: '', icon: Users, color: '' })} variant="secondary">
-                           Abrir Análise Detalhada
-                        </Button>
-                     </>
-                  )}
-               </div>
-            </Card>
-         )}
+         <div className="mt-6">
+            <ProfessionalPerformanceWidget initialYear={selectedYear} initialMonth={selectedMonth} />
+         </div>
       </div>
    );
 
    const renderReports = () => (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
          {[
-            { id: 'metas', title: 'Cumprimento de Metas', desc: 'Evolução da produção vs. meta definida por unidade e procedimento.', icon: Target, color: 'text-blue-600' },
-            { id: 'profissional', title: 'Produção por Profissional', desc: 'Detalhamento de volume, valores e ranking de produtividade.', icon: Users, color: 'text-emerald-600' },
+            { id: 'profissional_agrupado', title: 'Produção por Profissional - Agrupado', desc: 'Relatório do profissional por agrupamento de procedimentos.', icon: Users, color: 'text-indigo-600' },
+            { id: 'profissional', title: 'Produção por Profissional - Individualizado', desc: 'Relatório detalhado por paciente, procedimento, datas e quantidades.', icon: Users, color: 'text-emerald-600' },
+            { id: 'cbo_municipal', title: 'Produção por CBO - Municipal', desc: 'Totalização de produção por Município agrupado por Unidade e CBO.', icon: Users, color: 'text-pink-600' },
             { id: 'unidades', title: 'Comparativo de Unidades', desc: 'Análise de desempenho entre postos de saúde do município.', icon: Building2, color: 'text-purple-600' },
-            { id: 'procedimentos', title: 'Procedimentos Mais Realizados', desc: 'Curva ABC de procedimentos por volume e valor faturado.', icon: BarChart2, color: 'text-amber-600' },
-            { id: 'meta_realizada', title: 'Meta Física vs Realizada', desc: 'Indicador de eficiência global e por grupos de procedimentos.', icon: Activity, color: 'text-red-600' },
-            { id: 'cobertura', title: 'Indicadores de Cobertura', desc: 'Análise populacional, faixa etária e sexo dos pacientes atendidos.', icon: PieChart, color: 'text-indigo-600' },
-            { id: 'pacientes', title: 'Pacientes por Unidade', desc: 'Listagem nominal ou quantitativa de pacientes atendidos.', icon: Users, color: 'text-cyan-600' },
-            { id: 'financeiro', title: 'Evolução Financeira', desc: 'Série histórica de faturamento aprovado e glosado.', icon: TrendingUp, color: 'text-green-600' },
-         ].map((rep, idx) => {
+            { id: 'metas', title: 'Cumprimento de Metas', desc: 'Evolução da produção vs. meta definida por unidade e procedimento.', icon: Target, color: 'text-blue-600' },
+            { id: 'financeiro', title: 'Evolução Financeira', desc: 'Série histórica de faturamento produzido com base nos valores das metas.', icon: TrendingUp, color: 'text-green-600' },
+            { id: 'procedimentos', title: 'Procedimentos Mais Realizados', desc: 'Curva ABC de procedimentos por volume e valor faturado.', icon: BarChart2, color: 'text-amber-600', comingSoon: true },
+            { id: 'meta_realizada', title: 'Meta Física vs Realizada', desc: 'Indicador de eficiência global e por grupos de procedimentos.', icon: Activity, color: 'text-red-600', comingSoon: true },
+            { id: 'cobertura', title: 'Indicadores de Cobertura', desc: 'Análise populacional, faixa etária e sexo dos pacientes atendidos.', icon: PieChart, color: 'text-teal-600', comingSoon: true },
+            { id: 'pacientes', title: 'Pacientes por Unidade', desc: 'Listagem nominal ou quantitativa de pacientes atendidos.', icon: Users, color: 'text-cyan-600', comingSoon: true },
+         ].filter(rep => {
+            if (isCoordenacao && ['cbo_municipal', 'unidades', 'metas', 'financeiro'].includes(rep.id)) {
+               return false;
+            }
+            return true;
+         }).map((rep: any, idx) => {
             const Icon = rep.icon;
             return (
                <Card key={idx} className="p-6 flex flex-col justify-between hover:shadow-lg transition-shadow cursor-pointer border border-gray-200 dark:border-gray-700">
-                  <div>
-                     <div className={`p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 w-fit mb-4 ${rep.color}`}>
-                        <Icon className="w-6 h-6" />
-                     </div>
-                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{rep.title}</h3>
-                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{rep.desc}</p>
-                  </div>
-                  <div className="flex gap-2 mt-auto">
-                     <Button
-                        variant="outline"
-                        className="flex-1 text-xs"
-                        onClick={() => handleOpenReport(rep)}
-                     >
-                        <Eye className="w-3 h-3 mr-2" /> Visualizar
-                     </Button>
-                     {rep.id !== 'unidades' && rep.id !== 'profissional' && (
-                        <Button
-                           variant="secondary"
-                           className="flex-1 text-xs"
-                           onClick={() => {
-                              if (rep.id === 'profissional') {
-                                 handleExportUnifiedReport();
-                              } else {
-                                 // Simulation for others
-                                 handleGenerate('PDF');
-                              }
-                           }}
-                           disabled={rep.id === 'profissional' ? exportingUnified : false}
-                        >
-                           {rep.id === 'profissional' && exportingUnified ? (
-                              <Activity className="w-3 h-3 mr-2 animate-spin" />
-                           ) : (
-                              <Download className="w-3 h-3 mr-2" />
-                           )}
-                           PDF
-                        </Button>
+                  <div className={`p-6 flex flex-col justify-between h-full relative ${rep.comingSoon ? 'opacity-75 grayscale-[0.5]' : ''}`}>
+                     {rep.comingSoon && (
+                        <div className="absolute top-4 right-4 bg-gray-100 dark:bg-gray-700 text-gray-500 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">
+                           Em Breve
+                        </div>
                      )}
+                     <div>
+                        <div className={`p-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 w-fit mb-4 ${rep.color}`}>
+                           <Icon className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{rep.title}</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{rep.desc}</p>
+                     </div>
+                     <div className="flex gap-2 mt-auto">
+                        <Button
+                           variant="outline"
+                           className="flex-1 text-xs"
+                           onClick={() => !rep.comingSoon && handleOpenReport(rep)}
+                           disabled={rep.comingSoon}
+                        >
+                           <Eye className="w-3 h-3 mr-2" /> Visualizar
+                        </Button>
+                        {rep.id !== 'unidades' && rep.id !== 'profissional' && rep.id !== 'profissional_agrupado' && rep.id !== 'cbo_municipal' && rep.id !== 'metas' && rep.id !== 'financeiro' && (
+                           <Button
+                              variant="secondary"
+                              className="flex-1 text-xs"
+                              onClick={() => {
+                                 if (rep.comingSoon) return;
+                                 handleGenerate('PDF');
+                              }}
+                              disabled={rep.comingSoon}
+                           >
+                              <Download className="w-3 h-3 mr-2" />
+                              PDF
+                           </Button>
+                        )}
+                     </div>
                   </div>
                </Card>
             )
@@ -1576,6 +1994,7 @@ const Production: React.FC = () => {
 
    return (
       <div className="space-y-6">
+         <div id="zero-production-alert-portal" />
          {/* Header Principal */}
          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
@@ -1585,23 +2004,71 @@ const Production: React.FC = () => {
             </div>
          </div>
 
-         <div className="flex flex-col sm:flex-row gap-3">
-            {/* Seletor de Competência */}
-            <div className="relative">
-               <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+            {/* Seletor de Município */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+               <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-500 mr-2 flex-shrink-0" />
+               <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mr-2 flex-shrink-0 hidden sm:inline-block">Município:</span>
                <select
-                  value={selectedCompetence}
-                  onChange={(e) => setSelectedCompetence(e.target.value)}
-                  className="pl-10 pr-8 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-gray-50"
+                  value={selectedMunicipality}
+                  onChange={(e) => setSelectedMunicipality(e.target.value)}
+                  className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[130px] flex-1"
                >
-                  {competenceOptions.map(comp => (
-                     <option key={comp} value={comp}>{comp}</option>
+                  <option value="all" className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
+                     Todos os Municípios
+                  </option>
+                  {allMunicipalities.map((m) => (
+                     <option key={m.id} value={m.id} className="text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
+                        {m.name}
+                     </option>
                   ))}
                </select>
-               <ChevronRight className="absolute right-3 top-3 w-3 h-3 text-gray-500 transform rotate-90" />
             </div>
 
-            <Button variant="outline" className="flex items-center gap-2">
+            {/* Year Selector */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+               <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-500 mr-2 flex-shrink-0" />
+               <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[70px]"
+               >
+                  <option value={currentYearNum.toString()}>Ano {currentYearNum}</option>
+                  <option value={(currentYearNum - 1).toString()}>Ano {currentYearNum - 1}</option>
+                  <option value={(currentYearNum - 2).toString()}>Ano {currentYearNum - 2}</option>
+               </select>
+            </div>
+
+            {/* Month Selector */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+               <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[100px]"
+               >
+                  <option value="all">Todos os Meses</option>
+                  {monthNames.map((monthName, index) => (
+                     <option key={index + 1} value={String(index + 1)}>{monthName}</option>
+                  ))}
+               </select>
+            </div>
+
+            {/* Day Selector */}
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+               <select
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(e.target.value)}
+                  disabled={selectedMonth === 'all'}
+                  className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[60px] disabled:opacity-50"
+               >
+                  <option value="all">Dias</option>
+                  {getDaysInMonth(selectedYear, selectedMonth).map((day) => (
+                     <option key={day} value={day}>Dia {day}</option>
+                  ))}
+               </select>
+            </div>
+
+            <Button variant="outline" className="flex items-center gap-2 h-[38px]">
                <Filter className="w-4 h-4" /> Filtros Avançados
             </Button>
          </div>
@@ -1613,7 +2080,8 @@ const Production: React.FC = () => {
                {[
                   { id: 'dashboard', label: 'Dashboard & Monitoramento', icon: BarChart2 },
                   { id: 'reports', label: 'Relatórios Gerenciais', icon: FileText },
-                  { id: 'technical', label: 'Arquivos Técnicos (SIA)', icon: Database },
+                  ...(!isCoordenacao ? [{ id: 'history', label: 'Histórico de Produção', icon: Database }] : []),
+                  { id: 'lancamento', label: 'Lançar Produção', icon: PlusCircle },
                   { id: 'connector', label: 'Conector', icon: Activity },
                ].map(tab => (
                   <button
@@ -1638,13 +2106,23 @@ const Production: React.FC = () => {
          <div className="min-h-[500px]">
             {activeTab === 'dashboard' && renderDashboard()}
             {activeTab === 'reports' && renderReports()}
-            {activeTab === 'technical' && renderTechnical()}
             {activeTab === 'connector' && (
                <ConnectorDashboard
                   entityId={claims?.entityId || ''}
-                  municipalities={allMunicipalities.filter(m => m.lediConfig?.integrationStatus === 'ACTIVE')}
+                  municipalities={allMunicipalities}
                   competence={selectedCompetence}
                />
+            )}
+            {activeTab === 'history' && (
+               <GlobalProductionHistory 
+                  entityId={claims?.entityId || ''}
+                  municipalities={allMunicipalities}
+                  competence={selectedCompetence}
+                  day={selectedDay}
+               />
+            )}
+            {activeTab === 'lancamento' && (
+               <GlobalRegisterProduction />
             )}
          </div>
 
@@ -1653,12 +2131,19 @@ const Production: React.FC = () => {
             isOpen={isReportModalOpen}
             onClose={() => setIsReportModalOpen(false)}
             title={selectedReport?.title || 'Detalhes do Relatório'}
-            className={selectedReport?.id === 'unidades' || selectedReport?.id === 'profissional' ? 'max-w-[95vw]' : 'max-w-5xl'}
+            className={selectedReport?.id === 'unidades' || selectedReport?.id === 'profissional' || selectedReport?.id === 'profissional_agrupado' || selectedReport?.id === 'metas' || selectedReport?.id === 'financeiro' ? 'max-w-[95vw]' : 'max-w-5xl'}
          >
             <div className="mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">
                <p className="text-gray-500 dark:text-gray-400">{selectedReport?.desc}</p>
                <div className="mt-2 flex items-center gap-2">
-                  <Badge type="neutral">Competência: {selectedCompetence}</Badge>
+                  {selectedReport?.id !== 'metas' && selectedReport?.id !== 'financeiro' && selectedReport?.id !== 'cbo_municipal' && (
+                     <Badge type="neutral">
+                        {(selectedReport?.id === 'profissional' || selectedReport?.id === 'profissional_agrupado') 
+                           ? `Competência: ${displayCompetenceText}`
+                           : `Competência: ${selectedCompetence || 'Ano Inteiro'}`
+                        }
+                     </Badge>
+                  )}
                   <Badge type="success">Dados Consolidados</Badge>
                </div>
             </div>

@@ -102,11 +102,15 @@ export const connectorService = {
 
                         return recSnap.docs.map(d => {
                             const data = d.data();
-                            const rawCode = String(data.procedureCode || data.procedure?.code || '').toUpperCase();
-                            const rawName = String(data.procedureName || data.procedure?.name || '').toUpperCase();
+                            let rawCode = String(data.procedureCode || data.procedure?.code || '').toUpperCase();
+                            let rawName = String(data.procedureName || data.procedure?.name || '').toUpperCase();
+                            const cbo = String(data.professional?.cbo || '').trim();
 
                             // A. FILTER DUPLICATES (Logic from ConnectorDashboard)
-                            if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                            if (cbo === '251605' && rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                                rawCode = '0301010030';
+                                rawName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
+                            } else if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
                                 return null;
                             }
 
@@ -254,11 +258,15 @@ export const connectorService = {
 
                 return snapshot.docs.map(d => {
                     const data = d.data();
-                    const rawCode = String(data.procedureCode || data.procedure?.code || '').toUpperCase();
-                    const rawName = String(data.procedureName || data.procedure?.name || '').toUpperCase();
+                    let rawCode = String(data.procedureCode || data.procedure?.code || '').toUpperCase();
+                    let rawName = String(data.procedureName || data.procedure?.name || '').toUpperCase();
+                    const cbo = String(data.professional?.cbo || '').trim();
 
                     // A. FILTER DUPLICATES
-                    if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                    if (cbo === '251605' && rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                        rawCode = '0301010030';
+                        rawName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
+                    } else if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
                         return null;
                     }
 

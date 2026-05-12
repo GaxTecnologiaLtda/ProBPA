@@ -6,7 +6,7 @@ import { logSystemEvent, LogLevel } from '../utils/logger';
 
 export const triggerDashboardSubsedeRefresh = functions
     .region("southamerica-east1")
-    .runWith({ memory: "512MB", timeoutSeconds: 300 })
+    .runWith({ memory: "1GB", timeoutSeconds: 540 })
     .https.onCall(async (data, context) => {
         // 1. Authentication Check
         if (!context.auth || !context.auth.token.entityId) {

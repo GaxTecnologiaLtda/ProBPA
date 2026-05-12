@@ -702,6 +702,8 @@ export const getProfessionalHistory = async (professionalId: string, entityId?: 
                     quantity: data.quantity,
                     unitId: data.unitId,
                     patientCns: data.patientCns,
+                    patientCpf: data.patientCpf,
+                    patientName: data.patientName,
                     status: data.status || 'pending',
                     observations: data.obs,
                     firestorePath: doc.ref.path // Store exact path

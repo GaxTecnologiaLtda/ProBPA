@@ -620,6 +620,7 @@ export const CBO_LIST = [
       { value: '223430', label: '223430 – Farmacêutico em Saúde Pública' },
       { value: '223445', label: '223445 – Farmacêutico Hospitalar e Clínico' },
       { value: '324205', label: '324205 – Técnico em Patologia Clínica' },
+      { value: '221205', label: '221205 – Biomédico' },
       { value: '223710', label: '223710 – Nutricionista' }
     ]
   },

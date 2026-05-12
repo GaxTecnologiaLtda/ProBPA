@@ -14,10 +14,11 @@ export const StatCard: React.FC<{
   value: string | number;
   icon: React.ElementType;
   trend?: string;
+  trendSubtitle?: string;
   trendUp?: boolean;
   colorClass?: string;
   helpText?: string;
-}> = ({ title, value, icon: Icon, trend, trendUp, colorClass = 'bg-blue-50 text-blue-600', helpText }) => {
+}> = ({ title, value, icon: Icon, trend, trendSubtitle, trendUp, colorClass = 'bg-blue-50 text-blue-600', helpText }) => {
   const [showTooltip, setShowTooltip] = React.useState(false);
 
   return (
@@ -59,7 +60,9 @@ export const StatCard: React.FC<{
           <span className={`font-medium ${trendUp ? 'text-green-600' : 'text-red-600'}`}>
             {trendUp ? '+' : ''}{trend}
           </span>
-          <span className="text-gray-500 dark:text-gray-400 ml-2">desde o último mês</span>
+          {trendSubtitle && (
+            <span className="text-gray-500 dark:text-gray-400 ml-2">{trendSubtitle}</span>
+          )}
         </div>
       )}
     </Card>
@@ -82,8 +85,8 @@ export const Badge: React.FC<{ type: 'success' | 'warning' | 'error' | 'neutral'
 };
 
 // --- Table ---
-export const Table: React.FC<{ headers: string[], children: React.ReactNode }> = ({ headers, children }) => (
-  <div className="overflow-x-auto">
+export const Table: React.FC<{ headers: string[], children: React.ReactNode, wrapperClassName?: string }> = ({ headers, children, wrapperClassName = '' }) => (
+  <div className={`overflow-x-auto ${wrapperClassName}`}>
     <table className="w-full text-left text-sm text-gray-600 dark:text-gray-400">
       <thead className="bg-gray-50 dark:bg-gray-700/50 text-xs uppercase font-medium text-gray-500 dark:text-gray-400">
         <tr>
@@ -121,7 +124,7 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { 
 };
 
 // --- Modal ---
-export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; className?: string }> = ({ isOpen, onClose, title, children, className = 'max-w-2xl' }) => {
+export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; className?: string; zIndex?: string }> = ({ isOpen, onClose, title, children, className = 'max-w-2xl', zIndex = 'z-50' }) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -131,9 +134,9 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm"
+            className={`fixed inset-0 bg-black/50 ${zIndex} backdrop-blur-sm`}
           />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+          <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 pointer-events-none`}>
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -142,11 +145,49 @@ export const Modal: React.FC<{ isOpen: boolean; onClose: () => void; title: stri
             >
               <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                  <X className="w-6 h-6" />
+                <button onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
               <div className="p-6">
+                {children}
+              </div>
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};
+
+// --- SidePanel (Drawer) ---
+export const SidePanel: React.FC<{ isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode; className?: string; zIndex?: string }> = ({ isOpen, onClose, title, children, className = 'max-w-md w-full', zIndex = 'z-50' }) => {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className={`fixed inset-0 bg-black/50 ${zIndex} backdrop-blur-sm`}
+          />
+          <div className={`fixed inset-y-0 right-0 ${zIndex} flex pointer-events-none`}>
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className={`bg-white dark:bg-gray-800 shadow-2xl h-full flex flex-col ${className} pointer-events-auto border-l border-gray-200 dark:border-gray-700/50`}
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800 z-10">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
+                <button onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
                 {children}
               </div>
             </motion.div>

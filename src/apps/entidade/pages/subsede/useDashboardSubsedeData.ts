@@ -6,9 +6,10 @@ import { useAuth } from '../../context/AuthContext';
 export interface DashboardSubsedeStats {
     production: {
         total: number;
+        totalNonPactuated?: number;
         trend: number; // percentage
         trendUp: boolean;
-        chartData: { month: string; procedures: number }[];
+        chartData: { month: string; procedures: number; nonPactuated?: number }[];
         topProcedures: { name: string; value: number }[];
     };
     professionals: {
@@ -33,7 +34,7 @@ export interface DashboardSubsedeStats {
 export const useDashboardSubsedeData = (competence: string = 'Global') => {
     const { claims } = useAuth();
     const [stats, setStats] = useState<DashboardSubsedeStats>({
-        production: { total: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
+        production: { total: 0, totalNonPactuated: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
         professionals: { value: 0, trend: 0, trendUp: true },
         units: { value: 0, trendUp: true },
         goals: { value: '0%', trend: 0, trendUp: true },
@@ -71,7 +72,7 @@ export const useDashboardSubsedeData = (competence: string = 'Global') => {
             // Provide fallback mock data so the panel doesn't crash if the function isn't ready
             setStats({
                 ...stats,
-                production: { total: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
+                production: { total: 0, totalNonPactuated: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
                 professionals: { value: 0, trend: 0, trendUp: true },
                 units: { value: 0, trendUp: true },
             });

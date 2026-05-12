@@ -12,9 +12,10 @@ import { useAuth } from '../../context/AuthContext';
 export interface DashboardStats {
     production: {
         total: number;
+        totalNonPactuated?: number;
         trend: number; // percentage
         trendUp: boolean;
-        chartData: { month: string; procedures: number }[];
+        chartData: { month: string; procedures: number; nonPactuated?: number }[];
         topProcedures: { name: string; value: number }[];
     };
     professionals: {
@@ -25,7 +26,7 @@ export interface DashboardStats {
     municipalities: {
         value: number;
         trendUp: boolean;
-        topList: { name: string; value: number }[];
+        topList: { name: string; value: number; nonPactuated?: number }[];
     };
     goals: {
         value: string; // percentage string "87%"
@@ -38,10 +39,10 @@ export interface DashboardStats {
     rawRecords?: any[];
 }
 
-export const useDashboardData = () => {
+export const useDashboardData = (selectedYear: string, selectedMonth: string, selectedDay: string, selectedMunicipality: string) => {
     const { claims } = useAuth();
     const [stats, setStats] = useState<DashboardStats>({
-        production: { total: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
+        production: { total: 0, totalNonPactuated: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
         professionals: { value: 0, trend: 0, trendUp: true },
         municipalities: { value: 0, trendUp: true, topList: [] },
         goals: { value: '0%', trend: 0, trendUp: true },
@@ -56,9 +57,24 @@ export const useDashboardData = () => {
         if (!claims?.entityId) return;
         setLoading(true);
         try {
-            const currentYear = new Date().getFullYear().toString();
+            let year = selectedYear;
+            let month: string | undefined = undefined;
+            let day: string | undefined = undefined;
+
+            if (selectedMonth !== 'all') {
+                month = `${year}-${selectedMonth.padStart(2, '0')}`;
+            }
+
+            if (selectedDay !== 'all') {
+                day = selectedDay.padStart(2, '0');
+            }
+
             const getStatsFn = httpsCallable(functions, 'getDashboardStats');
-            const response = await getStatsFn({ year: currentYear });
+            const payload: any = { year, month, day };
+            if (selectedMunicipality && selectedMunicipality !== 'all') {
+                payload.municipalityId = selectedMunicipality;
+            }
+            const response = await getStatsFn(payload);
             const data = response.data as any;
 
             setStats({
@@ -80,11 +96,12 @@ export const useDashboardData = () => {
         setSyncing(true);
         try {
             const triggerRefreshFn = httpsCallable(functions, 'triggerDashboardRefresh');
-            await triggerRefreshFn({ year: new Date().getFullYear().toString() });
+            // Global refresh, year decoupled from backend
+            await triggerRefreshFn({});
             // After successful sync, reload the dashboard stats
             await load();
         } catch (error) {
-            console.error('Failed to sync dashboard data:', error);
+            console.error('Manual sync failed:', error);
         } finally {
             setSyncing(false);
         }
@@ -93,8 +110,7 @@ export const useDashboardData = () => {
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [claims?.entityId]);
+    }, [selectedYear, selectedMonth, selectedDay, selectedMunicipality, claims?.entityId]);
 
     return { ...stats, loading, syncing, syncData };
 };
-

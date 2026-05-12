@@ -53,6 +53,10 @@ export interface Municipality {
 
   // Interface Configuration
   interfaceType?: 'PEC' | 'SIMPLIFIED';
+  
+  // Tolerance Configuration
+  productionToleranceDays?: number;
+
   // Internal Context (Runtime only)
   _pathContext?: {
     entityType: string;

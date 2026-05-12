@@ -29,7 +29,15 @@ export * from "./rbac";
 export { onMunicipalityChange } from "./licenseTriggers";
 export { professionalSetClaims } from "./professionalSetClaims";
 export { professionalDelete } from "./professionalDelete";
+
+
+// --- Relatórios de Produção por Profissional ---
+export { getProfessionalProductionStats } from "./api/getProfessionalProductionStats";
+export { getProfessionalProductionDetailed } from "./api/getProfessionalProductionDetailed";
+export { getProfessionalProductionGrouped } from "./api/getProfessionalProductionGrouped";
+export { getZeroProductionProfessionals } from "./api/getZeroProductionProfessionals";
 export { professionalOnUpdate } from "./professionalOnUpdate";
+export { getCBOMunicipalStats } from "./api/getCBOMunicipalStats";
 export {
     sendPasswordResetToken,
     verifyPasswordResetToken,
@@ -89,3 +97,15 @@ export { getDashboardSubsedeStats } from "./api/getDashboardSubsedeStats";
 export { triggerDashboardSubsedeRefresh } from "./api/triggerDashboardSubsedeRefresh";
 export { getMunicipalitiesStats } from "./api/getMunicipalitiesStats";
 export { getUnitComparativeStats } from "./api/getUnitComparativeStats";
+export { getGoalsFulfillmentStats } from "./api/getGoalsFulfillmentStats";
+export { generateSigtapCache } from "./api/generateSigtapCache";
+
+// Patients API
+export { getMunicipalityPatients, updatePatientRecord, deletePatientRecord, importPatientsBatch } from "./api/patientsApi";
+
+// Production API Data Entry & Fetching (Criptografada / Segura)
+export { saveGlobalProduction } from "./api/saveGlobalProduction";
+export { getGlobalProductionHistory } from "./api/getGlobalProductionHistory";
+
+// External Integration API (Non-PEC)
+export { ingestExternalProduction } from "./api/externalProductionApi";

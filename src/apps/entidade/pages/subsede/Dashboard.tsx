@@ -48,22 +48,26 @@ const DashboardSubsede: React.FC = () => {
                 </div>
 
                 {/* KPI Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                     <StatCard
-                        title="Produção Municipal"
+                        title="Produção Pactuada"
                         value={production.total.toLocaleString('pt-BR')}
                         icon={Activity}
-                        trend={`${production.trend}%`}
-                        trendUp={production.trendUp}
                         colorClass={accentColorClass}
-                        helpText="Soma total de todos os procedimentos realizados no município vigente."
+                        helpText="Soma total das metas pactuadas realizadas no município vigente."
+                    />
+                    <StatCard
+                        title="Produção Não Pactuada"
+                        value={(production.totalNonPactuated || 0).toLocaleString('pt-BR')}
+                        icon={Activity}
+                        trendSubtitle="Extra-teto"
+                        colorClass="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                        helpText="Soma total de procedimentos executados fora do teto físico (Extra-teto)."
                     />
                     <StatCard
                         title="Profissionais (Equipes)"
                         value={professionals.value.toLocaleString('pt-BR')}
                         icon={Users}
-                        trend={`${professionals.trend}%`}
-                        trendUp={professionals.trendUp}
                         colorClass="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
                         helpText="Total de profissionais ativos."
                     />
@@ -79,8 +83,6 @@ const DashboardSubsede: React.FC = () => {
                         title="Metas Atingidas"
                         value={goals.value}
                         icon={TrendingUp}
-                        trend={`${goals.trend}%`}
-                        trendUp={goals.trendUp}
                         colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
                         helpText="Percentual de metas atingidas."
                     />
@@ -99,6 +101,10 @@ const DashboardSubsede: React.FC = () => {
                                                 <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3} />
                                                 <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
                                             </linearGradient>
+                                            <linearGradient id="colorProcsSubNonPact" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#9ca3af" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#9ca3af" stopOpacity={0} />
+                                            </linearGradient>
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af' }} />
@@ -106,9 +112,10 @@ const DashboardSubsede: React.FC = () => {
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                                             itemStyle={{ color: '#fff' }}
-                                            formatter={(value: number) => [value.toLocaleString('pt-BR'), 'Procedimentos']}
+                                            formatter={(value: number, name: string) => [value.toLocaleString('pt-BR'), name === 'procedures' ? 'Pactuadas' : 'Não Pactuadas']}
                                         />
-                                        <Area type="monotone" dataKey="procedures" stroke={colors.primary} fillOpacity={1} fill="url(#colorProcsSub)" strokeWidth={3} />
+                                        <Area type="monotone" dataKey="nonPactuated" stackId="1" stroke="#9ca3af" fillOpacity={1} fill="url(#colorProcsSubNonPact)" strokeWidth={2} />
+                                        <Area type="monotone" dataKey="procedures" stackId="1" stroke={colors.primary} fillOpacity={1} fill="url(#colorProcsSub)" strokeWidth={3} />
                                     </AreaChart>
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">

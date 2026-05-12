@@ -4,6 +4,20 @@ import { Search, Loader2, ChevronRight, CornerDownRight, Check, X, Info } from '
 import { sigtapService } from '../services/sigtapService';
 import { motion } from 'framer-motion';
 import { ProcedureDetailModal } from './ProcedureDetailModal';
+import { createPortal } from 'react-dom';
+
+function useDebounce<T>(value: T, delay: number): T {
+    const [debouncedValue, setDebouncedValue] = useState<T>(value);
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+    return debouncedValue;
+}
 
 // Types
 interface SigtapTreeSelectorProps {
@@ -30,6 +44,10 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
     const [selectedForm, setSelectedForm] = useState<string>('');
     const [viewProcedure, setViewProcedure] = useState<Procedure | null>(null);
 
+    // Text Search State
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
+
 
     // Data State
     const [groups, setGroups] = useState<any[]>([]);
@@ -44,9 +62,25 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
     const [comp, setComp] = useState('202501'); // Fallback
 
     useEffect(() => {
-        if (currentCompetence) {
-            setComp(currentCompetence);
+        async function resolveCompetence() {
+            let activeComp = currentCompetence || '202501';
+            try {
+                // Fallback: If current month has no SIGTAP, use the latest available.
+                const available = await sigtapService.getAvailableCompetences();
+                if (available.length > 0) {
+                    const exists = available.find(c => c.competence === activeComp);
+                    if (!exists) {
+                        // Get the most recent competence available
+                        available.sort((a, b) => a.competence.localeCompare(b.competence));
+                        activeComp = available[available.length - 1].competence;
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not fetch fallback competence in tree selector", e);
+            }
+            setComp(activeComp);
         }
+        resolveCompetence();
     }, [currentCompetence]);
 
     // Initial Load (Groups)
@@ -92,7 +126,16 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
 
     // Fetch Procedures
     useEffect(() => {
-        if (comp && selectedGroup && selectedSubGroup && selectedForm) {
+        if (debouncedSearchTerm && debouncedSearchTerm.length >= 3) {
+            setLoading(true);
+            sigtapService.searchProcedures(debouncedSearchTerm, comp).then(res => {
+                setProcedures(res);
+                setLoading(false);
+            }).catch(err => {
+                console.error("Error searching procedures:", err);
+                setLoading(false);
+            });
+        } else if (comp && selectedGroup && selectedSubGroup && selectedForm) {
             setLoading(true);
             sigtapService.getProcedures(comp, selectedGroup, selectedSubGroup, selectedForm).then(res => {
                 setProcedures(res);
@@ -101,7 +144,7 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
         } else {
             setProcedures([]);
         }
-    }, [comp, selectedGroup, selectedSubGroup, selectedForm]);
+    }, [comp, selectedGroup, selectedSubGroup, selectedForm, debouncedSearchTerm]);
 
     // Handlers
     const handleGroupChange = (val: string) => {
@@ -122,21 +165,21 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
         // Register expects SigtapProcedureRow properties + Context
         onSelect({
             ...proc,
-            groupCode: selectedGroup,
-            subGroupCode: selectedSubGroup,
-            formCode: selectedForm
+            groupCode: proc.code ? proc.code.substring(0, 2) : selectedGroup,
+            subGroupCode: proc.code ? proc.code.substring(2, 4) : selectedSubGroup,
+            formCode: proc.code ? proc.code.substring(4, 6) : selectedForm
         });
         onClose();
     };
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 text-slate-800 dark:text-slate-100 font-sans">
+    const modalContent = (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4 text-slate-800 dark:text-slate-100 font-sans">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-white dark:bg-gray-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                className="bg-white dark:bg-gray-900 w-full max-w-5xl h-[95vh] md:h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
                 {/* Header */}
                 <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/60">
@@ -151,8 +194,33 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
                     </button>
                 </div>
 
+                {/* Global Search Bar */}
+                <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 border-t-4 border-t-medical-600">
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <Input
+                            type="text"
+                            placeholder="Busca Rápida (Digite o nome ou código de barra do procedimento...)"
+                            className="w-full pl-10 h-12 text-lg border-2 border-medical-100 dark:border-medical-900 focus:border-medical-500 rounded-xl"
+                            value={searchTerm}
+                            onChange={(e) => {
+                                setSearchTerm(e.target.value);
+                                if (e.target.value) {
+                                    // Reset tree selection when searching
+                                    setSelectedGroup('');
+                                    setSelectedSubGroup('');
+                                    setSelectedForm('');
+                                }
+                            }}
+                            autoFocus
+                        />
+                    </div>
+                </div>
+
                 {/* Filters Row */}
-                <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Group */}
                     <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Grupo</label>
@@ -217,10 +285,10 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
                         </div>
                     )}
 
-                    {!selectedForm ? (
+                    {!selectedForm && !debouncedSearchTerm ? (
                         <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8 text-center animate-in fade-in zoom-in-95">
                             <CornerDownRight size={48} className="mb-4 opacity-20" />
-                            <p className="text-lg font-medium">Selecione a hierarquia completa acima</p>
+                            <p className="text-lg font-medium">Use a Busca Rápida acima ou Selecione a hierarquia</p>
                             <p className="text-sm">Os procedimentos serão listados aqui.</p>
                         </div>
                     ) : (
@@ -294,7 +362,7 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
                                 {procedures.length === 0 && !loading && (
                                     <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
                                         <Info size={32} className="mx-auto mb-2 text-gray-400" />
-                                        <p className="text-gray-500">Nenhum procedimento encontrado nesta forma de organização.</p>
+                                        <p className="text-gray-500">Nenhum procedimento encontrado na busca.</p>
                                     </div>
                                 )}
                             </div>
@@ -304,4 +372,6 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
             </motion.div>
         </div>
     );
+
+    return createPortal(modalContent, document.body);
 };

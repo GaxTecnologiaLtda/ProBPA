@@ -218,8 +218,16 @@ export const goalService = {
                 ? `goals/${entityTypeDoc}/entities/${userClaims.entityId}/municipalities/${municipalityId}/units/${payload.unitId}/professionals/${professionalId}/goals`
                 : null;
 
-            // Path 2 (New): municipalities/{entityType}/{entityId}/{municipalityId}/goals/{competenceMonth}/goals
-            const newCollectionPath = `municipalities/${normalizedEntityType}/${userClaims.entityId}/${municipalityId}/goals/${competenceMonth}/goals`;
+            // Compute precise vigency folder to isolate goal records instead of a generic year string
+            let vigencyFolder = competenceMonth;
+            if (goalPayload.startMonth && goalPayload.endMonth) {
+                const sY = goalPayload.startMonth.substring(0, 4);
+                const eY = goalPayload.endMonth.substring(0, 4);
+                vigencyFolder = sY === eY ? sY : `${sY}-${eY}`;
+            }
+
+            // Path 2 (New): municipalities/{entityType}/{entityId}/{municipalityId}/goals/{vigencyFolder}/goals
+            const newCollectionPath = `municipalities/${normalizedEntityType}/${userClaims.entityId}/${municipalityId}/goals/${vigencyFolder}/goals`;
 
             // 4. Save
             if (!payload.id) {
@@ -270,14 +278,30 @@ export const goalService = {
 
                 const promises = [];
 
-                // Update New Path
-                // NOTE: If competence changes, the path changes! This is tricky for updates. 
-                // For now, assuming competence doesn't change OR we are just updating the doc in place. 
-                // If competence CAN change, we would need to delete from old path and create in new.
-                // Assuming ID is stable, we use the *current* competence from payload to address the doc.
-                // If the user *changed* the competence in the UI, this will create a NEW doc in the new competence folder
-                // and leave the old one as "orphan" or duplicate. Ideally we should have the 'oldCompetence' to delete.
-                // Given the scope, we will just write to the destination path.
+                // Fetch previous state from DB to wipe old orphaned clones
+                try {
+                    const q = query(collectionGroup(db, 'goals'), where('entityId', '==', userClaims.entityId));
+                    const snapshot = await getDocs(q);
+                    const oldDoc = snapshot.docs.find(d => d.id === payload.id);
+                    
+                    if (oldDoc) {
+                        const oldData = oldDoc.data() as any;
+                        let oldVigencyFolder = oldData.competenceMonth || '2026';
+                        
+                        if (oldData.startMonth && oldData.endMonth) {
+                            const osY = oldData.startMonth.substring(0, 4);
+                            const oeY = oldData.endMonth.substring(0, 4);
+                            oldVigencyFolder = osY === oeY ? osY : `${osY}-${oeY}`;
+                        }
+                        
+                        const oldPath = `municipalities/${normalizedEntityType}/${userClaims.entityId}/${municipalityId}/goals/${oldVigencyFolder}/goals`;
+                        if (oldPath !== newCollectionPath) {
+                            promises.push(deleteDoc(doc(db, oldPath, payload.id)));
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not hunt old goal path for deletion', e);
+                }
 
                 const newDocRef = doc(db, newCollectionPath, payload.id);
                 promises.push(setDoc(newDocRef, goalData, { merge: true }));

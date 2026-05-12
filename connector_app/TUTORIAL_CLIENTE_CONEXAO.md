@@ -76,7 +76,30 @@ Agora que as máquinas estão na mesma rede privada, precisamos avisar o Postgre
 
 ---
 
-## 🔄 Passo 3: Reiniciar o Serviço do Banco de Dados
+## 🔒 Passo 3: Criação de Usuário de Leitura (Recomendado)
+
+Para garantir a segurança dos dados, o ProBPA realiza apenas **leituras** (consultas de painéis). Se você não for fornecer a senha do usuário administrador (`postgres`), crie um usuário dedicado com permissões *read-only*.
+
+Abra seu gerenciador de banco (PgAdmin, DBeaver) ou psql e execute os comandos abaixo no banco do e-SUS (geralmente `esus`):
+
+```sql
+-- 1. Criação do usuário (Altere a senha)
+CREATE USER probpa_leitura WITH ENCRYPTED PASSWORD 'senha_segura_aqui';
+
+-- 2. Permissão de conexão ao banco
+GRANT CONNECT ON DATABASE esus TO probpa_leitura;
+
+-- 3. Permissão de uso do schema público (onde ficam as tabelas)
+GRANT USAGE ON SCHEMA public TO probpa_leitura;
+
+-- 4. Permissão exclusiva de SELECT em todas as tabelas atuais e futuras
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO probpa_leitura;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO probpa_leitura;
+```
+
+---
+
+## 🔄 Passo 4: Reiniciar o Serviço do Banco de Dados
 
 Para que as alterações dos arquivos de configuração entrem em vigor, é preciso reiniciar o serviço do PostgreSQL.
 
@@ -101,7 +124,7 @@ sudo systemctl restart e-sus-pec-database
 
 ---
 
-## ✅ Passo 4: Retorno ao Suporte ProBPA
+## ✅ Passo 5: Retorno ao Suporte ProBPA
 
 Pronto! A infraestrutura está configurada com segurança de ponta.
 Por favor, envie para o nosso suporte técnico as seguintes informações:

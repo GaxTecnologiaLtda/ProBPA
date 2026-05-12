@@ -1,0 +1,6 @@
+Total active entity profs: 140
+Profs assigned strictly to Catende: 140
+Dashboard Total (Allows any entity prof): 13911
+Filtered Total (Only explicitly assigned to Catende): 13911
+Difference: 0
+Professionals causing the difference:

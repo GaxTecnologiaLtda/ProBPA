@@ -8,25 +8,22 @@ import { logSystemEvent, LogLevel } from '../utils/logger';
  */
 export const runManualAggregation = async (targetCompetence?: string, entityId?: string) => {
     const db = admin.firestore();
-    const now = new Date();
 
-    // precise current competence
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    let currentCompetence = targetCompetence;
+    // By default, if no targetCompetence is specified, we fetch EVERYTHING (Global aggregation)
+    // as requested by the user, to avoid the "End of Month Abyss" where retroactive records are lost.
+    let targetCompStr = targetCompetence ? targetCompetence : 'ALL';
 
-    if (!currentCompetence) {
-        currentCompetence = `${year}-${month}`;
-    }
-
-    console.log(`[ManualAggregation] Starting for competence: ${currentCompetence}`);
-    await logSystemEvent(LogLevel.INFO, 'Manual Aggregation Started', { competence: currentCompetence, entityId });
+    console.log(`[ManualAggregation] Starting for competence: ${targetCompStr}`);
+    await logSystemEvent(LogLevel.INFO, 'Manual Aggregation Started', { competence: targetCompStr, entityId });
 
     try {
-        // 1. Query all procedures for this competence
-        // Note: This relies on 'procedures' having 'competenceMonth' field populated correctly.
-        let queryRef = db.collectionGroup('procedures')
-            .where('competenceMonth', '==', currentCompetence);
+        // 1. Query procedures
+        // If targetCompetence is provided, filter. Otherwise, fetch all procedures.
+        let queryRef: admin.firestore.Query = db.collectionGroup('procedures');
+
+        if (targetCompetence) {
+            queryRef = queryRef.where('competenceMonth', '==', targetCompetence);
+        }
 
         if (entityId) {
             queryRef = queryRef.where('entityId', '==', entityId);
@@ -35,12 +32,12 @@ export const runManualAggregation = async (targetCompetence?: string, entityId?:
         const snapshot = await queryRef.get();
 
         if (snapshot.empty) {
-            console.log(`[ManualAggregation] No manual production found for ${currentCompetence}`);
-            await logSystemEvent(LogLevel.INFO, 'Manual Aggregation Skipped (No Data)', { competence: currentCompetence, entityId });
-            return { success: true, message: `No records found for ${currentCompetence}`, count: 0 };
+            console.log(`[ManualAggregation] No manual production found for ${targetCompStr}`);
+            await logSystemEvent(LogLevel.INFO, 'Manual Aggregation Skipped (No Data)', { competence: targetCompStr, entityId });
+            return { success: true, message: `No records found for ${targetCompStr}`, count: 0 };
         }
 
-        console.log(`[ManualAggregation] Found ${snapshot.size} procedure records.`);
+        console.log(`[ManualAggregation] Found ${snapshot.size} procedure records to aggregate.`);
 
         // 2. Aggregate Data in Memory
         // Map<CompetenceDocPath, Map<DateStr, Stats>>
@@ -78,13 +75,20 @@ export const runManualAggregation = async (targetCompetence?: string, entityId?:
             }
 
             // Extract Professional Path parts
-            // We want the path up to the professional document to construct the subcollection.
-            // path/to/professionals/PROF_ID
             const professionalDocPath = segments.slice(0, profIndex + 2).join('/');
 
+            // Use the document's own competenceMonth if available, otherwise fallback to the current/target one
+            const docCompetence = data.competenceMonth || (data.competence ? `${data.competence.substring(0, 4)}-${data.competence.substring(4, 6)}` : null);
+            
+            // Se o documento não tiver competência, ignoramos ou usamos um fallback? Melhor pular pois compromete os relatórios.
+            if (!docCompetence) {
+                console.warn(`[ManualAggregation] Doc missing competenceMonth: ${doc.ref.path}`);
+                mismatchedPaths++;
+                continue;
+            }
+
             // Construct Target Competence Path
-            // .../professionals/PROF_ID/competencias/2026-02
-            const competenceDocPath = `${professionalDocPath}/competencias/${currentCompetence}`;
+            const competenceDocPath = `${professionalDocPath}/competencias/${docCompetence}`;
 
             // Date Doc ID
             let dateStr = 'unknown';
@@ -135,12 +139,18 @@ export const runManualAggregation = async (targetCompetence?: string, entityId?:
             if (!dailyDoc.units[uId].professionals[pId]) {
                 dailyDoc.units[uId].professionals[pId] = {
                     professionalName: pName,
-                    procedures: {}
+                    procedures: {},
+                    canceledProcedures: {}
                 };
             }
 
             const profStats = dailyDoc.units[uId].professionals[pId];
-            profStats.procedures[code] = (profStats.procedures[code] || 0) + qty;
+            if (data.status === 'canceled') {
+                profStats.canceledProcedures = profStats.canceledProcedures || {};
+                profStats.canceledProcedures[code] = (profStats.canceledProcedures[code] || 0) + qty;
+            } else {
+                profStats.procedures[code] = (profStats.procedures[code] || 0) + qty;
+            }
         }
 
         console.log(`[ManualAggregation] Aggregation complete. Mismatched/Skipped paths: ${mismatchedPaths}`);
@@ -181,7 +191,7 @@ export const runManualAggregation = async (targetCompetence?: string, entityId?:
         console.log(`[ManualAggregation] DB Write Completed. Updated ${totalUpdated} summary documents.`);
 
         await logSystemEvent(LogLevel.INFO, 'Manual Aggregation Completed', {
-            competence: currentCompetence,
+            competence: targetCompStr,
             entityId: entityId || 'all',
             recordsFound: snapshot.size,
             mismatchedPaths,
@@ -199,7 +209,7 @@ export const runManualAggregation = async (targetCompetence?: string, entityId?:
         await logSystemEvent(LogLevel.ERROR, 'Manual Aggregation Failed', {
             error: error.message,
             code: error.code,
-            competence: currentCompetence,
+            competence: targetCompStr,
             entityId
         });
         throw error;

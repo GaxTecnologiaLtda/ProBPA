@@ -4,7 +4,7 @@ import { logSystemEvent, LogLevel } from '../utils/logger';
 
 export const getDashboardSubsedeStats = functions
     .region("southamerica-east1")
-    .runWith({ memory: "512MB", timeoutSeconds: 300 })
+    .runWith({ memory: "1GB", timeoutSeconds: 540 })
     .https.onCall(async (data, context) => {
         // 1. Authentication and Authorization Check
         if (!context.auth || !context.auth.token.entityId) {
@@ -71,20 +71,55 @@ export const getDashboardSubsedeStats = functions
             });
 
             const totalUnits = unitsSnap.size;
+            const activeUnitIds = new Set(unitsSnap.docs.map(d => d.id));
 
-            // 4. Calculate Goals
+            // 4. Calculate Goals and Extract Pactuated Rules
             let globalTarget = 0;
+            const pactuatedRules: Array<{ codeType?: 'macro' | 'specific'; value?: string; code?: string; isMacro?: boolean; municipalityId?: string }> = [];
+
             goalsSnap.forEach(doc => {
                 const g = doc.data();
+                if (g.status === 'Inativa') return; // Skip inactive goals for pactuated count
+
                 // Check if goal is linked to the municipality
-                if (g.municipalityId === municipalityId) {
+                const isGoalForMun = g.municipalityId === municipalityId || g.municipalityId === 'all' || !g.municipalityId;
+
+                if (isGoalForMun) {
                     globalTarget += (g.annualTargetQuantity || Math.max((g.targetQuantity || 0) * 12, 0));
+
+                    // Extract rule for pactuated check
+                    if (g.procedureCode) {
+                        let codes = g.procedureCode;
+                        if (typeof codes === 'string') {
+                            codes = [codes];
+                        }
+                        if (Array.isArray(codes)) {
+                            for (const c of codes) {
+                                const trimC = String(c).trim();
+                                if (trimC.length === 2) {
+                                    pactuatedRules.push({ codeType: 'macro', value: trimC });
+                                } else if (trimC.length === 10) {
+                                    pactuatedRules.push({ codeType: 'specific', value: trimC });
+                                }
+                            }
+                        }
+                    } else if (g.procedures && Array.isArray(g.procedures)) {
+                         g.procedures.forEach((proc: any) => {
+                            const code = String(proc.code || proc).trim();
+                            if (code.length === 10) {
+                                pactuatedRules.push({ codeType: 'specific', value: code });
+                            } else if (code.length === 2) {
+                                pactuatedRules.push({ codeType: 'macro', value: code });
+                            }
+                        });
+                    }
                 }
             });
 
             // 5. Aggregate Production Summaries
-            let totalProductionYear = 0;
-            const aggregatedByMonth: Record<string, number> = {};
+            let totalPactuatedYear = 0;
+            let totalNonPactuatedYear = 0;
+            const aggregatedByMonth: Record<string, { pactuated: number, nonPactuated: number }> = {};
             const procAggregation: Record<string, number> = {};
 
             // We search for all 'resumo_producao' subcollections under this entity's professionals
@@ -150,9 +185,13 @@ export const getDashboardSubsedeStats = functions
 
                 if (!data.units) continue;
 
-                let docTotalQty = 0;
+                let docPactuatedQty = 0;
+                let docNonPactuatedQty = 0;
 
                 for (const uId of Object.keys(data.units)) {
+                    // Filter unregistered units (allow entity itself if it appears)
+                    if (!activeUnitIds.has(uId) && uId !== entityId) continue;
+                    
                     const unitData = data.units[uId];
                     if (!unitData.professionals) continue;
 
@@ -169,7 +208,41 @@ export const getDashboardSubsedeStats = functions
                             const procQty = Number(count) || 0;
                             if (procQty === 0) continue;
 
-                            docTotalQty += procQty;
+                            // Check Pactuation Rule
+                            let isPactuated = false;
+                            for (const rule of pactuatedRules) {
+                                if (rule.municipalityId && rule.municipalityId !== municipalityId) {
+                                    continue;
+                                }
+
+                                if (rule.codeType === 'macro' && rule.value) {
+                                    if (code.startsWith(rule.value)) {
+                                        isPactuated = true;
+                                        break;
+                                    }
+                                } else if (rule.codeType === 'specific' && rule.value) {
+                                    if (code === rule.value) {
+                                        isPactuated = true;
+                                        break;
+                                    }
+                                } else if (rule.isMacro && rule.code) { // Fallback to old property if codeType not set
+                                     if (code.startsWith(rule.code)) {
+                                        isPactuated = true;
+                                        break;
+                                    }
+                                } else if (rule.code) {
+                                     if (code === rule.code) {
+                                        isPactuated = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (isPactuated) {
+                                docPactuatedQty += procQty;
+                            } else {
+                                docNonPactuatedQty += procQty;
+                            }
 
                             // Aggregate Top Procedures
                             procAggregation[code] = (procAggregation[code] || 0) + procQty;
@@ -177,13 +250,19 @@ export const getDashboardSubsedeStats = functions
                     }
                 }
 
-                if (docTotalQty === 0) continue;
+                if (docPactuatedQty === 0 && docNonPactuatedQty === 0) continue;
 
                 // Aggregate Total
-                totalProductionYear += docTotalQty;
+                totalPactuatedYear += docPactuatedQty;
+                totalNonPactuatedYear += docNonPactuatedQty;
+
+                if (!aggregatedByMonth[normalizedCompetence]) {
+                    aggregatedByMonth[normalizedCompetence] = { pactuated: 0, nonPactuated: 0 };
+                }
 
                 // Aggregate for Chart (Monthly breakdown)
-                aggregatedByMonth[normalizedCompetence] = (aggregatedByMonth[normalizedCompetence] || 0) + docTotalQty;
+                aggregatedByMonth[normalizedCompetence].pactuated += docPactuatedQty;
+                aggregatedByMonth[normalizedCompetence].nonPactuated += docNonPactuatedQty;
             }
 
             // 6. Format Final Payload Struct
@@ -192,7 +271,8 @@ export const getDashboardSubsedeStats = functions
             const sortedMonths = Object.keys(aggregatedByMonth).sort();
             const chartData = sortedMonths.map(m => ({
                 month: m,
-                procedures: aggregatedByMonth[m]
+                procedures: aggregatedByMonth[m].pactuated,
+                nonPactuated: aggregatedByMonth[m].nonPactuated
             }));
 
             // Build Top Procedures
@@ -202,11 +282,12 @@ export const getDashboardSubsedeStats = functions
                 .slice(0, 10);
 
             // Calculate Goal Percentage
-            const globalAchievementPercent = globalTarget > 0 ? (totalProductionYear / globalTarget) * 100 : 0;
+            const globalAchievementPercent = globalTarget > 0 ? (totalPactuatedYear / globalTarget) * 100 : 0;
 
             const finalStats = {
                 production: {
-                    total: totalProductionYear,
+                    total: totalPactuatedYear,
+                    totalNonPactuated: totalNonPactuatedYear,
                     trend: 0, // Placeholder
                     trendUp: true,
                     chartData,
@@ -228,7 +309,7 @@ export const getDashboardSubsedeStats = functions
                 }
             };
 
-            await logSystemEvent(LogLevel.INFO, 'Dashboard Subsede Stats Fetched', { entityId, municipalityId, year, productionTotal: totalProductionYear }, context.auth.uid);
+            await logSystemEvent(LogLevel.INFO, 'Dashboard Subsede Stats Fetched', { entityId, municipalityId, year, productionTotal: totalPactuatedYear + totalNonPactuatedYear }, context.auth.uid);
 
             return finalStats;
 

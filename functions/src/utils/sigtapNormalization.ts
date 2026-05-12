@@ -10,6 +10,39 @@
 // MAPEAMENTO DIRETO (DE -> PARA)
 // Para códigos numéricos internos do PEC que não batem com o SIGTAP.
 export const SIGTAP_DICTIONARY: Record<string, { code: string, name: string }> = {
+    'ABPG010': { code: '0201020033', name: 'COLETA DE MATERIAL DO COLO DE ÚTERO PARA EXAME CITOPATOLÓGICO' },
+    '010': { code: '0201020033', name: 'COLETA DE MATERIAL DO COLO DE ÚTERO PARA EXAME CITOPATOLÓGICO' },
+    'ABPG018': { code: '0301100152', name: 'RETIRADA DE PONTOS DE CIRURGIAS (POR PACIENTE)' },
+    '018': { code: '0301100152', name: 'RETIRADA DE PONTOS DE CIRURGIAS (POR PACIENTE)' },
+    'ABPO010': { code: '0101020082', name: 'EVIDENCIAÇÃO DE PLACA BACTERIANA' },
+    'ODONTO010': { code: '0101020082', name: 'EVIDENCIAÇÃO DE PLACA BACTERIANA' },
+    // NOVO LOTE (Nazaré da Mata & gerais PEC)
+    'ABPG002': { code: '0101040059', name: 'ADMINISTRAÇÃO DE VITAMINA A' },
+    '002': { code: '0101040059', name: 'ADMINISTRAÇÃO DE VITAMINA A' },
+    'ABPG007': { code: '0301100012', name: 'CURATIVO GRAU I (CURATIVO ESPECIAL)' },
+    '007': { code: '0301100012', name: 'CURATIVO GRAU I (CURATIVO ESPECIAL)' },
+    'ABPG011': { code: '0301010048', name: 'EXAME DO PÉ DIABÉTICO' },
+    '011': { code: '0301010048', name: 'EXAME DO PÉ DIABÉTICO' },
+    'ABPG017': { code: '0301100144', name: 'RETIRADA DE CERUME / LAVAGEM DE OUVIDO' },
+    '017': { code: '0301100144', name: 'RETIRADA DE CERUME / LAVAGEM DE OUVIDO' },
+    'ABPG024': { code: '0214010155', name: 'TESTE RÁPIDO PARA DETECÇÃO DE INFECÇÃO PELO HIV' },
+    '024': { code: '0214010155', name: 'TESTE RÁPIDO PARA DETECÇÃO DE INFECÇÃO PELO HIV' },
+    'ABPG025': { code: '0214010295', name: 'TESTE RÁPIDO PARA HEPATITE C' },
+    '025': { code: '0214010295', name: 'TESTE RÁPIDO PARA HEPATITE C' },
+    'ABPG026': { code: '0214010120', name: 'TESTE RÁPIDO PARA SÍFILIS' },
+    'ABEX026': { code: '0214010015', name: 'GLICEMIA CAPILAR' },
+    '026': { code: '0214010015', name: 'GLICEMIA CAPILAR / TESTE RÁPIDO PARA SÍFILIS' }, // Fallback para 026 sem prefixo
+    'ABPG030': { code: '0301100101', name: 'INALAÇÃO / NEBULIZAÇÃO' },
+    '030': { code: '0301100101', name: 'INALAÇÃO / NEBULIZAÇÃO' },
+    'ABPG031': { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' },
+    '031': { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' },
+    'ABPG034': { code: '0301100250', name: 'AFERIÇÃO DE TEMPERATURA' },
+    '034': { code: '0301100250', name: 'AFERIÇÃO DE TEMPERATURA' },
+    'ABPG041': { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' },
+    '041': { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' },
+    'ABPG042': { code: '0101010028', name: 'ORIENTAÇÃO INDIVIDUAL EM SAÚDE' },
+    '042': { code: '0101010028', name: 'ORIENTAÇÃO INDIVIDUAL EM SAÚDE' },
+    // FIM DO NOVO LOTE
     'ABPG028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
     '028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
     'ABPG027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
@@ -39,6 +72,11 @@ export const normalizeCns = (cns: string | undefined | null) => {
 export const normalizeVaccine = (name: string, type: string) => {
     const rawNameUpper = String(name || '').toUpperCase();
     const nameUpper = rawNameUpper.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove accents
+    // Avoid false positives where 'HEPATITE' or 'MENINGO' is mentioned in a test/exam
+    if (nameUpper.includes('TESTE') || nameUpper.includes('EXAME') || nameUpper.includes('PESQUISA') || nameUpper.includes('SOROLOGIA') || nameUpper.includes('ANTIGENO') || nameUpper.includes('ANTÍGENO') || nameUpper.includes('ANTICORPO')) {
+        return null; // Abort vaccine normalization, let dict/raw code handle this
+    }
+
     const isVaccine = type === 'VACCINATION' ||
         nameUpper.includes('VACINA') ||
         nameUpper.includes('IMUNIZA') ||
@@ -53,12 +91,12 @@ export const normalizeVaccine = (name: string, type: string) => {
 
     if (isVaccine) {
         // 1. VIA ORAL (03.01.10.021-7)
-        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA') || nameUpper.includes('POLIOMIELITE')) {
+        if (nameUpper.includes('ORAL') || /\bVOP\b/.test(nameUpper) || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA') || nameUpper.includes('POLIOMIELITE')) {
             return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
         }
 
         // 2. VIA INTRADÉRMICA (03.01.10.023-3)
-        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG') || nameUpper.includes('ID')) {
+        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG') || /\bID\b/.test(nameUpper)) {
             return { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' }; // Sigtap closest generic
         }
 
@@ -67,20 +105,20 @@ export const normalizeVaccine = (name: string, type: string) => {
             nameUpper.includes('TRIPLICE') || nameUpper.includes('SARAMPO') || nameUpper.includes('CAXUMBA') || nameUpper.includes('RUBEOLA') ||
             nameUpper.includes('FEBRE AMARELA') ||
             nameUpper.includes('VARICELA') || nameUpper.includes('CATAPORA') ||
-            nameUpper.includes('TETRA VIRAL') || nameUpper.includes('SCR') ||
-            nameUpper.includes('SC')) {
+            nameUpper.includes('TETRA VIRAL') || /\bSCR\b/.test(nameUpper) ||
+            /\bSC\b/.test(nameUpper)) {
             return { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' };
         }
 
         // 4. VIA INTRAMUSCULAR (03.01.10.020-9) - Broadest Category
-        if (nameUpper.includes('INTRAMUSCULAR') || nameUpper.includes('IM') ||
+        if (nameUpper.includes('INTRAMUSCULAR') || /\bIM\b/.test(nameUpper) ||
             nameUpper.includes('HEPATITE') ||
-            nameUpper.includes('PENTA') || nameUpper.includes('DTP') || nameUpper.includes('HIB') ||
-            nameUpper.includes('VIP') ||
+            nameUpper.includes('PENTA') || nameUpper.includes('DTP') || /\bHIB\b/.test(nameUpper) ||
+            /\bVIP\b/.test(nameUpper) ||
             nameUpper.includes('PNEUMO') || nameUpper.includes('MENINGO') ||
             nameUpper.includes('INFLUENZA') || nameUpper.includes('GRIPE') ||
             nameUpper.includes('COVID') ||
-            nameUpper.includes('DUPLA') || nameUpper.includes('DT') ||
+            nameUpper.includes('DUPLA') || /\bDT\b/.test(nameUpper) ||
             nameUpper.includes('TETANO') || nameUpper.includes('TÉTANO') ||
             nameUpper.includes('HPV')) {
             return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
@@ -107,8 +145,11 @@ export const resolveSigtapCode = (rec: any): { code: string, name: string } => {
     const profCbo = rec.professional?.cbo || rec.cbo || '';
 
     // 1. SUBSTITUIÇÃO DIRETA PELO DICIONÁRIO E-SUS -> SIGTAP
+    if (SIGTAP_DICTIONARY[rawCode]) {
+        return SIGTAP_DICTIONARY[rawCode]; // Tenta primeiro com o código bruto (ex: ABPG026)
+    }
     if (SIGTAP_DICTIONARY[code]) {
-        return SIGTAP_DICTIONARY[code];
+        return SIGTAP_DICTIONARY[code]; // Faz fallback para apenas números (ex: 026)
     }
 
     const isSmallCode = code.length <= 5;

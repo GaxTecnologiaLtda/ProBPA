@@ -35,7 +35,16 @@ export async function fetchMunicipalitiesByEntity(entityId: string, municipality
         const docRef = doc(colRef, municipalityId);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-            return [{ id: docSnap.id, ...docSnap.data() } as Municipality];
+            const collectionName = type === "PUBLIC" ? "public_entities" : "private_entities";
+            return [{
+                id: docSnap.id,
+                ...(docSnap.data() as any),
+                entityType: collectionName,
+                _pathContext: {
+                    entityType: type,
+                    entityId: entityId
+                }
+            } as Municipality];
         } else {
             return [];
         }

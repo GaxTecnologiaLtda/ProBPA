@@ -31,14 +31,14 @@ import {
 import { PatientTimeline } from '../components/PatientTimeline';
 import { SigtapTreeSelector } from '../components/SigtapTreeSelector';
 import { sigtapService } from '../services/sigtapService';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ProcedureCard } from '../components/ProcedureCard';
 import { CdsIndividualForm } from '../components/forms/CdsIndividualForm';
 import { CdsOdontoForm } from '../components/forms/CdsOdontoForm';
-import { CdsColetivaForm } from '../components/forms/CdsColetivaForm';
 import { CdsVaccinationForm } from '../components/forms/CdsVaccinationForm';
 import { CdsDomiciliarForm } from '../components/forms/CdsDomiciliarForm';
+import { ProcedureSection } from '../components/forms/ProcedureSection';
 import { doc, getDoc } from 'firebase/firestore'; // Added getDoc import
 
 function cn(...inputs: ClassValue[]) {
@@ -111,6 +111,20 @@ export const Register: React.FC = () => {
     // MUNICIPALITY CONFIGURATION STATE
     const [interfaceType, setInterfaceType] = useState<'PEC' | 'SIMPLIFIED'>('PEC'); // Default to PEC
     const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+    const [productionToleranceDays, setProductionToleranceDays] = useState<number>(0);
+    const [entityName, setEntityName] = useState<string>('Entidade');
+
+    // ==========================================
+    // ONBOARDING STATE (Simplified Mode)
+    // ==========================================
+    const [showOnboarding, setShowOnboarding] = useState(false);
+    const [onboardingStep, setOnboardingStep] = useState(0);
+
+    // Refs for scrolling to sections during onboarding
+    const unitRef = useRef<HTMLDivElement>(null);
+    const detailsRef = useRef<HTMLDivElement>(null);
+    const patientRef = useRef<HTMLDivElement>(null);
+    const proceduresRef = useRef<HTMLDivElement>(null);
 
     // BLOCK RENDER UNTIL CONFIG LOADED
     if (!isConfigLoaded && currentUnit?.municipalityId) {
@@ -134,21 +148,24 @@ export const Register: React.FC = () => {
 
             try {
 
-                // We need to fetch the municipality doc to get the interfaceType.
-                // Munis are subcollections: municipalities/{PUBLIC|PRIVATE}/{entityId}/{munId}
-                // Since we don't know the Type, we check both or verify User entity context.
-                // Assuming User is linked to the same entity as the unit:
+                // ---------------------------------------------------------
+                // MUNICIPALITY CONFIG FETCHING (STRICT SCOPE)
+                // ---------------------------------------------------------
                 const entityId = user?.entityId;
                 if (!entityId) throw new Error("User Entity ID missing");
 
-                // Try fetching from Public path first (Most common? Or check both)
-                let docRef = doc(db, 'municipalities', 'PUBLIC', entityId, mId);
+                // Determine entityType strictly from user context to avoid global mismatch
+                const rawEntityType = user?.entityType || 'PUBLIC';
+                const entityType = (rawEntityType === 'Privada' || rawEntityType === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
+
+                const docRef = doc(db, 'municipalities', entityType, entityId, mId);
                 let docSnap = await getDoc(docRef);
 
+                // Fallback attempt (only if the first fails and we are not sure)
                 if (!docSnap.exists()) {
-                    // Try Private
-                    docRef = doc(db, 'municipalities', 'PRIVATE', entityId, mId);
-                    docSnap = await getDoc(docRef);
+                    const altType = entityType === 'PRIVATE' ? 'PUBLIC' : 'PRIVATE';
+                    const altDocRef = doc(db, 'municipalities', altType, entityId, mId);
+                    docSnap = await getDoc(altDocRef);
                 }
 
                 // Fallback: If still not found, logic fails (PEC Default)
@@ -157,15 +174,22 @@ export const Register: React.FC = () => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     const type = data.interfaceType || 'PEC';
-                    console.log(`Debug: Municipality ${mId} Config Loaded:`, type);
+                    const toleranceDays = data.productionToleranceDays || 0;
+                    const linkedName = data.linkedEntityName || user?.entityName || 'Entidade';
+
+                    console.log(`Debug: Municipality ${mId} Config Loaded:`, type, 'Tolerance:', toleranceDays);
 
                     // CACHE: Save to localStorage for offline support
                     localStorage.setItem(`probpa_config_${mId}`, JSON.stringify({
                         type,
+                        toleranceDays,
+                        linkedName,
                         timestamp: Date.now()
                     }));
 
                     setInterfaceType(type);
+                    setProductionToleranceDays(toleranceDays);
+                    setEntityName(linkedName);
 
                     // IF SIMPLIFIED: Force Ficha to PROCEDIMENTOS
                     if (type === 'SIMPLIFIED') {
@@ -183,6 +207,9 @@ export const Register: React.FC = () => {
                         const parsed = JSON.parse(cached);
                         console.log("Using cached interface config:", parsed.type);
                         setInterfaceType(parsed.type);
+                        if (parsed.toleranceDays !== undefined) setProductionToleranceDays(parsed.toleranceDays);
+                        if (parsed.linkedName) setEntityName(parsed.linkedName);
+                        
                         if (parsed.type === 'SIMPLIFIED') {
                             setActiveFicha('PROCEDIMENTOS');
                         }
@@ -197,6 +224,59 @@ export const Register: React.FC = () => {
         fetchConfig();
     }, [currentUnit, user?.entityId]);
 
+    // TRIGGER ONBOARDING (ONCE PER MOUNT FOR SIMPLIFIED PER USER REQUEST)
+    useEffect(() => {
+        let isMounted = true;
+        if (isConfigLoaded && interfaceType === 'SIMPLIFIED') {
+            // We use a small timeout to ensure the DOM is ready and we don't block the initial render
+            setTimeout(() => {
+                if (isMounted) {
+                    setShowOnboarding(true);
+                    setOnboardingStep(0);
+                    // Prevent scrolling body while onboarding modal is open
+                    document.body.style.overflow = 'hidden';
+                }
+            }, 500);
+        }
+
+        return () => {
+            isMounted = false;
+            // Cleanup on unmount or mode switch
+            document.body.style.overflow = 'auto';
+        };
+    }, [isConfigLoaded, interfaceType]);
+
+    const handleNextOnboardingStep = () => {
+        if (onboardingStep < 5) {
+            const nextStep = onboardingStep + 1;
+            setOnboardingStep(nextStep);
+
+            // Allow scrolling again so we can scroll to sections
+            document.body.style.overflow = 'auto';
+
+            // Scroll to the active section
+            setTimeout(() => {
+                if (nextStep === 1 && unitRef.current) unitRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (nextStep === 2 && detailsRef.current) detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (nextStep === 3 && patientRef.current) patientRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (nextStep === 4 && proceduresRef.current) proceduresRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (nextStep === 5) {
+                    // Modal final, lock body again to focus center
+                    document.body.style.overflow = 'hidden';
+                }
+            }, 300);
+        } else {
+            closeOnboarding();
+        }
+    };
+
+    const closeOnboarding = () => {
+        setShowOnboarding(false);
+        setOnboardingStep(0);
+        document.body.style.overflow = 'auto';
+        // We do not save to localStorage as per user request (always show)
+    };
+
     // Ficha Type State
     type FichaType = 'INDIVIDUAL' | 'ODONTO' | 'PROCEDIMENTOS' | 'VACINACAO' | 'DOMICILIAR' | 'COLETIVA';
     // Allowed Fichas based on CBO
@@ -207,30 +287,30 @@ export const Register: React.FC = () => {
         }
 
         const cbo = user?.cbo || '';
-        if (!cbo) return ['PROCEDIMENTOS', 'COLETIVA'];
+        if (!cbo) return ['PROCEDIMENTOS'];
 
         // 1. Médicos (225) & Enfermeiros (2235)
         if (cbo.startsWith('225') || cbo.startsWith('2235')) {
-            return ['INDIVIDUAL', 'COLETIVA', 'VACINACAO'];
+            return ['INDIVIDUAL', 'VACINACAO'];
         }
 
         // 2. Dentistas (2232) & TSB (3224)
         if (cbo.startsWith('2232') || cbo.startsWith('3224')) {
-            return ['ODONTO', 'COLETIVA'];
+            return ['ODONTO'];
         }
 
         // 3. Técnicos de Enfermagem (3222)
         if (cbo.startsWith('3222')) {
-            return ['PROCEDIMENTOS', 'VACINACAO', 'COLETIVA'];
+            return ['PROCEDIMENTOS', 'VACINACAO'];
         }
 
         // 4. ACS (5151) & ACE (5153)
         if (cbo.startsWith('5151') || cbo.startsWith('5153')) {
-            return ['DOMICILIAR', 'COLETIVA'];
+            return ['DOMICILIAR'];
         }
 
         // Default
-        return ['PROCEDIMENTOS', 'COLETIVA'];
+        return ['PROCEDIMENTOS'];
 
 
     }, [user?.cbo, interfaceType]);
@@ -288,19 +368,7 @@ export const Register: React.FC = () => {
     const [showAddress, setShowAddress] = useState(false);
 
     // Procedures List
-    const [procedures, setProcedures] = useState<ProcedureItem[]>([{
-        procedureCode: '',
-        procedureName: '',
-        cidCodes: [],
-        attendanceCharacter: '01',
-        attendanceType: '',
-        authNumber: '',
-        serviceCode: '',
-        classCode: '',
-        quantity: 1,
-        obs: '',
-        isExpanded: true
-    }]);
+    const [procedures, setProcedures] = useState<ProcedureItem[]>([]);
 
     // Form State matching BPA-I structure (Base Fields)
     const [formData, setFormData] = useState({
@@ -412,6 +480,35 @@ export const Register: React.FC = () => {
         }
     }, [formData.patientDob, formData.attendanceDate]);
 
+    // Auto-update competence based on attendance date
+    useEffect(() => {
+        if (formData.attendanceDate) {
+            // Use T12:00:00 to avoid timezone shifts
+            const date = new Date(`${formData.attendanceDate}T12:00:00`);
+            if (!isNaN(date.getTime())) {
+                const year = date.getFullYear();
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const newCompetence = `${year}${month}`;
+
+                if (newCompetence !== formData.competence) {
+                    setFormData(prev => ({ ...prev, competence: newCompetence }));
+
+                    // Ensure this competence is available in the select options
+                    setAvailableCompetences(prev => {
+                        const exists = prev.some(c => c.competence === newCompetence);
+                        if (exists) return prev;
+
+                        const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                        const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+                        const newOptions = [...prev, { competence: newCompetence, label: formattedLabel }];
+                        // Sort descending by competence (YYYYMM)
+                        return newOptions.sort((a, b) => b.competence.localeCompare(a.competence));
+                    });
+                }
+            }
+        }
+    }, [formData.attendanceDate, formData.competence]);
+
     // Auto-Set Location for ACS / Domiciliar
     useEffect(() => {
         if (activeFicha === 'DOMICILIAR') {
@@ -442,6 +539,7 @@ export const Register: React.FC = () => {
     // Patient Search Debounce
     const debouncedCns = useDebounce(formData.patientCns, 500);
     const debouncedCpf = useDebounce(formData.patientCpf, 500);
+    const debouncedName = useDebounce(formData.patientName, 500);
 
     // Generate last 12 months for Competence Select
     useEffect(() => {
@@ -520,9 +618,10 @@ export const Register: React.FC = () => {
         async function searchPatient() {
             const termCns = debouncedCns.replace(/\D/g, '');
             const termCpf = debouncedCpf.replace(/\D/g, '');
+            const termName = debouncedName.trim().toUpperCase();
 
-            // Only search if we have at least 3 digits to avoid huge lists
-            if (termCns.length < 3 && termCpf.length < 3) {
+            // Only search if we have at least 3 digits/chars
+            if (termCns.length < 3 && termCpf.length < 3 && termName.length < 3) {
                 setPatientSuggestions([]);
                 setShowPatientSuggestions(null);
                 setPatientFound(false); // Reset found status
@@ -530,34 +629,57 @@ export const Register: React.FC = () => {
             }
 
             try {
-                const patientsRef = collection(db, 'patients');
-                let q;
-                let type: 'cns' | 'cpf' | null = null;
+                let patientsRef;
+                let legacyRef = collection(db, 'patients');
+                const entityId = user?.entityId;
+                const municipalityId = currentUnit?.municipalityId;
+                const entityType = user?.entityType || 'PUBLIC';
+
+                if (entityId && municipalityId) {
+                    const type = (entityType === 'Privada' || entityType === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
+                    patientsRef = collection(db, `municipalities/${type}/${entityId}/${municipalityId}/patients`);
+                } else {
+                    patientsRef = legacyRef;
+                }
+
+                let qScoped;
+                let qLegacy;
+                let type: 'cns' | 'cpf' | 'name' | null = null;
 
                 // Prioritize CNS search if active
                 if (termCns.length >= 3) {
                     type = 'cns';
-                    // Prefix search: cns >= term && cns <= term + '\uf8ff'
-                    q = query(
-                        patientsRef,
-                        where('cns', '>=', termCns),
-                        where('cns', '<=', termCns + '\uf8ff'),
-                        limit(5)
-                    );
+                    qScoped = query(patientsRef, where('cns', '>=', termCns), where('cns', '<=', termCns + '\uf8ff'), limit(5));
+                    if (patientsRef !== legacyRef) qLegacy = query(legacyRef, where('cns', '>=', termCns), where('cns', '<=', termCns + '\uf8ff'), limit(5));
                 } else if (termCpf.length >= 3) {
                     type = 'cpf';
-                    q = query(
-                        patientsRef,
-                        where('cpf', '>=', termCpf),
-                        where('cpf', '<=', termCpf + '\uf8ff'),
-                        limit(5)
-                    );
+                    qScoped = query(patientsRef, where('cpf', '>=', termCpf), where('cpf', '<=', termCpf + '\uf8ff'), limit(5));
+                    if (patientsRef !== legacyRef) qLegacy = query(legacyRef, where('cpf', '>=', termCpf), where('cpf', '<=', termCpf + '\uf8ff'), limit(5));
+                } else if (termName.length >= 3 && !patientFound) {
+                    type = 'name';
+                    qScoped = query(patientsRef, where('name', '>=', termName), where('name', '<=', termName + '\uf8ff'), limit(5));
+                    if (patientsRef !== legacyRef) qLegacy = query(legacyRef, where('name', '>=', termName), where('name', '<=', termName + '\uf8ff'), limit(5));
                 }
 
-                if (q && type) {
-                    const snapshot = await getDocs(q);
-                    const results = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
-                    setPatientSuggestions(results);
+                if (type) {
+                    const scopedSnap = qScoped ? await getDocs(qScoped) : null;
+                    const legacySnap = qLegacy ? await getDocs(qLegacy) : null;
+
+                    const resultsMap = new Map();
+
+                    if (scopedSnap) {
+                        scopedSnap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...(doc.data() as any) }));
+                    }
+                    if (legacySnap) {
+                        legacySnap.docs.forEach(doc => {
+                            // Deduplicate by ID
+                            if (!resultsMap.has(doc.id)) {
+                                resultsMap.set(doc.id, { id: doc.id, ...(doc.data() as any) });
+                            }
+                        });
+                    }
+
+                    setPatientSuggestions(Array.from(resultsMap.values()).slice(0, 5));
                     setShowPatientSuggestions(type);
                 }
             } catch (err) {
@@ -565,7 +687,7 @@ export const Register: React.FC = () => {
             }
         }
         searchPatient();
-    }, [debouncedCns, debouncedCpf]);
+    }, [debouncedCns, debouncedCpf, debouncedName]);
 
     const handleSelectPatient = async (patient: any) => {
         setIsReadOnlyPatient(true); // Lock demographic fields
@@ -665,43 +787,13 @@ export const Register: React.FC = () => {
     };
 
     // Procedure Handlers
-    const handleAddProcedure = () => {
-        setProcedures(prev => [
-            ...prev.map(p => ({ ...p, isExpanded: false })), // Collapse others
-            {
-                procedureCode: '',
-                procedureName: '',
-                cidCodes: [],
-                attendanceCharacter: '01-AGENDADA',
-                attendanceType: '',
-                authNumber: '',
-                serviceCode: '',
-                classCode: '',
-                quantity: 1,
-                obs: '',
-                isExpanded: true
-            }
-        ]);
+    const handleAddProcedure = (newProc?: any) => {
+        if (newProc) {
+            setProcedures(prev => [...prev.map(p => ({ ...p, isExpanded: false })), { ...newProc, isExpanded: false }]);
+        }
     };
 
     const handleRemoveProcedure = (index: number) => {
-        if (procedures.length === 1) {
-            // If only one, just reset it
-            setProcedures([{
-                procedureCode: '',
-                procedureName: '',
-                cidCodes: [],
-                attendanceCharacter: '01-AGENDADA',
-                attendanceType: '',
-                authNumber: '',
-                serviceCode: '',
-                classCode: '',
-                quantity: 1,
-                obs: '',
-                isExpanded: true
-            }]);
-            return;
-        }
         setProcedures(prev => prev.filter((_, i) => i !== index));
     };
 
@@ -740,8 +832,8 @@ export const Register: React.FC = () => {
         // CBO Validation
         const validation = sigtapService.checkCboCompatibility(proc, formData.cbo);
         if (!validation.compatible) {
-            alert(validation.message || 'CBO incompatível'); // Or use toast if available
-            return; // Block selection
+            const proceed = window.confirm(`${validation.message || 'CBO incompatível'}\n\nDeseja prosseguir e registrar este procedimento mesmo assim?`);
+            if (!proceed) return;
         }
 
         // OCI Validation (Avoid Duplication)
@@ -812,9 +904,48 @@ export const Register: React.FC = () => {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.SyntheticEvent) => {
         e.preventDefault();
         setError('');
+
+        // ---------------------------------------------------------
+        // 0. RETROACTIVE PRODUCTION BLOCK (Tolerance Check)
+        // ---------------------------------------------------------
+        if (formData.attendanceDate && productionToleranceDays > 0) {
+            const attDate = new Date(`${formData.attendanceDate}T12:00:00`);
+            if (!isNaN(attDate.getTime())) {
+                const deadlineDate = new Date(attDate.getFullYear(), attDate.getMonth() + 1, productionToleranceDays);
+                const today = new Date();
+                const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                
+                if (todayMidnight > deadlineDate) {
+                    setError(`O prazo para digitação retroativa desta competência expirou (Limite: dia ${productionToleranceDays} do mês seguinte). Entre em contato com a Regulação do Núcleo de Saúde da entidade ${entityName}.`);
+                    
+                    try {
+                        const mId = currentUnit?.municipalityId || (user?.units?.find(u => u.id === formData.unit)?.municipalityId) || '';
+                        const entityType = user?.entityType === 'Privada' || user?.entityType === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+                        const logsRef = collection(db, `municipalities/${entityType}/${user?.entityId}/${mId}/logs`);
+                        await addDoc(logsRef, {
+                            action: 'BLOCK',
+                            target: 'PROFESSIONAL',
+                            description: `Bloqueio de Produção: Tentativa de registrar atendimento retroativo (${formData.attendanceDate}).`,
+                            user: {
+                                uid: user?.id || '',
+                                email: user?.email || '',
+                                name: user?.name || '',
+                                role: 'PROFISSIONAL'
+                            },
+                            entityId: user?.entityId || '',
+                            municipalityId: mId,
+                            timestamp: new Date()
+                        });
+                    } catch (e) {
+                        console.error('Failed to log block:', e);
+                    }
+                    return;
+                }
+            }
+        }
 
         // ---------------------------------------------------------
         // 1. COLLECTIVE ACTIVITY PATH (Bypass Standard Validation)
@@ -860,7 +991,6 @@ export const Register: React.FC = () => {
                     cidCodes: [],
                     attendanceCharacter: '',
                     quantity: 1,
-                    isCollectiveActivity: true, // Flag for service
                     obs: `Atividade Tipo ${colData.atividadeTipo}`,
 
                     // Flattened params if strict schema requires them here, 
@@ -920,20 +1050,51 @@ export const Register: React.FC = () => {
         // 2. STANDARD PATH (Individual, Odonto, Proc, Domiciliar)
         // ---------------------------------------------------------
 
+        const cleanCns = formData.patientCns ? formData.patientCns.replace(/\D/g, '') : '';
+        const cleanCpf = formData.patientCpf ? formData.patientCpf.replace(/\D/g, '') : '';
+
         // Validation
-        if (!formData.patientCns && !formData.patientCpf && !formData.patientName) {
-            setError('Informe ao menos o CNS, CPF ou Nome do paciente');
-            return;
+        if (interfaceType === 'SIMPLIFIED') {
+            if (!cleanCns && !cleanCpf) {
+                setError('É obrigatório informar o CNS ou o CPF do paciente.');
+                return;
+            }
+            if (!formData.patientName || formData.patientName.trim() === '') {
+                setError('É obrigatório informar o Nome do paciente.');
+                return;
+            }
+            if (!patientFound && !formData.patientDob) {
+                setError('Para novos pacientes, é obrigatório informar a Data de Nascimento/Idade do paciente.');
+                return;
+            }
+            if (cleanCns.length > 0 && cleanCns.length !== 15) {
+                setError('CNS Inválido. O cartão SUS deve conter exatamente 15 números.');
+                return;
+            }
+            if (cleanCpf.length > 0 && cleanCpf.length !== 11) {
+                setError('CPF Inválido. O CPF deve conter exatamente 11 números.');
+                return;
+            }
+        } else {
+            // Original Legacy validation
+            if (!cleanCns && !cleanCpf && !formData.patientName) {
+                setError('Informe ao menos o CNS, CPF ou Nome do paciente');
+                return;
+            }
+            if (!patientFound && !formData.patientDob) {
+                setError('Para novos pacientes, é obrigatório informar a Data de Nascimento do paciente.');
+                return;
+            }
         }
 
         // LEDI/APS Validation
         if (isLediTarget) {
             // 1. CNS Validation (Modulo 11) - NOW CNS OR CPF
-            if (!formData.patientCns && !formData.patientCpf) {
+            if (!cleanCns && !cleanCpf) {
                 setError('Para unidades APS (e-SUS), é obrigatório informar o CNS ou o CPF do paciente.');
                 return;
             }
-            if (formData.patientCns.length > 0 && !validateCNS(formData.patientCns)) {
+            if (cleanCns.length > 0 && !validateCNS(cleanCns)) {
                 setError('CNS Inválido. Verifique o número do cartão SUS (Algoritmo Módulo 11).');
                 return;
             }
@@ -956,10 +1117,6 @@ export const Register: React.FC = () => {
                 const problems = formData.soaps?.evaluation?.problemConditions || [];
                 const conduct = formData.soaps?.plan?.conduct || [];
 
-                if (problems.length === 0) {
-                    setError('Ficha Atendimento Individual: Informe ao menos um Problema/Condição (CIAP/CID).');
-                    return;
-                }
                 if (conduct.length === 0) {
                     setError('Ficha Atendimento Individual: Informe a Conduta/Desfecho.');
                     return;
@@ -990,6 +1147,12 @@ export const Register: React.FC = () => {
             return;
         }
 
+        const isProcedureType = activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL';
+        if (isProcedureType && procedures.length === 0) {
+            setError('Adicione pelo menos um procedimento em "ITENS ADICIONADOS" para prosseguir.');
+            return;
+        }
+
         // Validate Procedures
         for (let i = 0; i < procedures.length; i++) {
             const p = procedures[i];
@@ -1000,32 +1163,7 @@ export const Register: React.FC = () => {
                 return;
             }
 
-            // 2. Collective Activity Validation
-            if (p.isCollectiveActivity) {
-                // Should not hit here if activeFicha is COLETIVA (handled above), 
-                // but keep for legacy mixed mode if any.
-                if (!p.activityType) {
-                    setError(`Procedimento #${i + 1}: Informe o Tipo de Atividade Coletiva.`);
-                    return;
-                }
-                if (!p.participantsCount || p.participantsCount < 1) {
-                    setError(`Procedimento #${i + 1}: Informe o número de participantes (mínimo 1).`);
-                    return;
-                }
-                // Skip CID/Qty checks for Collective (Qty forced to 1, CIDs handled by simplified form)
-                continue;
-            }
-
             // 3. Individual Validation (Standard)
-            // Skip CID check if it's a Home Visit (localAtendimento === '4')
-            const isHomeVisit = formData.localAtendimento === '4';
-
-            if (p.requiresCid !== false && !isHomeVisit) {
-                if (p.cidCodes.length === 0 || p.cidCodes.some(cid => !cid)) {
-                    setError(`Procedimento #${i + 1}: Selecione ao menos um CID válido.`);
-                    return;
-                }
-            }
             if (p.quantity <= 0) {
                 setError(`Procedimento #${i + 1}: Quantidade inválida.`);
                 return;
@@ -1048,8 +1186,8 @@ export const Register: React.FC = () => {
             // 2. Save/Update Patient (CRITICAL: Restored this call)
             const patientId = await saveOrUpdatePatient({
                 id: (formData as any).patientId, // Pass explicit ID to avoid duplicates
-                cns: formData.patientCns,
-                cpf: formData.patientCpf,
+                cns: formData.patientCns ? formData.patientCns.replace(/\D/g, '') : '',
+                cpf: formData.patientCpf ? formData.patientCpf.replace(/\D/g, '') : '',
                 name: formData.patientName,
                 dob: formData.patientDob,
                 age: formData.patientAge,
@@ -1284,7 +1422,7 @@ export const Register: React.FC = () => {
                     // entityType removed: let service resolve it
 
                     patientId: patientId,
-                    patientCns: formData.patientCns,
+                    patientCns: cleanCns,
                     patientName: formData.patientName,
                     patientDob: formData.patientDob,
                     patientAge: formData.patientAge,
@@ -1392,7 +1530,8 @@ export const Register: React.FC = () => {
                     // entityType removed: let service resolve it
 
                     patientId: patientId,
-                    patientCns: formData.patientCns, // Optional in FP Child if CPF is present, but good to have
+                    patientCns: cleanCns, // Optional in FP Child if CPF is present, but good to have
+                    patientCpf: cleanCpf,
                     patientName: formData.patientName, // Not used in FP Thrift but good for UI
                     patientDob: formData.patientDob,   // Required for FP Child (#4 dtNascimento)
                     patientSex: formData.patientSex,   // Required for FP Child (#5 sexo)
@@ -1441,7 +1580,41 @@ export const Register: React.FC = () => {
             }
 
             await Promise.all(savePromises);
-            setStep('success');
+
+            // --- UX IMPROVEMENT: Toast/Alert & Clear Patient Data Only ---
+            // Visual Feedback (Poor-man's toast since we lack react-hot-toast in this context)
+            const successMsg = document.createElement('div');
+            successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50 animate-in fade-in slide-in-from-top-4 duration-300';
+            successMsg.innerText = 'Atendimento Registrado com Sucesso!';
+            document.body.appendChild(successMsg);
+            setTimeout(() => {
+                successMsg.classList.add('fade-out');
+                setTimeout(() => successMsg.remove(), 300);
+            }, 5000);
+
+            // Clear ONLY Patient Data
+            setFormData(prev => ({
+                ...prev,
+                patientId: '',
+                patientCns: '',
+                patientCpf: '',
+                patientName: '',
+                patientDob: '',
+                patientSex: '',
+                patientRace: '',
+                // Also clear vitals/clinical data to prevent accidental carryover
+                weight: '', height: '', pressaoArterialSistolica: '', pressaoArterialDiastolica: '',
+                frequenciaCardiaca: '', frequenciaRespiratoria: '', temperatura: '', saturacaoO2: '',
+                glicemiaCapilar: '', perimetroCefalico: '', perimetroPanturrilha: '', circunferenciaAbdominal: ''
+            }));
+
+            setIsReadOnlyPatient(false);
+            setPatientFound(false);
+            setPatientHealthFlags({});
+            setIsHypertensiveOrDiabetic(false);
+
+            // Keep on 'form' step, do not go to 'success'
+            // setStep('success');
 
         } catch (err: any) {
             console.error(err);
@@ -1464,47 +1637,17 @@ export const Register: React.FC = () => {
             patientSex: '',
             patientRace: '',
         }));
-        setProcedures([{
-            procedureCode: '',
-            procedureName: '',
-            cidCodes: [],
-            attendanceCharacter: '01-AGENDADA',
-            attendanceType: '',
-            authNumber: '',
-            serviceCode: '',
-            classCode: '',
-            quantity: 1,
-            obs: '',
-            isExpanded: true
-        }]);
+        setIsReadOnlyPatient(false);
+        setPatientFound(false);
+        setPatientHealthFlags({});
+        setIsHypertensiveOrDiabetic(false);
+        setProcedures([]);
         setShowAddress(false);
     };
 
+    // We no longer use success step (kept logic above instead)
     if (step === 'success') {
-        return (
-            <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="flex flex-col items-center justify-center h-[60vh] text-center space-y-6"
-            >
-                <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center text-green-600 dark:text-green-400">
-                    <CheckCircle size={40} />
-                </div>
-                <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Atendimentos Registrados!</h2>
-
-                    <p className="text-gray-500 mt-2">Os procedimentos foram salvos com sucesso.</p>
-                </div>
-                <div className="flex gap-3 w-full max-w-xs">
-                    <Button variant="outline" className="flex-1" onClick={() => navigate('/dashboard')}>
-                        Início
-                    </Button>
-                    <Button className="flex-1" onClick={handleBack}>
-                        Novo Registro
-                    </Button>
-                </div>
-            </motion.div>
-        );
+        return null; // unreachable now
     }
 
 
@@ -1612,155 +1755,202 @@ export const Register: React.FC = () => {
 
 
             {/* CONTENT */}
-            <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+            <div className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
 
                 {/* SEÇÃO 1: DADOS OPERACIONAIS */}
-                <Card className="p-5 border-l-4 border-l-medical-500">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                        <FileText size={20} className="text-medical-500" />
-                        Identificação do Estabelecimento
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div ref={unitRef} className={cn("transition-all duration-300", showOnboarding && onboardingStep === 1 ? "relative z-[60] bg-white dark:bg-gray-900 p-2 -m-2 rounded-2xl ring-4 ring-medical-500 shadow-2xl" : "relative z-10")}>
+                    <Card className="p-5 border-l-4 border-l-medical-500">
+                        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                            <FileText size={20} className="text-medical-500" />
+                            Identificação do Estabelecimento
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                        {/* NEW: Local de Atendimento Visual Selector - Hidden for ACS & SIMPLIFIED */}
-                        {activeFicha !== 'DOMICILIAR' && interfaceType !== 'SIMPLIFIED' && (
-                            <div className="sm:col-span-2 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-2">
-                                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 block mb-3 flex items-center gap-2">
-                                    <MapPin size={18} className="text-medical-600" />
-                                    Passo 1: Onde o atendimento foi realizado?
-                                </label>
+                            {/* NEW: Local de Atendimento Visual Selector - Hidden for ACS & SIMPLIFIED */}
+                            {activeFicha !== 'DOMICILIAR' && interfaceType !== 'SIMPLIFIED' && (
+                                <div className="sm:col-span-2 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm mb-2">
+                                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 block mb-3 flex items-center gap-2">
+                                        <MapPin size={18} className="text-medical-600" />
+                                        Passo 1: Onde o atendimento foi realizado?
+                                    </label>
 
-                                <div className="flex flex-wrap gap-2">
-                                    {[
-                                        { value: '1', label: 'Na Unidade (UBS)', icon: <Layout size={16} /> },
-                                        { value: '4', label: 'No Domicílio', icon: <MapPin size={16} /> },
-                                        { value: '2', label: 'Unidade Móvel', icon: <Activity size={16} /> },
-                                        { value: '3', label: 'Escola/Creche', icon: <User size={16} /> },
-                                        { value: '5', label: 'Outros Locais', icon: <Plus size={16} /> } // Simplified
-                                    ].map(opt => (
-                                        <button
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, localAtendimento: opt.value })}
-                                            className={cn(
-                                                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
-                                                formData.localAtendimento === opt.value
-                                                    ? "bg-medical-50 border-medical-500 text-medical-700 shadow-sm ring-1 ring-medical-500"
-                                                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
-                                            )}
-                                        >
-                                            {opt.icon}
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { value: '1', label: 'Na Unidade (UBS)', icon: <Layout size={16} /> },
+                                            { value: '4', label: 'No Domicílio', icon: <MapPin size={16} /> },
+                                            { value: '2', label: 'Unidade Móvel', icon: <Activity size={16} /> },
+                                            { value: '3', label: 'Escola/Creche', icon: <User size={16} /> },
+                                            { value: '5', label: 'Outros Locais', icon: <Plus size={16} /> } // Simplified
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, localAtendimento: opt.value })}
+                                                className={cn(
+                                                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border",
+                                                    formData.localAtendimento === opt.value
+                                                        ? "bg-medical-50 border-medical-500 text-medical-700 shadow-sm ring-1 ring-medical-500"
+                                                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
+                                                )}
+                                            >
+                                                {opt.icon}
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
 
-                                {/* Contextual Info Badge */}
-                                <div className="mt-3">
-                                    {formData.localAtendimento === '4' && activeFicha === 'INDIVIDUAL' && (
-                                        <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded">
-                                            <CheckCircle size={14} />
-                                            <span>Você está registrando um <strong>Atendimento Individual em Domicílio</strong> (Ficha CDS 03).</span>
-                                        </div>
-                                    )}
-                                    {formData.localAtendimento === '4' && activeFicha === 'DOMICILIAR' && (
-                                        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded">
-                                            <MapPin size={14} />
-                                            <span>Você está registrando uma <strong>Visita Domiciliar ACS/ACE</strong> (Ficha CDS 07).</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        <Select
-                            label={formData.localAtendimento === '1' ? "Unidade de Realização (CNES)" : "Unidade de Vínculo/Referência"}
-                            value={formData.unit}
-                            onChange={e => {
-                                const selectedUnit = user?.units.find(u => u.id === e.target.value);
-                                if (selectedUnit) {
-                                    selectUnit(selectedUnit); // Updates global context & triggers config fetch
-                                    // Local formData update is handled by the useEffect monitoring currentUnit
-                                }
-                            }}
-                            options={user?.units.map(u => ({ value: u.id, label: `${u.name} ${u.type ? `(${u.type})` : ''} - ${u.occupation}` })) || []}
-                        />
-                        <Input
-                            label="CBO do Profissional"
-                            value={formData.cbo}
-                            readOnly
-                            className="bg-gray-50 dark:bg-gray-700 cursor-not-allowed"
-                        />
-                    </div>
-                </Card>
-
-                {/* SEÇÃO 1.1: DADOS GERAIS DO ATENDIMENTO (DATA, TURNO, COMPETÊNCIA) */}
-                <Card className="p-5 border-l-4 border-l-blue-500">
-                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                        <Calendar size={20} className="text-blue-500" />
-                        Detalhes Atendimento
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <div className="sm:col-span-2">
-                            {interfaceType !== 'SIMPLIFIED' ? (
-                                <>
-                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-1 block mb-1.5">Tipo de Atendimento</label>
-                                    <select
-                                        className="flex h-12 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500 dark:text-gray-100"
-                                        value={formData.tipoAtendimento || ''}
-                                        onChange={e => setFormData({ ...formData, tipoAtendimento: e.target.value })}
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {/* FAI Options (Standard) - When Local is NOT Domicilio (4) */}
-                                        {formData.localAtendimento !== '4' && (
-                                            <>
-                                                <option value="1" title="São consultas que constituem ações programáticas individuais, direcionadas para os ciclos de vida, doenças e agravos prioritários, as quais necessitam de acompanhamento contínuo.">1 - CONSULTA AGENDADA PROGRAMADA / CUIDADO CONTINUADO</option>
-                                                <option value="2" title="É toda consulta realizada com agendamento prévio. É oriunda da demanda espontânea ou por agendamento direto na recepção, de caráter não urgente.">2 - CONSULTA AGENDADA</option>
-                                                <option value="4" title="Refere-se à escuta realizada por profissional de nível superior no momento em que o usuário chega ao serviço de saúde.">4 - ESCUTA INICIAL / ORIENTAÇÃO</option>
-                                                <option value="5" title="É a consulta que é realizada no mesmo dia em que o usuário busca o serviço, de caráter não urgente, ou por encaixe/disponibilidade.">5 - CONSULTA NO DIA</option>
-                                                <option value="6" title="Atendimento realizado quando há risco de vida ou necessidade de assistência imediata.">6 - ATENDIMENTO DE URGÊNCIA</option>
-                                            </>
+                                    {/* Contextual Info Badge */}
+                                    <div className="mt-3">
+                                        {formData.localAtendimento === '4' && activeFicha === 'INDIVIDUAL' && (
+                                            <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded">
+                                                <CheckCircle size={14} />
+                                                <span>Você está registrando um <strong>Atendimento Individual em Domicílio</strong> (Ficha CDS 03).</span>
+                                            </div>
                                         )}
-
-                                        {/* FAD Options (Home Care) - When Local IS Domicilio (4) */}
-                                        {formData.localAtendimento === '4' && (
-                                            <>
-                                                <option value="7" title="Atendimento programado de Atenção Domiciliar.">7 - ATENDIMENTO PROGRAMADO</option>
-                                                <option value="8" title="Atendimento não programado de Atenção Domiciliar.">8 - ATENDIMENTO NÃO PROGRAMADO</option>
-                                                <option value="9" title="Visita domiciliar realizada após o falecimento do paciente.">9 - VISITA DOMICILIAR PÓS-ÓBITO</option>
-                                            </>
+                                        {formData.localAtendimento === '4' && activeFicha === 'DOMICILIAR' && (
+                                            <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded">
+                                                <MapPin size={14} />
+                                                <span>Você está registrando uma <strong>Visita Domiciliar ACS/ACE</strong> (Ficha CDS 07).</span>
+                                            </div>
                                         )}
-                                    </select>
-                                </>
-                            ) : (
-                                // Simplified Mode: Just a readonly info or hidden
-                                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded border border-gray-100 dark:border-gray-700">
-                                    <span className="text-xs text-gray-500 block">Modo Simplificado</span>
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Produção BPA Simplificada</span>
+                                    </div>
                                 </div>
                             )}
+
+                            <Select
+                                label={formData.localAtendimento === '1' ? "Unidade de Realização (CNES)" : "Unidade de Vínculo/Referência"}
+                                value={formData.unit}
+                                onChange={e => {
+                                    const selectedUnit = user?.units.find(u => u.id === e.target.value);
+                                    if (selectedUnit) {
+                                        selectUnit(selectedUnit); // Updates global context & triggers config fetch
+                                        // Local formData update is handled by the useEffect monitoring currentUnit
+                                    }
+                                }}
+                                options={user?.units.map(u => ({ 
+                                    value: u.id, 
+                                    label: `${u.name} ${u.type ? `(${u.type})` : ''} ${u.municipalityName ? `- ${u.municipalityName}` : ''} - ${u.occupation}` 
+                                })) || []}
+                            />
+                            <Input
+                                label="CBO do Profissional"
+                                value={formData.cbo}
+                                readOnly
+                                className="bg-gray-50 dark:bg-gray-700 cursor-not-allowed"
+                            />
                         </div>
-                        <Select
-                            label="Competência"
-                            value={formData.competence}
-                            onChange={e => setFormData({ ...formData, competence: e.target.value })}
-                            options={availableCompetences.map(c => ({ value: c.competence, label: c.label }))}
-                        />
-                        <Input
-                            label="Data Atend."
-                            type="date"
-                            value={formData.attendanceDate}
-                            onChange={e => setFormData({ ...formData, attendanceDate: e.target.value })}
-                        />
-                        {/* Show Shift/Weight/Height here generally? User said: "Data Atend., Turno" below Establishment. 
+                    </Card>
+
+                    {/* Onboarding Tooltip for Step 1 */}
+                    {showOnboarding && onboardingStep === 1 && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[calc(100vw-2rem)] max-w-[350px] bg-medical-600 text-white p-5 rounded-xl shadow-2xl z-[70] animate-in slide-in-from-top-4 fade-in">
+                            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-medical-600 rotate-45"></div>
+                            <h4 className="font-bold text-lg mb-2">Unidade</h4>
+                            <p className="text-sm text-medical-50 mb-4">Sempre observe se a unidade de realização e o CBO (profissão) estão corretos para o registro que você fará em seguida.</p>
+                            <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={closeOnboarding}>Pular Tudo</Button>
+                                <Button size="sm" className="bg-white text-medical-600 hover:bg-gray-100 font-bold" onClick={handleNextOnboardingStep}>Próximo Passo</Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* SEÇÃO 1.1: DADOS GERAIS DO ATENDIMENTO (DATA, TURNO, COMPETÊNCIA) */}
+                <div ref={detailsRef} className={cn("transition-all duration-300", showOnboarding && onboardingStep === 2 ? "relative z-[60] bg-white dark:bg-gray-900 p-2 -m-2 rounded-2xl ring-4 ring-blue-500 shadow-2xl" : "relative z-10")}>
+                    <Card className="p-5 border-l-4 border-l-blue-500">
+                        <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                            <Calendar size={20} className="text-blue-500" />
+                            Detalhes Atendimento
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                            <div className="sm:col-span-2">
+                                {interfaceType !== 'SIMPLIFIED' ? (
+                                    <>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-1 block mb-1.5">Tipo de Atendimento</label>
+                                        <select
+                                            className="flex h-12 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500 dark:text-gray-100"
+                                            value={formData.tipoAtendimento || ''}
+                                            onChange={e => setFormData({ ...formData, tipoAtendimento: e.target.value })}
+                                        >
+                                            <option value="">Selecione...</option>
+                                            {/* FAI Options (Standard) - When Local is NOT Domicilio (4) */}
+                                            {formData.localAtendimento !== '4' && (
+                                                <>
+                                                    <option value="1" title="São consultas que constituem ações programáticas individuais, direcionadas para os ciclos de vida, doenças e agravos prioritários, as quais necessitam de acompanhamento contínuo.">1 - CONSULTA AGENDADA PROGRAMADA / CUIDADO CONTINUADO</option>
+                                                    <option value="2" title="É toda consulta realizada com agendamento prévio. É oriunda da demanda espontânea ou por agendamento direto na recepção, de caráter não urgente.">2 - CONSULTA AGENDADA</option>
+                                                    <option value="4" title="Refere-se à escuta realizada por profissional de nível superior no momento em que o usuário chega ao serviço de saúde.">4 - ESCUTA INICIAL / ORIENTAÇÃO</option>
+                                                    <option value="5" title="É a consulta que é realizada no mesmo dia em que o usuário busca o serviço, de caráter não urgente, ou por encaixe/disponibilidade.">5 - CONSULTA NO DIA</option>
+                                                    <option value="6" title="Atendimento realizado quando há risco de vida ou necessidade de assistência imediata.">6 - ATENDIMENTO DE URGÊNCIA</option>
+                                                </>
+                                            )}
+
+                                            {/* FAD Options (Home Care) - When Local IS Domicilio (4) */}
+                                            {formData.localAtendimento === '4' && (
+                                                <>
+                                                    <option value="7" title="Atendimento programado de Atenção Domiciliar.">7 - ATENDIMENTO PROGRAMADO</option>
+                                                    <option value="8" title="Atendimento não programado de Atenção Domiciliar.">8 - ATENDIMENTO NÃO PROGRAMADO</option>
+                                                    <option value="9" title="Visita domiciliar realizada após o falecimento do paciente.">9 - VISITA DOMICILIAR PÓS-ÓBITO</option>
+                                                </>
+                                            )}
+                                        </select>
+                                    </>
+                                ) : (
+                                    // Simplified Mode: Just a readonly info or hidden
+                                    <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded border border-gray-100 dark:border-gray-700">
+                                        <span className="text-xs text-gray-500 block">Modo Simplificado</span>
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Produção BPA Simplificada</span>
+                                    </div>
+                                )}
+                            </div>
+                            <Select
+                                label="Competência"
+                                value={formData.competence}
+                                onChange={e => setFormData({ ...formData, competence: e.target.value })}
+                                options={availableCompetences.map(c => ({ value: c.competence, label: c.label }))}
+                            />
+                            <Input
+                                label="Data Atend."
+                                type="date"
+                                value={formData.attendanceDate}
+                                onChange={e => setFormData({ ...formData, attendanceDate: e.target.value })}
+                            />
+                            {/* Show Shift/Weight/Height here generally? User said: "Data Atend., Turno" below Establishment. 
                             Weight/Height are Anthro, usually in Form. 
                             But "Procedimentos" section had them. 
                             If FAI, Anthro handles Weight/Height. 
                             If Procedure Ficha? Maybe needed. 
                             Let's keep Weight/Height available but conditionally.
                         */}
-                        {isLediTarget && activeFicha !== 'INDIVIDUAL' && activeFicha !== 'DOMICILIAR' && (
-                            <>
+                            {isLediTarget && activeFicha !== 'INDIVIDUAL' && activeFicha !== 'DOMICILIAR' && (
+                                <>
+                                    <Select
+                                        label="Turno"
+                                        value={formData.shift}
+                                        onChange={e => setFormData({ ...formData, shift: e.target.value })}
+                                        options={[
+                                            { value: 'M', label: 'Manhã' },
+                                            { value: 'T', label: 'Tarde' },
+                                            { value: 'N', label: 'Noite' }
+                                        ]}
+                                    />
+                                    {/* For pure Procedure Ficha, Weight/Height might be needed? Usually not mandatory but let's keep logic */}
+                                    <Input
+                                        label="Peso (kg)"
+                                        type="number"
+                                        placeholder="00.0"
+                                        value={formData.weight}
+                                        onChange={e => setFormData({ ...formData, weight: e.target.value })}
+                                    />
+                                    <Input
+                                        label="Altura (cm)"
+                                        type="number"
+                                        placeholder="000"
+                                        value={formData.height}
+                                        onChange={e => setFormData({ ...formData, height: e.target.value })}
+                                    />
+                                </>
+                            )}
+                            {isLediTarget && (activeFicha === 'INDIVIDUAL' || activeFicha === 'DOMICILIAR') && (
                                 <Select
                                     label="Turno"
                                     value={formData.shift}
@@ -1771,279 +1961,316 @@ export const Register: React.FC = () => {
                                         { value: 'N', label: 'Noite' }
                                     ]}
                                 />
-                                {/* For pure Procedure Ficha, Weight/Height might be needed? Usually not mandatory but let's keep logic */}
-                                <Input
-                                    label="Peso (kg)"
-                                    type="number"
-                                    placeholder="00.0"
-                                    value={formData.weight}
-                                    onChange={e => setFormData({ ...formData, weight: e.target.value })}
-                                />
-                                <Input
-                                    label="Altura (cm)"
-                                    type="number"
-                                    placeholder="000"
-                                    value={formData.height}
-                                    onChange={e => setFormData({ ...formData, height: e.target.value })}
-                                />
-                            </>
-                        )}
-                        {isLediTarget && (activeFicha === 'INDIVIDUAL' || activeFicha === 'DOMICILIAR') && (
-                            <Select
-                                label="Turno"
-                                value={formData.shift}
-                                onChange={e => setFormData({ ...formData, shift: e.target.value })}
-                                options={[
-                                    { value: 'M', label: 'Manhã' },
-                                    { value: 'T', label: 'Tarde' },
-                                    { value: 'N', label: 'Noite' }
-                                ]}
-                            />
-                        )}
-                    </div>
-                </Card>
+                            )}
+                        </div>
+                    </Card>
 
-                {/* SEÇÃO 2: IDENTIFICAÇÃO DO PACIENTE */}
+                    {/* Onboarding Tooltip for Step 2 */}
+                    {showOnboarding && onboardingStep === 2 && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[calc(100vw-2rem)] max-w-[350px] bg-blue-600 text-white p-5 rounded-xl shadow-2xl z-[70] animate-in slide-in-from-top-4 fade-in">
+                            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-blue-600 rotate-45"></div>
+                            <h4 className="font-bold text-lg mb-2">Detalhes Atendimento</h4>
+                            <p className="text-sm text-blue-50 mb-4">Garanta que a competência e data de atendimento estão corretos para os procedimentos que serão lançados.</p>
+                            <div className="flex justify-end gap-2">
+                                <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={closeOnboarding}>Pular Tudo</Button>
+                                <Button size="sm" className="bg-white text-blue-600 hover:bg-gray-100 font-bold" onClick={handleNextOnboardingStep}>Próximo Passo</Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* SEÇÃO 2: IDENTIFICAÇÃO DO PACIENTE */}
                 {activeFicha !== 'COLETIVA' && (
-                    <Card className="p-5 border-l-4 border-l-indigo-500">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-                                <UserCheck size={20} className="text-indigo-500" />
-                                Identificação do Paciente
-                                {patientFound && (
-                                    <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 animate-fade-in">
-                                        <CheckCircle size={12} />
-                                        Encontrado
-                                    </span>
-                                )}
-                                {patientHealthFlags.isHypertension && (
-                                    <span className="ml-2 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-bold border border-red-200">
-                                        HIPERTENSO
-                                    </span>
-                                )}
-                                {patientHealthFlags.isDiabetes && (
-                                    <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold border border-orange-200">
-                                        DIABÉTICO
-                                    </span>
-                                )}
-                            </h3>
-                            <div className="flex gap-2">
-                                {isReadOnlyPatient && (
-                                    <Button type="button" variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="gap-2">
-                                        <Activity size={16} />
-                                        Ver Histórico
-                                    </Button>
-                                )}
-                                {patientFound && isReadOnlyPatient && (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setIsReadOnlyPatient(false)}
-                                        className="gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                                    >
-                                        <Unlock size={16} />
-                                        Editar
-                                    </Button>
-                                )}
-                                <Button variant="outline" size="sm" type="button" disabled title="Em breve: Integração DataSUS">
-                                    <Search size={14} className="mr-1" /> Localizar no DataSUS
-                                </Button>
-                            </div>
-                        </div>
-
-                        {/* Content omitted for brevity in replace tool, effectively wrapping strict content */}
-                        {/* Wait, I cannot omit content in replace_file_content if I want to keep it. I must include it or use start/end carefully. */}
-                        {/* Since the block is huge, I will use multiple simpler edits or just wrap the top and bottom. */}
-                        <div className="space-y-4">
-                            {/* Linha 1: CNS, CPF e Nome */}
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                                <div className="sm:col-span-1 relative">
-                                    <Input
-                                        label="CNS"
-                                        placeholder="000 0000 0000 0000"
-                                        value={formData.patientCns}
-                                        onChange={e => {
-                                            setFormData({ ...formData, patientCns: e.target.value });
-                                            if (e.target.value === '') {
-                                                setPatientSuggestions([]);
-                                                setShowPatientSuggestions(null);
-                                            }
-                                        }}
-                                    />
-                                    {showPatientSuggestions === 'cns' && patientSuggestions.length > 0 && (
-                                        <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
-                                            {patientSuggestions.map(patient => (
-                                                <div
-                                                    key={patient.id}
-                                                    className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm border-b last:border-0 border-gray-100 dark:border-gray-700"
-                                                    onClick={() => handleSelectPatient(patient)}
-                                                >
-                                                    <div className="font-bold text-gray-800 dark:text-white">{patient.cns}</div>
-                                                    <div className="text-xs text-gray-500">{patient.patientName || patient.name}</div>
-                                                </div>
-                                            ))}
-                                        </div>
+                    <div ref={patientRef} className={cn("transition-all duration-300", showOnboarding && onboardingStep === 3 ? "relative z-[60] bg-white dark:bg-gray-900 p-2 -m-2 rounded-2xl ring-4 ring-indigo-500 shadow-2xl" : "relative z-10")}>
+                        <Card className="p-5 border-l-4 border-l-indigo-500">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                                    <UserCheck size={20} className="text-indigo-500" />
+                                    Identificação do Paciente
+                                    {patientFound && (
+                                        <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center gap-1 animate-fade-in">
+                                            <CheckCircle size={12} />
+                                            Encontrado
+                                        </span>
                                     )}
-                                </div>
-                                <div className="sm:col-span-1 relative">
-                                    <Input
-                                        label="CPF"
-                                        placeholder="000.000.000-00"
-                                        value={formData.patientCpf}
-                                        onChange={e => {
-                                            setFormData({ ...formData, patientCpf: e.target.value });
-                                            if (e.target.value === '') {
-                                                setPatientSuggestions([]);
-                                                setShowPatientSuggestions(null);
-                                            }
-                                        }}
-                                    />
-                                    {showPatientSuggestions === 'cpf' && patientSuggestions.length > 0 && (
-                                        <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
-                                            {patientSuggestions.map(patient => (
-                                                <div
-                                                    key={patient.id}
-                                                    className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm border-b last:border-0 border-gray-100 dark:border-gray-700"
-                                                    onClick={() => handleSelectPatient(patient)}
-                                                >
-                                                    <div className="font-bold text-gray-800 dark:text-white">{patient.cpf}</div>
-                                                    <div className="text-xs text-gray-500">{patient.patientName || patient.name}</div>
-                                                </div>
-                                            ))}
-                                        </div>
+                                    {patientHealthFlags.isHypertension && (
+                                        <span className="ml-2 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-bold border border-red-200">
+                                            HIPERTENSO
+                                        </span>
                                     )}
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <Input
-                                        label="Nome Completo"
-                                        placeholder="Nome do paciente"
-                                        value={formData.patientName}
-                                        onChange={e => setFormData({ ...formData, patientName: e.target.value })}
-                                        readOnly={isReadOnlyPatient}
-                                        className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Linha 2: Dados Demográficos */}
-                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                                <div className="col-span-1">
-                                    <Input
-                                        label="Data Nasc."
-                                        type="date"
-                                        value={formData.patientDob}
-                                        onChange={e => setFormData({ ...formData, patientDob: e.target.value })}
-                                        readOnly={isReadOnlyPatient}
-                                        className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
-                                    />
-                                </div>
-                                <div className="col-span-1">
-                                    <Input
-                                        label="Idade"
-                                        value={formData.patientAge}
-                                        readOnly
-                                        className="bg-gray-50 dark:bg-gray-700 cursor-not-allowed"
-                                    />
-                                </div>
-                                <div className="col-span-1">
-                                    <Select
-                                        label="Sexo"
-                                        value={formData.patientSex}
-                                        onChange={e => setFormData({ ...formData, patientSex: e.target.value })}
-                                        options={[{ value: '', label: 'Selecione' }, ...LISTA_SEXO]}
-                                        disabled={isReadOnlyPatient}
-                                    />
-                                </div>
-                                <div className="col-span-1">
-                                    <Select
-                                        label="Raça/Cor"
-                                        value={formData.patientRace}
-                                        onChange={e => setFormData({ ...formData, patientRace: e.target.value })}
-                                        options={[{ value: '', label: 'Selecione' }, ...LISTA_RACA_COR]}
-                                        disabled={isReadOnlyPatient}
-                                    />
-                                </div>
-                                <div className="col-span-1 sm:col-span-1">
-                                    <Input
-                                        label="Telefone"
-                                        placeholder="(XX) 99999-9999"
-                                        value={formData.patientPhone}
-                                        onChange={e => setFormData({ ...formData, patientPhone: e.target.value })}
-                                        readOnly={isReadOnlyPatient}
-                                        className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
-                                    />
-                                </div>
-                                <div className="col-span-1 sm:col-span-1">
-                                    <Input
-                                        label="Nacionalidade (Cód. País)"
-                                        value={formData.patientNationality}
-                                        onChange={e => setFormData({ ...formData, patientNationality: e.target.value })}
-                                        placeholder="010 (Brasil)"
-                                        readOnly={isReadOnlyPatient}
-                                        className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
-                                    />
+                                    {patientHealthFlags.isDiabetes && (
+                                        <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-bold border border-orange-200">
+                                            DIABÉTICO
+                                        </span>
+                                    )}
+                                </h3>
+                                <div className="flex gap-2">
+                                    {isReadOnlyPatient && (
+                                        <Button type="button" variant="outline" size="sm" onClick={() => setIsHistoryOpen(true)} className="gap-2">
+                                            <Activity size={16} />
+                                            Ver Histórico
+                                        </Button>
+                                    )}
+                                    {patientFound && isReadOnlyPatient && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setIsReadOnlyPatient(false)}
+                                            className="gap-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                                        >
+                                            <Unlock size={16} />
+                                            Editar
+                                        </Button>
+                                    )}
+                                    <Button variant="outline" size="sm" type="button" disabled title="Em breve: Integração DataSUS">
+                                        <Search size={14} className="mr-1" /> Localizar no DataSUS
+                                    </Button>
                                 </div>
                             </div>
 
-                            {/* PRE-NATAL SECTION */}
-                            {isLediTarget && isPrenatalEligible && (
-                                <div className="mt-4 p-4 bg-pink-50 dark:bg-pink-900/10 border border-pink-100 dark:border-pink-800 rounded-lg">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <input
-                                            type="checkbox"
-                                            id="chkPregnant"
-                                            className="w-4 h-4 text-pink-600 rounded focus:ring-pink-500"
-                                            checked={formData.isPregnant}
-                                            onChange={e => setFormData({ ...formData, isPregnant: e.target.checked })}
+                            {/* Content omitted for brevity in replace tool, effectively wrapping strict content */}
+                            {/* Wait, I cannot omit content in replace_file_content if I want to keep it. I must include it or use start/end carefully. */}
+                            {/* Since the block is huge, I will use multiple simpler edits or just wrap the top and bottom. */}
+                            <div className="space-y-4">
+                                {/* Linha 1: CNS, CPF e Nome */}
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                    <div className="sm:col-span-1 relative">
+                                        <Input
+                                            label="CNS"
+                                            placeholder="000 0000 0000 0000"
+                                            value={formData.patientCns}
+                                            onChange={e => {
+                                                // Format CNS: XXX XXXX XXXX XXXX (15 digits)
+                                                let v = e.target.value.replace(/\D/g, '');
+                                                if (v.length > 15) v = v.substring(0, 15);
+                                                v = v.replace(/(\d{3})(\d)/, '$1 $2');
+                                                v = v.replace(/(\d{4})(\d)/, '$1 $2');
+                                                v = v.replace(/(\d{4})(\d)/, '$1 $2');
+
+                                                setFormData({ ...formData, patientCns: v });
+                                                if (v === '') {
+                                                    setPatientSuggestions([]);
+                                                    setShowPatientSuggestions(null);
+                                                }
+                                            }}
                                         />
-                                        <label htmlFor="chkPregnant" className="font-bold text-gray-700 dark:text-gray-300">
-                                            Paciente é Gestante
-                                        </label>
-                                    </div>
-
-                                    {formData.isPregnant && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
-                                            <Input
-                                                label="DUM (Data Última Menst.)"
-                                                type="date"
-                                                value={formData.dumDaGestante}
-                                                onChange={e => setFormData({ ...formData, dumDaGestante: e.target.value })}
-                                            />
-                                            <Input
-                                                label="Idade Gestacional (Semanas)"
-                                                type="number"
-                                                value={formData.idadeGestacional}
-                                                readOnly // Computed ideally
-                                                onChange={e => setFormData({ ...formData, idadeGestacional: e.target.value })}
-                                            />
-                                            <div className="flex flex-col justify-end pb-2">
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="rounded text-pink-600 focus:ring-pink-500"
-                                                        checked={formData.stGravidezPlanejada}
-                                                        onChange={e => setFormData({ ...formData, stGravidezPlanejada: e.target.checked })}
-                                                    />
-                                                    <span className="text-sm text-gray-700 dark:text-gray-300">Gravidez Planejada?</span>
-                                                </label>
+                                        {showPatientSuggestions === 'cns' && patientSuggestions.length > 0 && (
+                                            <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                {patientSuggestions.map(patient => (
+                                                    <div
+                                                        key={patient.id}
+                                                        className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm border-b last:border-0 border-gray-100 dark:border-gray-700"
+                                                        onClick={() => handleSelectPatient(patient)}
+                                                    >
+                                                        <div className="font-bold text-gray-800 dark:text-white">{patient.cns}</div>
+                                                        <div className="text-xs text-gray-500">{patient.patientName || patient.name}</div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                            <Input
-                                                label="Núm. Partos Prévios"
-                                                type="number"
-                                                value={formData.nuPartos}
-                                                onChange={e => setFormData({ ...formData, nuPartos: e.target.value })}
-                                            />
-                                        </div>
+                                        )}
+                                    </div>
+                                    <div className="sm:col-span-1 relative">
+                                        <Input
+                                            label="CPF"
+                                            placeholder="000.000.000-00"
+                                            value={formData.patientCpf}
+                                            onChange={e => {
+                                                // Format CPF: XXX.XXX.XXX-XX (11 digits)
+                                                let v = e.target.value.replace(/\D/g, '');
+                                                if (v.length > 11) v = v.substring(0, 11);
+                                                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                                                v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                                                v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+
+                                                setFormData({ ...formData, patientCpf: v });
+                                                if (v === '') {
+                                                    setPatientSuggestions([]);
+                                                    setShowPatientSuggestions(null);
+                                                }
+                                            }}
+                                        />
+                                        {showPatientSuggestions === 'cpf' && patientSuggestions.length > 0 && (
+                                            <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                {patientSuggestions.map(patient => (
+                                                    <div
+                                                        key={patient.id}
+                                                        className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm border-b last:border-0 border-gray-100 dark:border-gray-700"
+                                                        onClick={() => handleSelectPatient(patient)}
+                                                    >
+                                                        <div className="font-bold text-gray-800 dark:text-white">{patient.cpf}</div>
+                                                        <div className="text-xs text-gray-500">{patient.patientName || patient.name}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <Input
+                                            label="Nome Completo"
+                                            placeholder="Nome do paciente"
+                                            value={formData.patientName}
+                                            onChange={e => {
+                                                setFormData({ ...formData, patientName: e.target.value });
+                                                if (e.target.value === '') {
+                                                    setPatientSuggestions([]);
+                                                    setShowPatientSuggestions(null);
+                                                }
+                                            }}
+                                            readOnly={isReadOnlyPatient}
+                                            className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
+                                        />
+                                        {showPatientSuggestions === 'name' && patientSuggestions.length > 0 && (
+                                            <div className="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                {patientSuggestions.map(patient => (
+                                                    <div
+                                                        key={patient.id}
+                                                        className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm border-b last:border-0 border-gray-100 dark:border-gray-700"
+                                                        onClick={() => handleSelectPatient(patient)}
+                                                    >
+                                                        <div className="font-bold text-gray-800 dark:text-white">{patient.patientName || patient.name}</div>
+                                                        <div className="text-xs text-gray-500">CNS: {patient.cns || 'Não inf.'} | CPF: {patient.cpf || 'Não inf.'}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Linha 2: Dados Demográficos */}
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                                    <div className="col-span-1">
+                                        <Input
+                                            label={patientFound ? "Data Nasc." : "Data Nasc. *"}
+                                            type="date"
+                                            value={formData.patientDob}
+                                            onChange={e => setFormData({ ...formData, patientDob: e.target.value })}
+                                            readOnly={isReadOnlyPatient}
+                                            className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
+                                        />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <Input
+                                            label="Idade"
+                                            value={formData.patientAge}
+                                            readOnly
+                                            className="bg-gray-50 dark:bg-gray-700 cursor-not-allowed"
+                                        />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <Select
+                                            label="Sexo"
+                                            value={formData.patientSex}
+                                            onChange={e => setFormData({ ...formData, patientSex: e.target.value })}
+                                            options={[{ value: '', label: 'Selecione' }, ...LISTA_SEXO]}
+                                            disabled={isReadOnlyPatient}
+                                        />
+                                    </div>
+                                    {interfaceType !== 'SIMPLIFIED' && (
+                                        <>
+                                            <div className="col-span-1">
+                                                <Select
+                                                    label="Raça/Cor"
+                                                    value={formData.patientRace}
+                                                    onChange={e => setFormData({ ...formData, patientRace: e.target.value })}
+                                                    options={[{ value: '', label: 'Selecione' }, ...LISTA_RACA_COR]}
+                                                    disabled={isReadOnlyPatient}
+                                                />
+                                            </div>
+                                            <div className="col-span-1 sm:col-span-1">
+                                                <Input
+                                                    label="Telefone"
+                                                    placeholder="(XX) 99999-9999"
+                                                    value={formData.patientPhone}
+                                                    onChange={e => setFormData({ ...formData, patientPhone: e.target.value })}
+                                                    readOnly={isReadOnlyPatient}
+                                                    className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
+                                                />
+                                            </div>
+                                            <div className="col-span-1 sm:col-span-1">
+                                                <Input
+                                                    label="Nacionalidade (Cód. País)"
+                                                    value={formData.patientNationality}
+                                                    onChange={e => setFormData({ ...formData, patientNationality: e.target.value })}
+                                                    placeholder="010 (Brasil)"
+                                                    readOnly={isReadOnlyPatient}
+                                                    className={isReadOnlyPatient ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed" : ""}
+                                                />
+                                            </div>
+                                        </>
                                     )}
                                 </div>
-                            )}
 
-                            {/* Removed Address/Homeless fields per user request */}
-                        </div>
-                    </Card>
+                                {/* PRE-NATAL SECTION */}
+                                {isLediTarget && isPrenatalEligible && (
+                                    <div className="mt-4 p-4 bg-pink-50 dark:bg-pink-900/10 border border-pink-100 dark:border-pink-800 rounded-lg">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <input
+                                                type="checkbox"
+                                                id="chkPregnant"
+                                                className="w-4 h-4 text-pink-600 rounded focus:ring-pink-500"
+                                                checked={formData.isPregnant}
+                                                onChange={e => setFormData({ ...formData, isPregnant: e.target.checked })}
+                                            />
+                                            <label htmlFor="chkPregnant" className="font-bold text-gray-700 dark:text-gray-300">
+                                                Paciente é Gestante
+                                            </label>
+                                        </div>
+
+                                        {formData.isPregnant && (
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 animate-in slide-in-from-top-2">
+                                                <Input
+                                                    label="DUM (Data Última Menst.)"
+                                                    type="date"
+                                                    value={formData.dumDaGestante}
+                                                    onChange={e => setFormData({ ...formData, dumDaGestante: e.target.value })}
+                                                />
+                                                <Input
+                                                    label="Idade Gestacional (Semanas)"
+                                                    type="number"
+                                                    value={formData.idadeGestacional}
+                                                    readOnly // Computed ideally
+                                                    onChange={e => setFormData({ ...formData, idadeGestacional: e.target.value })}
+                                                />
+                                                <div className="flex flex-col justify-end pb-2">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="rounded text-pink-600 focus:ring-pink-500"
+                                                            checked={formData.stGravidezPlanejada}
+                                                            onChange={e => setFormData({ ...formData, stGravidezPlanejada: e.target.checked })}
+                                                        />
+                                                        <span className="text-sm text-gray-700 dark:text-gray-300">Gravidez Planejada?</span>
+                                                    </label>
+                                                </div>
+                                                <Input
+                                                    label="Núm. Partos Prévios"
+                                                    type="number"
+                                                    value={formData.nuPartos}
+                                                    onChange={e => setFormData({ ...formData, nuPartos: e.target.value })}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Removed Address/Homeless fields per user request */}
+                            </div>
+                        </Card>
+
+                        {/* Onboarding Tooltip for Step 3 */}
+                        {showOnboarding && onboardingStep === 3 && (
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-[calc(100vw-2rem)] max-w-[400px] bg-indigo-600 text-white p-5 rounded-xl shadow-2xl z-[70] animate-in slide-in-from-top-4 fade-in">
+                                <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-indigo-600 rotate-45"></div>
+                                <h4 className="font-bold text-lg mb-2 mr-6 text-white text-left">Identificação do Paciente</h4>
+                                <p className="text-sm text-indigo-50 mb-4 text-left">Insira os dados mínimos do paciente (CPF ou CNS, nome, data de nascimento), ou busque pelo documento se ele já tiver sido cadastrado.</p>
+                                <div className="flex justify-end gap-2">
+                                    <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={closeOnboarding}>Pular Tudo</Button>
+                                    <Button size="sm" className="bg-white text-indigo-600 hover:bg-gray-100 font-bold" onClick={handleNextOnboardingStep}>Próximo Passo</Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 )}
 
                 {/* FICHA HUB TOOLBAR - Hidden in Simplified Mode */}
@@ -2105,16 +2332,6 @@ export const Register: React.FC = () => {
                                 />
                             )}
 
-                            {allowedFichas.includes('COLETIVA') && (
-                                <FichaButton
-                                    active={activeFicha === 'COLETIVA'}
-                                    onClick={() => handleFichaChange('COLETIVA')}
-                                    icon={<UserCheck size={20} />}
-                                    title="Ativ. Coletiva"
-                                    subtitle="Grupos/Reuniões"
-                                    color="indigo"
-                                />
-                            )}
                         </div>
                     </div>
                 )}
@@ -2146,13 +2363,6 @@ export const Register: React.FC = () => {
 
                 {activeFicha === 'ODONTO' && (
                     <CdsOdontoForm
-                        data={formData as any}
-                        onChange={(d) => setFormData(prev => ({ ...prev, ...d }))}
-                    />
-                )}
-
-                {activeFicha === 'COLETIVA' && (
-                    <CdsColetivaForm
                         data={formData as any}
                         onChange={(d) => setFormData(prev => ({ ...prev, ...d }))}
                     />
@@ -2248,7 +2458,7 @@ export const Register: React.FC = () => {
 
                 {/* SEÇÃO 3: PROCEDIMENTOS REALIZADOS (Hidden for DOMICILIAR & COLETIVA & VACINACAO & INDIVIDUAL) */}
                 {activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL' && (
-                    <div className="space-y-4">
+                    <div ref={proceduresRef} className={cn("space-y-4 transition-all duration-300", showOnboarding && onboardingStep === 4 ? "relative z-[60] bg-white dark:bg-gray-900 p-3 -m-3 rounded-2xl ring-4 ring-green-500 shadow-2xl" : "relative z-10")}>
                         <div className="flex justify-between items-center">
                             <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                                 <FileText size={20} className="text-green-500" />
@@ -2265,26 +2475,32 @@ export const Register: React.FC = () => {
 
                         {/* Lista de Procedimentos */}
                         <div className="space-y-4">
-                            {procedures.map((proc, index) => (
-                                <ProcedureCard
-                                    key={index}
-                                    index={index}
-                                    data={proc}
-                                    competence={formData.competence}
-                                    onUpdate={handleUpdateProcedure}
-                                    onRemove={handleRemoveProcedure}
-                                    onOpenSigtap={handleOpenSigtap}
-                                    isExpanded={proc.isExpanded}
-                                    onToggleExpand={handleToggleExpand}
-                                    userCbo={formData.cbo}
-                                    interfaceType={interfaceType}
-                                />
-                            ))}
-                            {/* Add Button */}
-                            <Button variant="outline" onClick={handleAddProcedure} className="w-full border-dashed border-2 py-6">
-                                <Plus className="mr-2" size={20} />
-                                Adicionar Outro Procedimento
-                            </Button>
+                            <ProcedureSection
+                                procedures={procedures}
+                                competence={formData.competence}
+                                onUpdate={handleUpdateProcedure}
+                                onRemove={handleRemoveProcedure}
+                                onOpenSigtap={handleOpenSigtap}
+                                onToggleExpand={handleToggleExpand}
+                                onAdd={handleAddProcedure}
+                                userCbo={formData.cbo}
+                            />
+
+                            {/* Onboarding Tooltip for Step 4 */}
+                            {showOnboarding && onboardingStep === 4 && (
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-20 w-[calc(100vw-2rem)] max-w-[450px] bg-green-600 text-white p-5 rounded-xl shadow-2xl z-[70] animate-in slide-in-from-bottom-4 fade-in">
+                                    <h4 className="font-bold text-lg mb-2 flex items-center gap-2"><Plus size={20} /> Adicionar Procedimento</h4>
+                                    <p className="text-sm text-green-50 mb-4">
+                                        Pesquise o SIGTAP do atendimento pelo nome ou código, altere a quantidade se necessário, e obrigatoriamente clique no botão <strong>"Adicionar"</strong> (verde).<br /><br />
+                                        Faça isso para cada procedimento que desejar lançar. Somente após adicionar e o item aparecer em <strong>"ITENS ADICIONADOS"</strong> é que será possível registrar a ficha com sucesso!
+                                    </p>
+                                    <div className="flex justify-end gap-2">
+                                        <Button size="sm" variant="ghost" className="text-white hover:bg-white/10" onClick={closeOnboarding}>Pular Tudo</Button>
+                                        <Button size="sm" className="bg-white text-green-600 hover:bg-gray-100 font-bold" onClick={handleNextOnboardingStep}>Avançar</Button>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
                     </div>
                 )}
@@ -2299,8 +2515,22 @@ export const Register: React.FC = () => {
                 }
 
                 {/* Botão de Ação */}
-                <div className="pb-4">
-                    <Button type="submit" className="w-full h-14 text-lg shadow-lg shadow-medical-500/20" isLoading={loading}>
+                <div className="pb-4 relative group">
+                    {(activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL') && procedures.length === 0 && (
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-max max-w-[90vw] text-center bg-gray-900 dark:bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex items-center gap-1.5 shadow-lg border border-gray-700">
+                            <AlertCircle size={14} className="text-red-400" />
+                            <span>Adicione procedimentos à lista para habilitar o registro.</span>
+                            {/* Seta do tooltip */}
+                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45 border-r border-b border-gray-700"></div>
+                        </div>
+                    )}
+                    <Button
+                        type="button"
+                        className="w-full h-14 text-lg shadow-lg shadow-medical-500/20"
+                        onClick={handleSubmit}
+                        isLoading={loading}
+                        disabled={activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL' ? procedures.length === 0 : false}
+                    >
                         {(() => {
                             const suffix = isLediTarget ? '(e-SUS/PEC)' : '(BPA)';
                             switch (activeFicha) {
@@ -2314,7 +2544,54 @@ export const Register: React.FC = () => {
                         })()}
                     </Button>
                 </div>
-            </form>
+            </div>
+
+            {/* GLOBAL ONBOARDING OVERLAY */}
+            {showOnboarding && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 pointer-events-auto transition-opacity duration-300"></div>
+            )}
+
+            {/* MODAL INICIAL (Passo 0) */}
+            {showOnboarding && onboardingStep === 0 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-8 text-center animate-in zoom-in-95 duration-300 z-[60]">
+                        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Activity size={32} />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Bem-vindo ao Modo Simplificado!</h2>
+                        <p className="text-gray-600 dark:text-gray-300 mb-8 leading-relaxed">
+                            Atenção, siga as instruções corretamente neste rápido guia para garantir o registro correto da produção BPA e entender como nossa tela agiliza o seu trabalho de digitação!
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <Button size="lg" className="w-full text-lg font-bold" onClick={handleNextOnboardingStep}>
+                                Iniciar Guia (1 minuto)
+                            </Button>
+                            <Button variant="ghost" className="w-full text-gray-500" onClick={closeOnboarding}>
+                                Já sei como fazer, pular tutorial
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL FINAL (Passo 5) */}
+            {showOnboarding && onboardingStep === 5 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-8 text-center animate-in zoom-in-95 duration-300 z-[60]">
+                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <CheckCircle size={32} />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">A Dica de Ouro da Digitação! 🚀</h2>
+                        <p className="text-gray-600 dark:text-gray-300 mb-8 leading-relaxed">
+                            Como forma de melhorar a agilidade e o registro em massa, <strong>agora é possível reaproveitar os procedimentos para diferentes pacientes!</strong><br /><br />
+                            Ao salvar um atendimento, o único dado que o sistema zera é o do paciente. Assim você só precisa bipar (ou digitar) o próximo paciente e reaproveitar toda a competência e procedimentos, alterando apenas a quantidade ou excluindo um procedimento quando necessário.
+                        </p>
+                        <Button size="lg" className="w-full text-lg font-bold bg-emerald-600 hover:bg-emerald-700" onClick={closeOnboarding}>
+                            Entendi, começar a registrar!
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* Patient History Modal */}
             <PatientTimeline
@@ -2324,7 +2601,6 @@ export const Register: React.FC = () => {
                 patientName={formData.patientName}
                 entityId={user?.entityId || ''}
             />
-
 
             {/* SIGTAP Tree Selector Modal (v2 New Structure) */}
             <SigtapTreeSelector

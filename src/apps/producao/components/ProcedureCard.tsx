@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Input, Select, cn } from '../components/ui/BaseComponents';
-import { Search, Loader2, Trash2, ChevronDown, ChevronUp, BookOpen, FileText } from 'lucide-react';
+import { Search, Loader2, Trash2, ChevronDown, ChevronUp, BookOpen, FileText, Plus } from 'lucide-react';
 import { ProcedureFormItem } from '../services/bpaService';
 import {
     getCompatibleCids,
     getAttendanceCharacterForProcedure,
     getServicesForProcedure,
     SigtapProcedureRow,
-    SigtapCidRow
+    SigtapCidRow,
+    searchCiap,
+    searchCids
 } from '../services/sigtapLookupService';
 import { sigtapService } from '../services/sigtapService';
 import { LISTA_CARATER_ATENDIMENTO } from '../constants';
@@ -23,6 +25,7 @@ interface ProcedureCardProps {
     onToggleExpand: (index: number) => void;
     userCbo?: string;
     interfaceType?: 'PEC' | 'SIMPLIFIED';
+    onAddAction?: () => void;
 }
 
 // Debounce hook (local)
@@ -49,7 +52,8 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
     isExpanded,
     onToggleExpand,
     userCbo,
-    interfaceType = 'PEC'
+    interfaceType = 'PEC',
+    onAddAction
 }) => {
     // Local UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -63,11 +67,59 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
     const [cidDisabled, setCidDisabled] = useState(false);
     const [procedureType, setProcedureType] = useState<string>('');
 
-    // Sync local search term with data name if empty (initial load)
+    // CID Search State
+    const [cidSearch, setCidSearch] = useState('');
+    const [cidSearchResults, setCidSearchResults] = useState<any[]>([]);
+    const [isSearchingCid, setIsSearchingCid] = useState(false);
+    const [showCidDropdown, setShowCidDropdown] = useState(false);
+
+    const handleSearchCid = async () => {
+        if (cidSearch.length < 2) {
+            setCidSearchResults(availableCids.map(c => ({ code: c.code, label: c.name })));
+            return;
+        }
+        setIsSearchingCid(true);
+        try {
+            const ciapRes = await searchCiap(cidSearch);
+            const cidRes = await searchCids(cidSearch);
+
+            const mappedCiap = ciapRes.map(r => ({ code: r.ciap, label: `[CIAP] ${r.ciap_desc} -> CID: ${r.cid}` }));
+            const mappedCid = cidRes.map(r => ({ code: r.code, label: r.name }));
+
+            setCidSearchResults([...mappedCiap, ...mappedCid]);
+            setShowCidDropdown(true);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsSearchingCid(false);
+        }
+    };
+
+    // Auto-search available specific CIDs at form load initially
+    useEffect(() => {
+        if (availableCids.length > 0) {
+            setCidSearchResults(availableCids.map(c => ({ code: c.code, label: c.name })));
+        }
+    }, [availableCids]);
+
+    // Track previous procedure code to detect external clear
+    const prevCodeRef = useRef(data.procedureCode);
+
+    // Sync local search term with data name or clear if reset
     useEffect(() => {
         if (data.procedureCode && data.procedureName && !searchTerm) {
             setSearchTerm(`${data.procedureCode} - ${data.procedureName}`);
         }
+        
+        // If it was cleared externally (went from something to nothing)
+        if (prevCodeRef.current && !data.procedureCode) {
+            setSearchTerm('');
+            setProcedureType('');
+            setSearchResults([]);
+            setShowSuggestions(false);
+        }
+        
+        prevCodeRef.current = data.procedureCode;
     }, [data.procedureCode, data.procedureName]);
 
     // Load details when procedureCode changes (e.g. from Modal or manual select)
@@ -90,22 +142,22 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                 setAvailableCids(cids);
 
                 if (cids.length === 0) {
-                    setCidDisabled(true);
-                    // Update: No CIDs required
+                    // Do not completely disable, but indicate no explicit CIDs match. User can still type/add if needed.
+                    setCidDisabled(false);
                     onUpdate(index, { ...data, cidCodes: [], requiresCid: false });
                 } else {
                     setCidDisabled(false);
 
                     let newCidCodes = data.cidCodes;
-                    // Auto-select if 1 and none selected
-                    if (cids.length === 1 && data.cidCodes.length === 0) {
-                        newCidCodes = [cids[0].code];
-                    } else if (cids.length > 1 && data.cidCodes.length === 0) {
-                        // Initialize with one empty select if multiple options
-                        newCidCodes = [""];
+                    // We no longer strictly auto-select the first CID, because the user might want to skip it
+                    // if it's not strictly required in their municipal rule.
+                    if (data.cidCodes.length === 0) {
+                        newCidCodes = [];
                     }
 
-                    onUpdate(index, { ...data, cidCodes: newCidCodes, requiresCid: true });
+                    // Flexible rule: We mark it false so the validation in Register.tsx won't block it.
+                    // The professional CAN select it, but won't be blocked.
+                    onUpdate(index, { ...data, cidCodes: newCidCodes, requiresCid: false });
                 }
 
                 // 2. Character
@@ -145,17 +197,25 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                 return;
             }
 
-            // Avoid searching if term matches current selection
-            if (data.procedureCode && (debouncedSearchTerm === data.procedureCode || debouncedSearchTerm.includes(data.procedureCode))) {
-                console.log("[ProcedureCard] Term matches current selection. Skipping.");
-                return;
-            }
-
             console.log("[ProcedureCard] Starting search...");
             setIsSearching(true);
             try {
+                let currentComp = competence;
+                // FALLBACK: If current month has no SIGTAP, use the latest available.
+                try {
+                    const available = await sigtapService.getAvailableCompetences();
+                    if (available.length > 0) {
+                        const exists = available.find(c => c.competence === currentComp);
+                        if (!exists) {
+                            currentComp = available[available.length - 1].competence;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch fallback competence", e);
+                }
+
                 // New Search Logic (Code or Name via CollectionGroup)
-                const results = await sigtapService.searchProcedures(debouncedSearchTerm, competence);
+                const results = await sigtapService.searchProcedures(debouncedSearchTerm, currentComp);
                 console.log(`[ProcedureCard] Results: ${results.length}`);
                 setSearchResults(results);
                 setShowSuggestions(true);
@@ -172,18 +232,13 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
         // CBO Validation (Internal Search)
         const validation = sigtapService.checkCboCompatibility(proc, userCbo || '');
         if (!validation.compatible) {
-            alert(validation.message || 'CBO incompatível');
-            return;
+            const proceed = window.confirm(`${validation.message || 'CBO incompatível'}\n\nDeseja prosseguir e registrar este procedimento mesmo assim?`);
+            if (!proceed) return;
         }
 
         setSearchTerm(`${proc.code} - ${proc.name}`);
         setProcedureType(proc.procedureType);
         setShowSuggestions(false);
-
-        // Check for collective activity potential
-        const isPotentialCollective = (proc as any).groupCode === '01' || ((proc as any).formCode && (proc as any).formCode.includes('coletiva'));
-        // Only enable flag if NOT in simplified mode
-        const shouldFlagAsCollective = interfaceType !== 'SIMPLIFIED' && isPotentialCollective;
 
         // Reset fields
         onUpdate(index, {
@@ -196,9 +251,7 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
             // Save Context Fields (from search API)
             groupCode: (proc as any).groupCode,
             subGroupCode: (proc as any).subGroupCode,
-            formCode: (proc as any).formCode,
-            // Automatic Trigger: isCollective?
-            isCollectiveActivity: shouldFlagAsCollective
+            formCode: (proc as any).formCode
         });
     };
 
@@ -223,13 +276,6 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                         <div className="text-xs text-gray-500 flex gap-2">
                             <span>Qtd: {data.quantity}</span>
                             {data.cidCodes.length > 0 && <span>• {data.cidCodes.length} CIDs</span>}
-
-                            {/* Visual Badge for Collective Activity (Hidden in Simplified) */}
-                            {interfaceType !== 'SIMPLIFIED' && (data.groupCode === '01' || (data.formCode && data.formCode.includes('coletiva'))) && (
-                                <span className="ml-2 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 text-[10px] px-1.5 py-0.5 rounded font-bold border border-purple-200 dark:border-purple-800">
-                                    🟣 Atividade Coletiva
-                                </span>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -291,16 +337,28 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                                     </div>
                                 )}
                             </div>
-                            <Button
-                                type="button"
-                                onClick={async () => {
-                                    const results = await sigtapService.searchProcedures(searchTerm, competence);
-                                    setSearchResults(results);
-                                    setShowSuggestions(true);
-                                }}
-                            >
-                                Buscar
-                            </Button>
+                            
+                            {onAddAction ? (
+                                <Button
+                                    type="button"
+                                    onClick={onAddAction}
+                                    className="bg-green-600 hover:bg-green-700 text-white shadow-md focus:ring-green-500 gap-1 flex items-center justify-center shrink-0 min-w-[120px]"
+                                >
+                                    <Plus size={16} /> Adicionar
+                                </Button>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    onClick={async () => {
+                                        const results = await sigtapService.searchProcedures(searchTerm, competence);
+                                        setSearchResults(results);
+                                        setShowSuggestions(true);
+                                    }}
+                                    className="shrink-0"
+                                >
+                                    Buscar
+                                </Button>
+                            )}
                         </div>
 
                         {/* Suggestions */}
@@ -330,79 +388,10 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                     </div>
 
 
-                    {/* CONDITIONAL FORM: COLLECTIVE vs INDIVIDUAL */}
-                    {data.isCollectiveActivity ? (
-                        <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800 rounded-lg p-4 space-y-4">
-                            <div className="flex items-start gap-3">
-                                <div className="bg-purple-100 dark:bg-purple-800 p-2 rounded-lg shrink-0">
-                                    <BookOpen className="w-5 h-5 text-purple-600 dark:text-purple-300" />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-purple-800 dark:text-purple-300">Atividade Coletiva (PEC)</h4>
-                                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                                        Procedimento identificado como coletivo. O preenchimento simplificado abaixo substitui a ficha padrão.
-                                    </p>
-                                </div>
-                            </div>
+                    {/* STANDARD INDIVIDUAL FORM (CID, Character, Qty) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                                <Select
-                                    label="Tipo de Atividade"
-                                    value={data.activityType || ''}
-                                    onChange={e => onUpdate(index, { ...data, activityType: e.target.value })}
-                                    options={[
-                                        { value: '01', label: 'Reunião de Equipe' },
-                                        { value: '02', label: 'Reunião com Usuários' },
-                                        { value: '03', label: 'Reunião com Outros' },
-                                        { value: '04', label: 'Grupo de Atendimento' },
-                                        { value: '05', label: 'Proc. Coletivo/Prática Corporal' },
-                                        { value: '06', label: 'Atividade Educativa' },
-                                        { value: '07', label: 'Outros' }
-                                    ]}
-                                />
-                                <Input
-                                    label="Nº Participantes"
-                                    type="number"
-                                    value={data.participantsCount || ''}
-                                    onChange={e => onUpdate(index, { ...data, participantsCount: Number(e.target.value) })}
-                                    placeholder="Min. 1"
-                                />
-                                <div className="sm:col-span-2">
-                                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 block mb-1">
-                                        Público Alvo
-                                    </label>
-                                    <select
-                                        multiple
-                                        className="w-full text-sm rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 h-20"
-                                        value={data.targetAudience || []}
-                                        onChange={e => {
-                                            const target = e.target as HTMLSelectElement;
-                                            const options = Array.from(target.selectedOptions, option => option.value);
-                                            onUpdate(index, { ...data, targetAudience: options });
-                                        }}
-                                    >
-                                        <option value="01">Comunidade em Geral</option>
-                                        <option value="02">Crianças 0-3 anos</option>
-                                        <option value="03">Crianças 4-9 anos</option>
-                                        <option value="04">Adolescentes</option>
-                                        <option value="05">Adultos</option>
-                                        <option value="06">Idosos</option>
-                                        <option value="07">Gestantes</option>
-                                        <option value="08">Mulheres</option>
-                                        <option value="09">Homens</option>
-                                        <option value="10">Familias</option>
-                                        <option value="11">Profissionais Educação</option>
-                                        <option value="12">Outros</option>
-                                    </select>
-                                    <p className="text-[10px] text-gray-500 mt-1">*Segure Ctrl/Cmd para selecionar múltiplos</p>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        // STANDARD INDIVIDUAL FORM (CID, Character, Qty)
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                            {/* VACCINATION BLOCK */}
+                        {/* VACCINATION BLOCK */}
                             {(data.procedureName.toUpperCase().includes("VACINA") || data.procedureName.toUpperCase().includes("IMUNOBI")) && (
                                 <div className="sm:col-span-2 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800 rounded-lg p-4 space-y-4">
                                     <div className="flex items-start gap-3">
@@ -484,71 +473,6 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                                 </div>
                             )}
 
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">CID-10</label>
-                                <div className="flex flex-col gap-2">
-                                    {/* Case 1: No Procedure Selected or No CIDs available */}
-                                    {availableCids.length === 0 && (
-                                        <select
-                                            disabled={true}
-                                            className={cn(
-                                                "w-full h-12 px-4 rounded-xl border bg-gray-50 dark:bg-gray-800 transition-all border-gray-200 dark:border-gray-700 dark:text-white cursor-not-allowed"
-                                            )}
-                                        >
-                                            <option>{cidDisabled ? "Não há CIDs compatíveis" : "Selecione o Procedimento"}</option>
-                                        </select>
-                                    )}
-
-                                    {/* Case 2: CIDs Available */}
-                                    {availableCids.length > 0 && data.cidCodes.map((code, idx) => (
-                                        <div key={idx} className="flex gap-2">
-                                            <select
-                                                disabled={cidDisabled}
-                                                className="w-full h-12 px-4 rounded-xl border bg-white dark:bg-gray-800 focus:ring-2 focus:ring-medical-500 focus:outline-none border-gray-200 dark:border-gray-700 dark:text-white"
-                                                value={code}
-                                                onChange={e => {
-                                                    const newList = [...data.cidCodes];
-                                                    newList[idx] = e.target.value;
-                                                    onUpdate(index, { ...data, cidCodes: newList });
-                                                }}
-                                            >
-                                                <option value="">Selecione o CID</option>
-                                                {availableCids.map(opt => (
-                                                    <option key={opt.code} value={opt.code}>
-                                                        {opt.code} - {opt.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            {/* Remove button for extra CIDs */}
-                                            {data.cidCodes.length > 1 && (
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-red-500 hover:bg-red-50"
-                                                    onClick={() => {
-                                                        const newList = data.cidCodes.filter((_, i) => i !== idx);
-                                                        onUpdate(index, { ...data, cidCodes: newList });
-                                                    }}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    ))}
-
-                                    {!cidDisabled && availableCids.length > 0 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => onUpdate(index, { ...data, cidCodes: [...data.cidCodes, ''] })}
-                                            className="text-xs text-medical-600 font-medium hover:underline self-start flex items-center gap-1"
-                                        >
-                                            + Adicionar outro CID
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
                             {/* Carater Atendimento Removed - Moved to Detalhes Atendimento in Register.tsx */}
 
                             <Input
@@ -559,7 +483,6 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                                 min={1}
                             />
                         </div>
-                    )}
 
 
 

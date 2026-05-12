@@ -94,15 +94,35 @@ export const professionalDelete = functions
             // mas o ideal seria tudo no batch.
             // Vou manter o padrão, mas usar batch para os contadores e o doc do profissional.
 
-            // Atualizar contadores das unidades
+            // Buscar entidade para descobrir o tipo
+            const entityDoc = await db.collection("entities").doc(entityId).get();
+            let pathType = "PUBLIC";
+            if (entityDoc.exists) {
+                const typeStr = (entityDoc.data()?.type || "").toUpperCase();
+                if (typeStr.includes("PRIV")) pathType = "PRIVATE";
+            }
+
+            // Atualizar contadores das unidades com segurança
+            const unitRefsToUpdate: admin.firestore.DocumentReference[] = [];
             assignments.forEach((a: any) => {
-                if (a.unitId) {
-                    const unitRef = db.collection("units").doc(a.unitId);
-                    batch.update(unitRef, {
-                        professionalsCount: admin.firestore.FieldValue.increment(-1)
-                    });
+                if (a.unitId && a.municipalityId) {
+                    unitRefsToUpdate.push(db.doc(`municipalities/${pathType}/${entityId}/${a.municipalityId}/units/${a.unitId}`));
+                } else if (a.unitId && !a.municipalityId) {
+                    // Fallback legado
+                    unitRefsToUpdate.push(db.collection("units").doc(a.unitId));
                 }
             });
+
+            if (unitRefsToUpdate.length > 0) {
+                const unitDocs = await db.getAll(...unitRefsToUpdate);
+                unitDocs.forEach((docSnap) => {
+                    if (docSnap.exists) {
+                        batch.update(docSnap.ref, {
+                            professionalsCount: admin.firestore.FieldValue.increment(-1)
+                        });
+                    }
+                });
+            }
 
             await batch.commit();
 
