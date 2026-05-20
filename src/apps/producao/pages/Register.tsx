@@ -541,11 +541,11 @@ export const Register: React.FC = () => {
     const debouncedCpf = useDebounce(formData.patientCpf, 500);
     const debouncedName = useDebounce(formData.patientName, 500);
 
-    // Generate last 12 months for Competence Select
+    // Generate last 36 months for Competence Select
     useEffect(() => {
         const options = [];
         const today = new Date();
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 36; i++) {
             const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
             const year = d.getFullYear();
             const month = (d.getMonth() + 1).toString().padStart(2, '0');

@@ -952,11 +952,11 @@ const SubsedeRegisterProduction: React.FC = () => {
     const debouncedCpf = useDebounce(formData.patientCpf, 500);
     const debouncedName = useDebounce(formData.patientName, 500);
 
-    // Generate last 12 months for Competence Select
+    // Generate last 36 months for Competence Select
     useEffect(() => {
         const options = [];
         const today = new Date();
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 36; i++) {
             const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
             const year = d.getFullYear();
             const month = (d.getMonth() + 1).toString().padStart(2, '0');
@@ -1467,33 +1467,51 @@ const SubsedeRegisterProduction: React.FC = () => {
         // 2. STANDARD PATH (Individual, Odonto, Proc, Domiciliar)
         // ---------------------------------------------------------
 
+        const cleanCns = formData.patientCns ? formData.patientCns.replace(/\D/g, '') : '';
+        const cleanCpf = formData.patientCpf ? formData.patientCpf.replace(/\D/g, '') : '';
+
         // Validation
-        if (!formData.patientCns && !formData.patientCpf && !formData.patientName) {
-            setError('Informe ao menos o CNS, CPF ou Nome do paciente');
-            return;
-        }
-
-        const rawCns = formData.patientCns.replace(/\D/g, '');
-        const rawCpf = formData.patientCpf.replace(/\D/g, '');
-
-        if (rawCns && rawCns.length !== 15) {
-            setError('CNS Inválido: O CNS deve conter exatamente 15 números.');
-            return;
-        }
-
-        if (rawCpf && rawCpf.length !== 11) {
-            setError('CPF Inválido: O CPF deve conter exatamente 11 números.');
-            return;
+        if (interfaceType === 'SIMPLIFIED') {
+            if (!cleanCns && !cleanCpf) {
+                setError('É obrigatório informar o CNS ou o CPF do paciente.');
+                return;
+            }
+            if (!formData.patientName || formData.patientName.trim() === '') {
+                setError('É obrigatório informar o Nome do paciente.');
+                return;
+            }
+            if (!patientFound && !formData.patientDob) {
+                setError('Para novos pacientes, é obrigatório informar a Data de Nascimento/Idade do paciente.');
+                return;
+            }
+            if (cleanCns.length > 0 && cleanCns.length !== 15) {
+                setError('CNS Inválido. O cartão SUS deve conter exatamente 15 números.');
+                return;
+            }
+            if (cleanCpf.length > 0 && cleanCpf.length !== 11) {
+                setError('CPF Inválido. O CPF deve conter exatamente 11 números.');
+                return;
+            }
+        } else {
+            // Original Legacy validation
+            if (!cleanCns && !cleanCpf && !formData.patientName) {
+                setError('Informe ao menos o CNS, CPF ou Nome do paciente');
+                return;
+            }
+            if (!patientFound && !formData.patientDob) {
+                setError('Para novos pacientes, é obrigatório informar a Data de Nascimento do paciente.');
+                return;
+            }
         }
 
         // LEDI/APS Validation
         if (isLediTarget) {
             // 1. CNS Validation (Modulo 11) - NOW CNS OR CPF
-            if (!formData.patientCns && !formData.patientCpf) {
+            if (!cleanCns && !cleanCpf) {
                 setError('Para unidades APS (e-SUS), é obrigatório informar o CNS ou o CPF do paciente.');
                 return;
             }
-            if (formData.patientCns.length > 0 && !validateCNS(formData.patientCns)) {
+            if (cleanCns.length > 0 && !validateCNS(cleanCns)) {
                 setError('CNS Inválido. Verifique o número do cartão SUS (Algoritmo Módulo 11).');
                 return;
             }
@@ -1579,8 +1597,8 @@ const SubsedeRegisterProduction: React.FC = () => {
             // 2. Save/Update Patient (CRITICAL: Restored this call)
             const patientId = await saveOrUpdatePatient({
                 id: (formData as any).patientId, // Pass explicit ID to avoid duplicates
-                cns: formData.patientCns,
-                cpf: formData.patientCpf,
+                cns: cleanCns,
+                cpf: cleanCpf,
                 name: formData.patientName,
                 dob: formData.patientDob,
                 age: formData.patientAge,
@@ -1815,7 +1833,7 @@ const SubsedeRegisterProduction: React.FC = () => {
                     // entityType removed: let service resolve it
 
                     patientId: patientId,
-                    patientCns: formData.patientCns,
+                    patientCns: cleanCns,
                     patientName: formData.patientName,
                     patientDob: formData.patientDob,
                     patientAge: formData.patientAge,

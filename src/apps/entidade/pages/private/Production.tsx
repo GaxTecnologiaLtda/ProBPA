@@ -217,6 +217,7 @@ const Production: React.FC = () => {
    const [filterName, setFilterName] = useState('');
    const [filterMunicipality, setFilterMunicipality] = useState('');
    const [filterUnit, setFilterUnit] = useState('');
+   const [sortBy, setSortBy] = useState<string>('name-asc');
 
    // Export Filters
    const [exportGoalFilter, setExportGoalFilter] = useState<'all' | 'pactuados' | 'nao_pactuados'>('all');
@@ -265,8 +266,28 @@ const Production: React.FC = () => {
    // Filtered Professionals
    const latestStatsFetchId = React.useRef(0);
 
+   const getCreatedAtMs = (prof: Professional) => {
+      if (!prof.createdAt) return 0;
+      if (typeof (prof.createdAt as any).toMillis === 'function') {
+         return (prof.createdAt as any).toMillis();
+      }
+      if ((prof.createdAt as any).seconds !== undefined) {
+         return (prof.createdAt as any).seconds * 1000;
+      }
+      if (prof.createdAt instanceof Date) {
+         return prof.createdAt.getTime();
+      }
+      if (typeof prof.createdAt === 'string') {
+         return new Date(prof.createdAt).getTime();
+      }
+      if (typeof prof.createdAt === 'number') {
+         return prof.createdAt;
+      }
+      return 0;
+   };
+
    const filteredProfessionals = React.useMemo(() => {
-      return professionals.filter(prof => {
+      const filtered = professionals.filter(prof => {
          const matchesName = normalize(prof.name).includes(normalize(filterName));
 
          // Check if ANY assignment matches the municipality filter
@@ -302,7 +323,31 @@ const Production: React.FC = () => {
 
          return matchesName && matchesMunicipality && matchesUnit && matchesProduction;
       });
-   }, [professionals, filterName, filterMunicipality, filterUnit, appliedStartDate, appliedEndDate, productionStats]);
+
+      return [...filtered].sort((a, b) => {
+         if (sortBy === 'name-asc') {
+            return a.name.localeCompare(b.name, 'pt-BR');
+         }
+         if (sortBy === 'name-desc') {
+            return b.name.localeCompare(a.name, 'pt-BR');
+         }
+         if (sortBy === 'date-asc') {
+            return getCreatedAtMs(a) - getCreatedAtMs(b);
+         }
+         if (sortBy === 'date-desc') {
+            return getCreatedAtMs(b) - getCreatedAtMs(a);
+         }
+         if (sortBy === 'no-signature') {
+            const hasSigA = !!a.signatureUrl;
+            const hasSigB = !!b.signatureUrl;
+            if (hasSigA !== hasSigB) {
+               return hasSigA ? 1 : -1;
+            }
+            return a.name.localeCompare(b.name, 'pt-BR');
+         }
+         return 0;
+      });
+   }, [professionals, filterName, filterMunicipality, filterUnit, appliedStartDate, appliedEndDate, productionStats, sortBy]);
 
    // Derive unique options for Selects - Using Fetched Data
    const uniqueMunicipalities = React.useMemo(() => {
@@ -336,6 +381,7 @@ const Production: React.FC = () => {
          setAppliedStartDate('');
          setAppliedEndDate('');
          setIsManagementDataLoaded(false);
+         setSortBy('name-asc');
       }
    }, [isReportModalOpen]);
 
@@ -1154,7 +1200,7 @@ const Production: React.FC = () => {
                      </div>
 
                      <div className="flex flex-col md:flex-row gap-3">
-                        <div className="md:w-1/4">
+                        <div className="md:w-1/5">
                            <label className="text-xs text-gray-500 mb-1 block">Município</label>
                            <select
                               value={filterMunicipality}
@@ -1170,7 +1216,7 @@ const Production: React.FC = () => {
                               ))}
                            </select>
                         </div>
-                        <div className="md:w-1/4">
+                        <div className="md:w-1/5">
                            <label className="text-xs text-gray-500 mb-1 block">Unidade</label>
                            <select
                               value={filterUnit}
@@ -1181,6 +1227,20 @@ const Production: React.FC = () => {
                               {uniqueUnits.map(u => (
                                  <option key={u} value={u}>{u}</option>
                               ))}
+                           </select>
+                        </div>
+                        <div className="md:w-1/5">
+                           <label className="text-xs text-gray-500 mb-1 block">Ordenar por</label>
+                           <select
+                              value={sortBy}
+                              onChange={(e) => setSortBy(e.target.value)}
+                              className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                           >
+                              <option value="name-asc">Ordem Alfabética (A-Z)</option>
+                              <option value="name-desc">Ordem Alfabética (Z-A)</option>
+                              <option value="date-desc">Cadastro Mais Recente</option>
+                              <option value="date-asc">Cadastro Mais Antigo</option>
+                              <option value="no-signature">Sem Assinatura Primeiro</option>
                            </select>
                         </div>
                         <div className="flex-1">
@@ -1214,7 +1274,7 @@ const Production: React.FC = () => {
                         
                         <div className="flex-1 flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-end w-full justify-end">
                            <div className="flex gap-2 w-full sm:w-auto">
-                              {(filterName || filterUnit || filterMunicipality || exportGoalFilter !== 'all') && (
+                              {(filterName || filterUnit || filterMunicipality || exportGoalFilter !== 'all' || sortBy !== 'name-asc') && (
                                  <Button
                                     variant="ghost"
                                     className="text-gray-500 hover:text-red-500 flex-1 sm:flex-none justify-center"
@@ -1227,6 +1287,7 @@ const Production: React.FC = () => {
                                        setAppliedStartDate('');
                                        setAppliedEndDate('');
                                        setExportGoalFilter('all');
+                                       setSortBy('name-asc');
                                     }}
                                  >
                                     <X className="w-4 h-4 mr-1 shrink-0" /> Limpar Filtros

@@ -20,7 +20,7 @@ import { fetchProfessionalsByEntity } from '../../services/professionalsService'
 import { createPerson, searchPersons, Person } from '../../services/personsService';
 import { SigtapBrowserModal } from './components/SigtapBrowserModal';
 import { susReportService } from '../../services/susReportService';
-import { municipalityReportService } from '../../services/municipalityReportService';
+import { municipalityReportService, resolveSigtapCode } from '../../services/municipalityReportService';
 import { sigtapService, SigtapProcedureDetail } from '../../services/sigtapService';
 import { logAction } from '../../services/logsService';
 import { fetchActionProfessionals, searchActionProfessionals, saveActionProfessional, deleteActionProfessional, ActionProfessionalBase, updateActionProfessionalStatus } from '../../services/actionProfessionalsService';
@@ -216,7 +216,7 @@ const ActionsAndPrograms: React.FC = () => {
     const [baseProfForm, setBaseProfForm] = useState({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', email: '', phone: '', municipalityId: '' });
 
     const [isProfessionalBaseModalOpen, setIsProfessionalBaseModalOpen] = useState(false);
-    
+
     // Signature State
     const [uploadingSignatureId, setUploadingSignatureId] = useState<string | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -418,7 +418,7 @@ const ActionsAndPrograms: React.FC = () => {
         if (!profId) return;
 
         let prof = professionals.find(p => p.id === profId);
-        
+
         // If not found in primary professionals list, search in actionProfessionalsList
         if (!prof) {
             const actionProf = actionProfessionalsList.find(p => p.id === profId);
@@ -460,13 +460,13 @@ const ActionsAndPrograms: React.FC = () => {
             alert("Preencha ao menos o nome e o CPF do profissional.");
             return;
         }
-        
+
         setIsSavingManualProf(true);
 
         if (claims?.entityId) {
             try {
                 const payload = {
-                    municipalityId: baseProfForm.municipalityId || '', 
+                    municipalityId: baseProfForm.municipalityId || '',
                     entityId: claims.entityId,
                     name: baseProfForm.name,
                     cpf: baseProfForm.cpf,
@@ -476,7 +476,7 @@ const ActionsAndPrograms: React.FC = () => {
                     email: baseProfForm.email,
                     phone: baseProfForm.phone
                 };
-                
+
                 const newProfId = await saveActionProfessional(claims.entityId, baseProfForm.id ? { id: baseProfForm.id, ...payload } : payload);
 
                 setActionProfessionalsList(prev => {
@@ -858,16 +858,16 @@ const ActionsAndPrograms: React.FC = () => {
 
             const actionCompetence = selectedAction.date.substring(0, 7);
             const actionLocationName = selectedAction.municipalityName || municipalities.find(m => m.id === selectedAction.municipalityId)?.name || 'Local não especificado';
-            
+
             if (editingProductionPatientId) {
                 await updateActionProduction(
                     selectedAction.entityId,
-                    selectedAction.id!, 
-                    actionCompetence, 
-                    editingProductionPatientId, 
+                    selectedAction.id!,
+                    actionCompetence,
+                    editingProductionPatientId,
                     { ...productionForm, procedures: finalProcedures }
                 );
-                
+
                 await logAction({
                     entityId: selectedAction.entityId,
                     municipalityId: selectedAction.municipalityId,
@@ -921,7 +921,7 @@ const ActionsAndPrograms: React.FC = () => {
     const handleEditProduction = (e: React.MouseEvent, record: ActionProduction) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         const grouped = record.procedures.reduce((acc, proc) => {
             const existing = acc.find((p: any) => p.code === proc.code);
             if (existing) {
@@ -942,7 +942,7 @@ const ActionsAndPrograms: React.FC = () => {
         }));
         setEditingProductionPatientId(record.patientId);
         setEditingProductionPatientId(record.patientId);
-        
+
         // Find the modal scroll container and scroll to top smoothly
         const modalContainer = document.querySelector('[role="dialog"] .overflow-y-auto') || document.querySelector('.overflow-y-auto');
         if (modalContainer) {
@@ -950,7 +950,7 @@ const ActionsAndPrograms: React.FC = () => {
         } else {
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-        
+
     };
 
     const handleCancelEditProduction = () => {
@@ -970,12 +970,12 @@ const ActionsAndPrograms: React.FC = () => {
         e.stopPropagation();
 
         if (!claims?.entityId || !selectedAction?.id) return;
-        
+
         if (confirm(`Tem certeza que deseja excluir a produção de ${record.patient.name}?`)) {
             try {
                 const actionCompetence = selectedAction.date.substring(0, 7);
                 await deleteActionProduction(claims.entityId, selectedAction.id, actionCompetence, record.patientId);
-                
+
                 await logAction({
                     entityId: claims.entityId,
                     municipalityId: selectedAction.municipalityId,
@@ -999,7 +999,7 @@ const ActionsAndPrograms: React.FC = () => {
             if (!claims?.entityId) return;
             const patientRef = doc(db, 'entities', claims.entityId, 'persons', record.patientId);
             const patientSnap = await getDoc(patientRef);
-            
+
             let pData = patientSnap.exists() ? patientSnap.data() : null;
 
             setPatientToEdit({
@@ -1035,7 +1035,7 @@ const ActionsAndPrograms: React.FC = () => {
         setIsSavingPatient(true);
         try {
             const patientRef = doc(db, 'entities', claims.entityId, 'persons', patientToEdit.id);
-            
+
             // Clean before sending to Firestore
             const cleanData = Object.fromEntries(
                 Object.entries({
@@ -1057,17 +1057,17 @@ const ActionsAndPrograms: React.FC = () => {
                 if (selectedAction) {
                     const actionCompetence = selectedAction.date.substring(0, 7);
                     const actionProdRef = doc(
-                        db, 
-                        'entities', 
-                        claims.entityId, 
-                        'actions', 
-                        actionCompetence, 
-                        'actions', 
-                        selectedAction.id!, 
-                        'production', 
+                        db,
+                        'entities',
+                        claims.entityId,
+                        'actions',
+                        actionCompetence,
+                        'actions',
+                        selectedAction.id!,
+                        'production',
                         patientToEdit.id
                     );
-                    
+
                     const existingProdDoc = await getDoc(actionProdRef);
                     if (existingProdDoc.exists()) {
                         const existingData = existingProdDoc.data();
@@ -1085,7 +1085,7 @@ const ActionsAndPrograms: React.FC = () => {
             }
 
             await batch.commit();
-            
+
             // Retroactively update the LIVE history listing (O(1) visual update)
             setProductionHistory(prev => prev.map(r => {
                 if (r.patientId === patientToEdit.id) {
@@ -1134,7 +1134,7 @@ const ActionsAndPrograms: React.FC = () => {
             const actionCompetence = action.date.substring(0, 7);
             const recordsRaw = await fetchActionProduction(claims.entityId, action.id, actionCompetence);
             let records = recordsRaw.filter(r => !r.isDeleted).map(r => ({ ...r, actionDate: action.date }));
-            
+
             if (startDate || endDate) {
                 records = records.filter(r => {
                     const rDateStr = r.attendanceDate || r.actionDate || (r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000).toISOString().split('T')[0] : null);
@@ -1251,11 +1251,11 @@ const ActionsAndPrograms: React.FC = () => {
         try {
             let allRecordsRaw: any[] = [];
             const profsMap = new Map<string, any>();
-            
+
             for (const action of batchExportMunGroup.actions) {
                 const actionCompetence = action.date.substring(0, 7);
                 const records = await fetchActionProduction(claims.entityId, action.id, actionCompetence);
-                
+
                 const mappedRecords = records.map(r => {
                     let pName = '';
                     if (r.professionalId) {
@@ -1267,25 +1267,25 @@ const ActionsAndPrograms: React.FC = () => {
                         pName = action.professionals[0].name;
                     }
                     return {
-                        ...r, 
-                        actionId: action.id, 
-                        actionName: action.name, 
+                        ...r,
+                        actionId: action.id,
+                        actionName: action.name,
                         actionDate: action.date,
                         professionalName: pName
                     };
                 });
-                
+
                 allRecordsRaw = [...allRecordsRaw, ...mappedRecords];
 
                 if (action.professionals) {
                     action.professionals.forEach((p: any) => {
-                         if (p.name && !profsMap.has(p.name)) profsMap.set(p.name, p);
+                        if (p.name && !profsMap.has(p.name)) profsMap.set(p.name, p);
                     });
                 }
             }
 
             let validRecords = allRecordsRaw.filter(r => !r.isDeleted);
-            
+
             if (batchExportProfessionalName) {
                 validRecords = validRecords.filter(r => r.professionalName === batchExportProfessionalName);
             }
@@ -1296,8 +1296,8 @@ const ActionsAndPrograms: React.FC = () => {
                 return;
             }
 
-            const selectedProfsMeta = batchExportProfessionalName 
-                ? [Array.from(profsMap.values()).find(p => p.name === batchExportProfessionalName)].filter(Boolean) 
+            const selectedProfsMeta = batchExportProfessionalName
+                ? [Array.from(profsMap.values()).find(p => p.name === batchExportProfessionalName)].filter(Boolean)
                 : Array.from(profsMap.values());
 
             const fullProfessionals = await Promise.all(
@@ -1357,7 +1357,7 @@ const ActionsAndPrograms: React.FC = () => {
             if (!logoBase64 && entity?.logoUrl) {
                 try {
                     logoBase64 = await municipalityReportService.loadImage(entity.logoUrl);
-                } catch (err) {}
+                } catch (err) { }
             }
 
             const batchData = fullProfessionals.map(prof => {
@@ -1395,6 +1395,114 @@ const ActionsAndPrograms: React.FC = () => {
             alert("Erro ao exportar relatório agrupado.");
         } finally {
             setIsExportingBatch(false);
+        }
+    };
+    const collectAndFlattenActionProduction = async (munGroup: any) => {
+        let allFlattened: any[] = [];
+        for (const action of munGroup.actions) {
+            const actionCompetence = action.date.substring(0, 7);
+            const records = await fetchActionProduction(claims?.entityId!, action.id, actionCompetence);
+
+            records.forEach((r: any) => {
+                if (r.isDeleted || r.status === 'canceled') return;
+
+                // Get professional name and CBO
+                let pName = 'NÃO IDENTIFICADO';
+                let pCbo = 'S/CBO';
+                if (r.professionalId) {
+                    const pObj = action.professionals?.find((p: any) => p.id === r.professionalId);
+                    if (pObj) {
+                        pName = pObj.name;
+                        pCbo = pObj.occupation || pObj.cbo || 'S/CBO';
+                    }
+                }
+
+                // Calculate age if missing
+                let age = r.age;
+                if (!age && r.patient?.birthDate) {
+                    try {
+                        const birth = new Date(r.patient.birthDate);
+                        const now = new Date();
+                        age = now.getFullYear() - birth.getFullYear();
+                        const m = now.getMonth() - birth.getMonth();
+                        if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
+                            age--;
+                        }
+                    } catch (e) {
+                        age = 0;
+                    }
+                }
+
+                // Flatten procedures
+                const proceduresArray = Array.isArray(r.procedures) && r.procedures.length > 0 ? r.procedures : [r];
+                proceduresArray.forEach((proc: any) => {
+                    const resolved = resolveSigtapCode(proc);
+                    allFlattened.push({
+                        ...r,
+                        professionalName: pName,
+                        cbo: pCbo,
+                        procedureCode: proc.code || resolved?.code || '-',
+                        procedureName: proc.name || resolved?.name || '-',
+                        quantity: 1,
+                        age: age || 0,
+                        attendanceDate: r.attendanceDate || action.date,
+                        patientCns: r.patient?.cns || '',
+                        patientCpf: r.patient?.cpf || '',
+                        patientName: r.patient?.name || '',
+                        patientBirthDate: r.patient?.birthDate || ''
+                    });
+                });
+            });
+        }
+        return allFlattened;
+    };
+
+    const handleExportBpaC = async (munGroup: any) => {
+        if (!claims?.entityId) return;
+        const fakeId = 'bpa-c-' + munGroup.municipalityId;
+        setExportingActionId(fakeId);
+        try {
+            const allRecords = await collectAndFlattenActionProduction(munGroup);
+            if (allRecords.length === 0) {
+                alert("Nenhuma produção encontrada para este município na competência.");
+                return;
+            }
+
+            const bpaRows = municipalityReportService.aggregateBpaC(allRecords);
+            municipalityReportService.generatePdfBpaC(bpaRows, {
+                municipalityName: munGroup.municipalityName,
+                entityName: entity?.name || 'ENTIDADE',
+                competence: selectedCompetence.replace('-', '/')
+            });
+        } catch (error) {
+            console.error("Erro ao gerar BPA-C:", error);
+            alert("Erro ao gerar BPA-C.");
+        } finally {
+            setExportingActionId(null);
+        }
+    };
+
+    const handleExportBpaI = async (munGroup: any) => {
+        if (!claims?.entityId) return;
+        const fakeId = 'bpa-i-' + munGroup.municipalityId;
+        setExportingActionId(fakeId);
+        try {
+            const allRecords = await collectAndFlattenActionProduction(munGroup);
+            if (allRecords.length === 0) {
+                alert("Nenhuma produção encontrada para este município na competência.");
+                return;
+            }
+
+            municipalityReportService.generatePdfBpaI(allRecords, {
+                municipalityName: munGroup.municipalityName,
+                entityName: entity?.name || 'ENTIDADE',
+                competence: selectedCompetence.replace('-', '/')
+            });
+        } catch (error) {
+            console.error("Erro ao gerar BPA-I:", error);
+            alert("Erro ao gerar BPA-I.");
+        } finally {
+            setExportingActionId(null);
         }
     };
 
@@ -1462,7 +1570,27 @@ const ActionsAndPrograms: React.FC = () => {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 sm:gap-4">
+                                    <div className="hidden sm:flex items-center gap-2 mr-2">
+                                        <Button
+                                            variant="outline"
+                                            className="text-[10px] font-bold h-7 px-2 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                                            onClick={(e) => { e.stopPropagation(); handleExportBpaC(munGroup); }}
+                                            disabled={exportingActionId === 'bpa-c-' + munGroup.municipalityId}
+                                        >
+                                            {exportingActionId === 'bpa-c-' + munGroup.municipalityId ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <FileText className="w-3 h-3 mr-1" />}
+                                            BPA-C
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="text-[10px] font-bold h-7 px-2 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                            onClick={(e) => { e.stopPropagation(); handleExportBpaI(munGroup); }}
+                                            disabled={exportingActionId === 'bpa-i-' + munGroup.municipalityId}
+                                        >
+                                            {exportingActionId === 'bpa-i-' + munGroup.municipalityId ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <User className="w-3 h-3 mr-1" />}
+                                            BPA-I
+                                        </Button>
+                                    </div>
                                     <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                                         {isExpanded ? <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" /> : <ChevronDown className="w-5 h-5" />}
                                     </button>
@@ -1491,21 +1619,51 @@ const ActionsAndPrograms: React.FC = () => {
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setBatchExportMunGroup(munGroup);
-                                                            setBatchExportProfessionalName('');
-                                                            setIsBatchExportModalOpen(true);
-                                                        }}
-                                                        className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/40"
-                                                    >
-                                                        <Download className="w-4 h-4 mr-2" />
-                                                        <span className="hidden sm:inline">Baixar Agrupado</span>
-                                                        <span className="sm:hidden">Baixar</span>
-                                                    </Button>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleExportBpaC(munGroup);
+                                                            }}
+                                                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/40"
+                                                            disabled={exportingActionId === 'bpa-c-' + munGroup.municipalityId}
+                                                        >
+                                                            {exportingActionId === 'bpa-c-' + munGroup.municipalityId ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                                                            <span className="hidden sm:inline">BPA-C (Consolidado)</span>
+                                                            <span className="sm:hidden">BPA-C</span>
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleExportBpaI(munGroup);
+                                                            }}
+                                                            className="text-blue-600 border-blue-200 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/40"
+                                                            disabled={exportingActionId === 'bpa-i-' + munGroup.municipalityId}
+                                                        >
+                                                            {exportingActionId === 'bpa-i-' + munGroup.municipalityId ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                                                            <span className="hidden sm:inline">BPA-I (Individualizado)</span>
+                                                            <span className="sm:hidden">BPA-I</span>
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setBatchExportMunGroup(munGroup);
+                                                                setBatchExportProfessionalName('');
+                                                                setIsBatchExportModalOpen(true);
+                                                            }}
+                                                            className="text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/40"
+                                                        >
+                                                            <Download className="w-4 h-4 mr-2" />
+                                                            <span className="hidden sm:inline">Baixar Agrupado</span>
+                                                            <span className="sm:hidden">Baixar</span>
+                                                        </Button>
+                                                    </div>
                                                 </div>
 
                                                 <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent -mx-2 px-2 min-h-[220px]">
@@ -1569,15 +1727,15 @@ const ActionsAndPrograms: React.FC = () => {
                                                                             onClick={() => {
                                                                                 setActionToExport(action);
                                                                                 const comp = action.date.substring(0, 7);
-                                                                                
+
                                                                                 // Preselect month bounds
                                                                                 const firstDay = `${comp}-01`;
-                                                                                
+
                                                                                 // Calculate last day of month
                                                                                 const [yearStr, monthStr] = comp.split('-');
                                                                                 const lastDayOfMonth = new Date(parseInt(yearStr), parseInt(monthStr), 0).getDate();
                                                                                 const lastDay = `${comp}-${lastDayOfMonth}`;
-                                                                                
+
                                                                                 setExportPeriod({ start: firstDay, end: lastDay });
                                                                                 setIsPeriodExportModalOpen(true);
                                                                             }}
@@ -1711,66 +1869,66 @@ const ActionsAndPrograms: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Equipe Envolvida</label>
 
                         <div className="relative">
-                                <div className="relative">
-                                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar profissional por nome..."
-                                        value={professionalSearch}
-                                        onChange={(e) => {
-                                            setProfessionalSearch(e.target.value);
-                                            setShowProfessionalDropdown(true);
-                                        }}
-                                        onFocus={() => setShowProfessionalDropdown(true)}
-                                        className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:text-white"
-                                    />
-                                    {professionalSearch && (
-                                        <button
-                                            type="button"
-                                            onClick={() => { setProfessionalSearch(""); setShowProfessionalDropdown(false); }}
-                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                {showProfessionalDropdown && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                        {(() => {
-                                            const combinedList = actionProfessionalsList;
-                                            const searchLower = professionalSearch.toLowerCase();
-                                            
-                                            const filteredList = combinedList.filter(p => {
-                                                const matchesName = p.name.toLowerCase().includes(searchLower) || (p.cpf && p.cpf.includes(searchLower));
-                                                if (!matchesName) return false;
-                                                
-                                                if (!actionForm.municipalityId) return true;
-                                                
-                                                const isGlobal = !p.municipalityId || p.municipalityId === '' || p.municipalityId === 'custom';
-                                                const matchesMun = p.municipalityId === actionForm.municipalityId || p.assignments?.some((a: any) => a.municipalityId === actionForm.municipalityId);
-                                                
-                                                return isGlobal || matchesMun;
-                                            });
-
-                                            if (filteredList.length === 0) {
-                                                return <div className="px-4 py-3 text-sm text-gray-500 text-center">Nenhum profissional encontrado.</div>;
-                                            }
-
-                                            return filteredList.map(p => (
-                                                <div
-                                                    key={p.id}
-                                                    onClick={() => p.id && handleAddProfessional(p.id)}
-                                                    className="px-4 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 cursor-pointer text-sm text-gray-700 dark:text-gray-200 border-b border-gray-50 dark:border-gray-700/50 last:border-0"
-                                                >
-                                                    <div className="font-medium">{p.name}</div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">{p.occupation || 'Sem CBO'} • CNS: {p.cns || 'N/A'}</div>
-                                                </div>
-                                            ));
-                                        })()}
-                                    </div>
+                            <div className="relative">
+                                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar profissional por nome..."
+                                    value={professionalSearch}
+                                    onChange={(e) => {
+                                        setProfessionalSearch(e.target.value);
+                                        setShowProfessionalDropdown(true);
+                                    }}
+                                    onFocus={() => setShowProfessionalDropdown(true)}
+                                    className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:text-white"
+                                />
+                                {professionalSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setProfessionalSearch(""); setShowProfessionalDropdown(false); }}
+                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
                                 )}
                             </div>
+
+                            {showProfessionalDropdown && (
+                                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                    {(() => {
+                                        const combinedList = actionProfessionalsList;
+                                        const searchLower = professionalSearch.toLowerCase();
+
+                                        const filteredList = combinedList.filter(p => {
+                                            const matchesName = p.name.toLowerCase().includes(searchLower) || (p.cpf && p.cpf.includes(searchLower));
+                                            if (!matchesName) return false;
+
+                                            if (!actionForm.municipalityId) return true;
+
+                                            const isGlobal = !p.municipalityId || p.municipalityId === '' || p.municipalityId === 'custom';
+                                            const matchesMun = p.municipalityId === actionForm.municipalityId || p.assignments?.some((a: any) => a.municipalityId === actionForm.municipalityId);
+
+                                            return isGlobal || matchesMun;
+                                        });
+
+                                        if (filteredList.length === 0) {
+                                            return <div className="px-4 py-3 text-sm text-gray-500 text-center">Nenhum profissional encontrado.</div>;
+                                        }
+
+                                        return filteredList.map(p => (
+                                            <div
+                                                key={p.id}
+                                                onClick={() => p.id && handleAddProfessional(p.id)}
+                                                className="px-4 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 cursor-pointer text-sm text-gray-700 dark:text-gray-200 border-b border-gray-50 dark:border-gray-700/50 last:border-0"
+                                            >
+                                                <div className="font-medium">{p.name}</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">{p.occupation || 'Sem CBO'} • CNS: {p.cns || 'N/A'}</div>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+                            )}
+                        </div>
 
                         <div className="flex flex-wrap gap-2 mt-3 min-h-[40px] p-2 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
                             {actionForm.professionals?.length === 0 && (
@@ -1850,9 +2008,9 @@ const ActionsAndPrograms: React.FC = () => {
                             <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl text-sm text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/50 flex items-start gap-3 shadow-sm">
                                 <Info className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 animate-pulse" />
                                 <div>
-                                    <strong className="font-bold flex items-center gap-1.5"><Edit2 className="w-4 h-4"/> Modo de Edição Ativo</strong>
+                                    <strong className="font-bold flex items-center gap-1.5"><Edit2 className="w-4 h-4" /> Modo de Edição Ativo</strong>
                                     <p className="mt-1">
-                                        Os dados do paciente foram recarregados no formulário abaixo. Faça as alterações desejadas nos 
+                                        Os dados do paciente foram recarregados no formulário abaixo. Faça as alterações desejadas nos
                                         <b> procedimentos</b> ou profissionais e clique em "Salvar Edição" lá no final da tela.
                                     </p>
                                 </div>
@@ -2150,94 +2308,94 @@ const ActionsAndPrograms: React.FC = () => {
                                 <Clock className="w-5 h-5 text-gray-400" /> Registros
                             </h4>
                             <div className="space-y-4 overflow-y-auto pr-3 custom-scrollbar flex-1 min-h-0 pb-4">
-                            {productionHistory.map(prod => (
-                                <details key={prod.id} className={`p-4 ${prod.isDeleted ? 'bg-gray-100 dark:bg-gray-800/40 opacity-75 grayscale-[50%]' : 'bg-white dark:bg-gray-800/80'} border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:border-emerald-300 dark:hover:border-emerald-700 transition-all hover:shadow-md group cursor-pointer [&_summary::-webkit-details-marker]:hidden`}>
-                                    <summary className="font-bold text-base text-gray-900 dark:text-white mb-2 list-none flex items-center gap-2" title={prod.patient.name}>
-                                        <div className="flex items-center gap-1.5 group/patient flex-1 min-w-0">
-                                            <span className={`truncate flex-1 ${prod.isDeleted ? 'line-through text-gray-500' : ''}`}>{prod.patient.name}</span>
-                                            {prod.isDeleted && <Badge type="error" className="ml-2 text-[10px] shrink-0">Excluído</Badge>}
-                                            <button 
-                                                type="button"
-                                                onClick={(e) => { 
-                                                    e.preventDefault(); 
-                                                    e.stopPropagation();
-                                                    handleOpenEditPatient(prod); 
-                                                }}
-                                                className="flex-shrink-0 text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/30"
-                                                title="Editar dados cadastrais básicos deste Paciente"
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
+                                {productionHistory.map(prod => (
+                                    <details key={prod.id} className={`p-4 ${prod.isDeleted ? 'bg-gray-100 dark:bg-gray-800/40 opacity-75 grayscale-[50%]' : 'bg-white dark:bg-gray-800/80'} border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:border-emerald-300 dark:hover:border-emerald-700 transition-all hover:shadow-md group cursor-pointer [&_summary::-webkit-details-marker]:hidden`}>
+                                        <summary className="font-bold text-base text-gray-900 dark:text-white mb-2 list-none flex items-center gap-2" title={prod.patient.name}>
+                                            <div className="flex items-center gap-1.5 group/patient flex-1 min-w-0">
+                                                <span className={`truncate flex-1 ${prod.isDeleted ? 'line-through text-gray-500' : ''}`}>{prod.patient.name}</span>
+                                                {prod.isDeleted && <Badge type="error" className="ml-2 text-[10px] shrink-0">Excluído</Badge>}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleOpenEditPatient(prod);
+                                                    }}
+                                                    className="flex-shrink-0 text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                                    title="Editar dados cadastrais básicos deste Paciente"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                            </div>
+                                            <ChevronDown className="flex-shrink-0 w-4 h-4 text-gray-400 group-open:rotate-180 transition-transform" />
+                                        </summary>
+                                        <div className="grid grid-cols-1 gap-y-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-lg">
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-medium">Identificação:</span>
+                                                <span className="font-mono text-xs">{prod.patient.cns || prod.patient.cpf || 'Não informada'}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="font-medium">Nascimento:</span>
+                                                <span>
+                                                    {prod.patient.birthDate ? new Date(prod.patient.birthDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <ChevronDown className="flex-shrink-0 w-4 h-4 text-gray-400 group-open:rotate-180 transition-transform" />
-                                    </summary>
-                                    <div className="grid grid-cols-1 gap-y-2 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/40 p-3 rounded-lg">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium">Identificação:</span>
-                                            <span className="font-mono text-xs">{prod.patient.cns || prod.patient.cpf || 'Não informada'}</span>
+
+                                        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                                            <h6 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Procedimentos ({prod.procedures?.length || 0})</h6>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(prod.procedures || []).map((proc, i) => (
+                                                    <span key={i} className="text-[11px] font-bold tracking-wide bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60" title={proc.name}>
+                                                        {proc.code} {proc.name && <span className="font-medium opacity-80 mx-1">-</span>} <span className="font-medium opacity-80">{proc.name}</span>
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="font-medium">Nascimento:</span>
-                                            <span>
-                                                {prod.patient.birthDate ? new Date(prod.patient.birthDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+
+                                        <div className="mt-3 flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                {!prod.isDeleted && (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleEditProduction(e, prod)}
+                                                            className="text-[11px] font-medium text-indigo-500 hover:text-indigo-700 flex items-center gap-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 px-2 py-1 rounded"
+                                                            title="Editar este lançamento (Alterar quantidade, profissionais, procedimentos)"
+                                                        >
+                                                            <Edit2 className="w-3.5 h-3.5" /> Editar Lançamento
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleDeleteProduction(e, prod)}
+                                                            className="text-[11px] font-medium text-red-500 hover:text-red-700 flex items-center gap-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 px-2 py-1 rounded"
+                                                            title="Excluir este registro"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" /> Excluir
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <span className="text-[11px] font-medium text-gray-400 flex items-center gap-1">
+                                                <Calendar className="w-3 h-3" />
+                                                {prod.attendanceDate
+                                                    ? prod.attendanceDate.split('-').reverse().join('/')
+                                                    : (prod.createdAt ? new Date(prod.createdAt.seconds * 1000).toLocaleDateString('pt-BR') : '-')}
                                             </span>
                                         </div>
+                                    </details>
+                                ))}
+                                {productionHistory.length === 0 && (
+                                    <div className="text-center py-12 flex flex-col items-center justify-center h-full opacity-60">
+                                        <Activity className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-3" />
+                                        <p className="text-gray-500 dark:text-gray-400 font-medium">Nenhum registro ainda</p>
+                                        <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">Os atendimentos aparecerão aqui</p>
                                     </div>
-
-                                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
-                                        <h6 className="text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Procedimentos ({prod.procedures?.length || 0})</h6>
-                                        <div className="flex flex-wrap gap-2">
-                                            {(prod.procedures || []).map((proc, i) => (
-                                                <span key={i} className="text-[11px] font-bold tracking-wide bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60" title={proc.name}>
-                                                    {proc.code} {proc.name && <span className="font-medium opacity-80 mx-1">-</span>} <span className="font-medium opacity-80">{proc.name}</span>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            {!prod.isDeleted && (
-                                                <>
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => handleEditProduction(e, prod)}
-                                                        className="text-[11px] font-medium text-indigo-500 hover:text-indigo-700 flex items-center gap-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 px-2 py-1 rounded"
-                                                        title="Editar este lançamento (Alterar quantidade, profissionais, procedimentos)"
-                                                    >
-                                                        <Edit2 className="w-3.5 h-3.5" /> Editar Lançamento
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={(e) => handleDeleteProduction(e, prod)}
-                                                        className="text-[11px] font-medium text-red-500 hover:text-red-700 flex items-center gap-1.5 hover:bg-red-50 dark:hover:bg-red-900/30 px-2 py-1 rounded"
-                                                        title="Excluir este registro"
-                                                    >
-                                                        <Trash2 className="w-3.5 h-3.5" /> Excluir
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-                                        <span className="text-[11px] font-medium text-gray-400 flex items-center gap-1">
-                                            <Calendar className="w-3 h-3" />
-                                            {prod.attendanceDate
-                                                ? prod.attendanceDate.split('-').reverse().join('/')
-                                                : (prod.createdAt ? new Date(prod.createdAt.seconds * 1000).toLocaleDateString('pt-BR') : '-')}
-                                        </span>
-                                    </div>
-                                </details>
-                            ))}
-                            {productionHistory.length === 0 && (
-                                <div className="text-center py-12 flex flex-col items-center justify-center h-full opacity-60">
-                                    <Activity className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-3" />
-                                    <p className="text-gray-500 dark:text-gray-400 font-medium">Nenhum registro ainda</p>
-                                    <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">Os atendimentos aparecerão aqui</p>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
             </Modal>
 
             {/* Modal: Cadastrar Paciente */}
@@ -2340,12 +2498,12 @@ const ActionsAndPrograms: React.FC = () => {
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">{baseProfForm.id ? "Editar Profissional da Base" : "Cadastro de Profissional na Base"}</h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Preencha os dados abaixo. Itens com * são obrigatórios.</p>
                             </div>
-                            
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 md:gap-6">
                                 <Input label="Nome Completo *" placeholder="Obrigatório" value={baseProfForm.name} onChange={e => setBaseProfForm({ ...baseProfForm, name: e.target.value })} />
                                 <Input label="CPF *" placeholder="Obrigatório" value={baseProfForm.cpf} onChange={e => setBaseProfForm({ ...baseProfForm, cpf: e.target.value })} />
                             </div>
-                            
+
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6">
                                 <Input label="CNS (Cartão SUS)" placeholder="Opcional" value={baseProfForm.cns} onChange={e => setBaseProfForm({ ...baseProfForm, cns: e.target.value })} />
                                 <div className="flex flex-col">
@@ -2374,7 +2532,7 @@ const ActionsAndPrograms: React.FC = () => {
                                 <Input label="E-mail" type="email" placeholder="Opcional" value={baseProfForm.email} onChange={e => setBaseProfForm({ ...baseProfForm, email: e.target.value })} />
                                 <Input label="Telefone / WhatsApp" placeholder="Opcional" value={baseProfForm.phone} onChange={e => setBaseProfForm({ ...baseProfForm, phone: e.target.value })} />
                             </div>
-                            
+
                             <div className="flex justify-end pt-6">
                                 <Button type="button" onClick={handleCreateBaseProfessional} disabled={isSavingManualProf} size="sm" className="px-6 w-full sm:w-auto shadow-sm flex items-center justify-center gap-2">
                                     {isSavingManualProf ? (
@@ -2391,7 +2549,7 @@ const ActionsAndPrograms: React.FC = () => {
                         <div className="space-y-6">
                             {(() => {
                                 // Filter
-                                const filtered = actionProfessionalsList.filter(p => 
+                                const filtered = actionProfessionalsList.filter(p =>
                                     p.name.toLowerCase().includes(profBaseSearch.toLowerCase()) ||
                                     p.cpf?.includes(profBaseSearch) ||
                                     p.occupation?.toLowerCase().includes(profBaseSearch.toLowerCase())
@@ -2502,12 +2660,12 @@ const ActionsAndPrograms: React.FC = () => {
                 </div>
                 {renderSignatureModal()}
             </SidePanel>
-            
+
             {/* Quick Patient Edit Modal Overlay within the Actions Context */}
             <AnimatePresence>
                 {editPatientModalOpen && patientToEdit && (
                     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
@@ -2671,7 +2829,7 @@ const ActionsAndPrograms: React.FC = () => {
                     <p className="text-sm text-gray-500">
                         {batchExportMunGroup ? `Selecione o(a) profissional para gerar o boletim integrado de produções contidas nesta competência.` : 'Selecione o profissional.'}
                     </p>
-                    
+
                     <div>
                         <Select
                             label="Profissional"
@@ -2704,7 +2862,7 @@ const ActionsAndPrograms: React.FC = () => {
                     </div>
                 </div>
             </Modal>
-            
+
             {/* Hidden File Input for Signatures */}
             <input
                 type="file"

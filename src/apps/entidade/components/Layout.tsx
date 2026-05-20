@@ -167,6 +167,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
   const menuItemsSubsede = [
     { icon: LayoutDashboard, label: 'Visão Geral', path: '/subsede/dashboard' },
     { icon: Users, label: 'Corpo Clínico Local', path: '/subsede/profissionais' },
+    { icon: Users, label: 'Pacientes', path: '/subsede/pacientes' },
     { icon: Activity, label: 'Produção Municipal', path: '/subsede/producao' },
   ];
 

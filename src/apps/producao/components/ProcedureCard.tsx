@@ -481,6 +481,7 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                                 value={data.quantity}
                                 onChange={e => onUpdate(index, { ...data, quantity: Number(e.target.value) })}
                                 min={1}
+                                className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                         </div>
 

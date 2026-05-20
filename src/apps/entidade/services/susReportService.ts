@@ -160,11 +160,11 @@ export const susReportService = {
                 // Adjust Y based on CBO lines
                 currentY += 16 + (Math.max(0, cboLines.length - 1) * 4);
 
-                // Period
-                doc.setFillColor(245, 245, 245);
-                doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
-                doc.setFont('helvetica', 'bold');
-                doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
+                // Period hidden to prevent overlap with DATA DA PRODUÇÃO
+                // doc.setFillColor(245, 245, 245);
+                // doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
+                // doc.setFont('helvetica', 'bold');
+                // doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
             };
 
 
@@ -435,10 +435,11 @@ export const susReportService = {
                     }
 
                     currentY += 16 + (Math.max(0, cboLines.length - 1) * 4);
-                    doc.setFillColor(245, 245, 245);
-                    doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
-                    doc.setFont('helvetica', 'bold');
-                    doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
+                    // Period hidden to prevent overlap with DATA DA PRODUÇÃO
+                    // doc.setFillColor(245, 245, 245);
+                    // doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
+                    // doc.setFont('helvetica', 'bold');
+                    // doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
                 };
 
 
@@ -684,10 +685,11 @@ export const susReportService = {
             doc.text(cboLines, rightColValueX, currentY + 10);
 
             currentY += 16 + (Math.max(0, cboLines.length - 1) * 4);
-            doc.setFillColor(245, 245, 245);
-            doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
-            doc.setFont('helvetica', 'bold');
-            doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
+            // Period hidden to prevent overlap with DATA DA PRODUÇÃO
+            // doc.setFillColor(245, 245, 245);
+            // doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
+            // doc.setFont('helvetica', 'bold');
+            // doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
         };
 
         // Sort logic for records
@@ -1142,10 +1144,11 @@ export const susReportService = {
                 doc.text(cboLines, rightColValueX, currentY + 10);
 
                 currentY += 16 + (Math.max(0, cboLines.length - 1) * 4);
-                doc.setFillColor(245, 245, 245);
-                doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
-                doc.setFont('helvetica', 'bold');
-                doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
+                // Period hidden to prevent overlap with DATA DA PRODUÇÃO
+                // doc.setFillColor(245, 245, 245);
+                // doc.rect(14, currentY - 5, pageWidth - 28, 7, 'F');
+                // doc.setFont('helvetica', 'bold');
+                // doc.text(`PERÍODO: ${options.competence}`, pageWidth / 2, currentY, { align: 'center' });
             };
 
             const sortedRecords = [...records].sort((a, b) => {
