@@ -28,10 +28,13 @@ import UsersPrivate from './pages/private/Users';
 import SettingsPrivate from './pages/private/Settings';
 import SupportPrivate from './pages/private/Support';
 import NotificationsPage from './pages/private/NotificationsPage';
+import RegistrationBackups from './pages/private/RegistrationBackups';
 
 import DashboardSubsede from './pages/subsede/Dashboard';
 import ProfessionalsSubsede from './pages/subsede/Professionals';
 import ProductionSubsede from './pages/subsede/Production';
+import TutorialsSubsede from './pages/subsede/Tutorials';
+import PatientsSubsede from './pages/subsede/Patients';
 
 import { AuthProvider } from './context/AuthContext';
 
@@ -74,13 +77,16 @@ const App: React.FC = () => {
             <Route path="suporte" element={<SupportPrivate />} />
             <Route path="notificacoes" element={<NotificationsPage />} />
             <Route path="configuracoes" element={<SettingsPrivate />} />
+            <Route path="cadastros-originais" element={<RegistrationBackups />} />
           </Route>
 
           {/* Rotas Subsede (Consultivas) */}
           <Route path="/subsede" element={<Layout type="subsede" />}>
             <Route path="dashboard" element={<DashboardSubsede />} />
             <Route path="profissionais" element={<ProfessionalsSubsede />} />
+            <Route path="pacientes" element={<PatientsSubsede />} />
             <Route path="producao" element={<ProductionSubsede />} />
+            <Route path="tutoriais" element={<TutorialsSubsede />} />
           </Route>
         </Routes>
       </HashRouter>

@@ -41,9 +41,11 @@ export interface ProductionRecord {
   unitId: string;
   patientCns?: string;
   patientCpf?: string;
+  patientName?: string;
   cidCodes?: string[];
-  status: 'synced' | 'pending' | 'error';
+  status: 'synced' | 'pending' | 'error' | 'canceled';
   observations?: string;
+  firestorePath?: string;
 }
 
 export interface DashboardStats {

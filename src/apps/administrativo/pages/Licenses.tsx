@@ -51,7 +51,8 @@ const Licenses: React.FC = () => {
                 // Calculate municipalities count per entity
                 const counts: Record<string, number> = {};
                 munis.forEach(m => {
-                    if (m.linkedEntityId) {
+                    // Consider only active municipalities in the count
+                    if (m.linkedEntityId && m.status === 'Ativa') {
                         counts[m.linkedEntityId] = (counts[m.linkedEntityId] || 0) + 1;
                     }
                 });
@@ -669,8 +670,9 @@ const Licenses: React.FC = () => {
                             <p className="text-2xl font-bold text-slate-900 dark:text-white">
                                 {licenses.filter(l => {
                                     if (l.status !== LicenseStatus.ACTIVE) return false;
-                                    const end = new Date(l.endDate);
+                                    const end = new Date(l.endDate + 'T00:00:00'); // Prevent timezone shift
                                     const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
                                     const diffTime = end.getTime() - today.getTime();
                                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                                     return diffDays >= 0 && diffDays <= 30;
@@ -687,7 +689,16 @@ const Licenses: React.FC = () => {
                         <div>
                             <p className="text-sm text-slate-500">Expiradas</p>
                             <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                                {licenses.filter(l => l.status === LicenseStatus.EXPIRED).length}
+                                {licenses.filter(l => {
+                                    if (l.status === LicenseStatus.EXPIRED) return true;
+                                    if (l.status === LicenseStatus.ACTIVE) {
+                                      const end = new Date(l.endDate + 'T00:00:00'); // Prevent timezone shift
+                                      const today = new Date();
+                                      today.setHours(0, 0, 0, 0);
+                                      return end < today;
+                                    }
+                                    return false;
+                                }).length}
                             </p>
                         </div>
                     </div>

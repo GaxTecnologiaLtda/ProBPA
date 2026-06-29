@@ -60,12 +60,22 @@ const mergeGoalsWithAggregatedProgress = (
       // Get exact progress object from the API mapping
       const progress = progressMap[goal.id!] || { total: 0, byMonth: {} };
 
-      // Calculate Chart Data (12 months)
-      const chartData = Array.from({ length: 12 }, (_, i) => {
-         const month = (i + 1).toString().padStart(2, '0');
-         const value = progress.byMonth[month] || 0;
-         return { month: `${month}`, value, label: `${month}/${targetYear.slice(2)}` };
-      });
+      // Calculate Chart Data dynamically using precise bounds
+      const sY = parseInt(goal.startMonth ? goal.startMonth.substring(0, 4) : targetYear);
+      const eY = parseInt(goal.endMonth ? goal.endMonth.substring(0, 4) : targetYear);
+      const sM = goal.startMonth ? goal.startMonth.substring(0, 7) : `${targetYear}-01`;
+      const eM = goal.endMonth ? goal.endMonth.substring(0, 7) : `${targetYear}-12`;
+      
+      const chartData: { month: string, value: number, label: string }[] = [];
+      for (let y = sY; y <= eY; y++) {
+         for (let m = 1; m <= 12; m++) {
+            const mStr = String(m).padStart(2, '0');
+            const compKey = `${y}-${mStr}`;
+            if (compKey >= sM && compKey <= eM) {
+                chartData.push({ month: compKey, value: progress.byMonth ? (progress.byMonth[compKey] || 0) : 0, label: `${mStr}/${String(y).slice(2)}` });
+            }
+         }
+      }
 
       // Annual Total
       const totalAnnual = progress.total || 0;
@@ -135,6 +145,7 @@ const Goals: React.FC = () => {
    const [professionals, setProfessionals] = useState<Professional[]>([]);
 
    const [municipalities, setMunicipalities] = useState<any[]>([]);
+   const [rawProgressMap, setRawProgressMap] = useState<Record<string, { total: number, byMonth: Record<string, number> }>>({});
 
    const [isSigtapModalOpen, setIsSigtapModalOpen] = useState(false);
    const [sigtapSourceCompetence, setSigtapSourceCompetence] = useState('');
@@ -254,6 +265,7 @@ const Goals: React.FC = () => {
             const targetVigencyYear = vigencyYear || new Date().getFullYear().toString();
             console.log(`[Goals] Loading aggregated production API for ${targetVigencyYear}`);
             const progressMap = await goalService.getAggregatedGoalsProgress(targetVigencyYear, goalsData);
+            setRawProgressMap(progressMap);
 
             // 3. Merge
             const merged = mergeGoalsWithAggregatedProgress(goalsData, progressMap, targetVigencyYear);
@@ -406,7 +418,10 @@ const Goals: React.FC = () => {
 
    interface GroupedMunicipality {
       municipalityId: string;
+      groupKey: string;
       municipalityName: string;
+      startYear: string;
+      endYear: string;
       globalGoals: Goal[];
       unitGoals: GroupedUnit[];
       totalValue: number;
@@ -420,18 +435,18 @@ const Goals: React.FC = () => {
       // NO FILTERING by View Competence! Show ALL Active Goals.
       const filteredList = goals;
 
-      // 2. Agrupar TUDO por Município
-      const byMunicipality: Record<string, { global: Goal[], units: Record<string, Goal[]> }> = {};
+      // 2. Agrupar TUDO por Município e Vigência
+      const byMunicipality: Record<string, { global: Goal[], units: Record<string, Goal[]>, munId: string, startYear: string, endYear: string }> = {};
 
       goals.forEach(goal => {
          // --- Vigency Logic ---
          // Check if goal is active within the selected Vigency YEAR
-         const startYear = parseInt(getYear(goal.startMonth) || '0');
-         const endYear = parseInt(getYear(goal.endMonth) || '9999');
+         const startYear = getYear(goal.startMonth) || '0';
+         const endYear = getYear(goal.endMonth) || '9999';
          const selectedYear = parseInt(vigencyYear);
 
          // If filter year is outside the [Start, End] range, SKIP IT.
-         if (selectedYear < startYear || selectedYear > endYear) {
+         if (selectedYear < parseInt(startYear) || selectedYear > parseInt(endYear)) {
             return;
          }
 
@@ -448,8 +463,10 @@ const Goals: React.FC = () => {
          // Fallback se ainda não tiver ID
          if (!munId) munId = 'unknown';
 
-         if (!byMunicipality[munId]) {
-            byMunicipality[munId] = { global: [], units: {} };
+         const groupKey = `${munId}_${startYear}_${endYear}`;
+
+         if (!byMunicipality[groupKey]) {
+            byMunicipality[groupKey] = { global: [], units: {}, munId, startYear, endYear };
          }
 
          // Determina Tipo do Goal
@@ -460,23 +477,24 @@ const Goals: React.FC = () => {
          }
 
          if (type === 'municipal') {
-            byMunicipality[munId].global.push(goal);
+            byMunicipality[groupKey].global.push(goal);
          } else {
             // Agrupa por unidade dentro do município
             const uId = goal.unitId || 'unknown-unit';
-            if (!byMunicipality[munId].units[uId]) {
-               byMunicipality[munId].units[uId] = [];
+            if (!byMunicipality[groupKey].units[uId]) {
+               byMunicipality[groupKey].units[uId] = [];
             }
-            byMunicipality[munId].units[uId].push(goal);
+            byMunicipality[groupKey].units[uId].push(goal);
          }
       });
 
       // 3. Transformar em Array Ordenado de Municípios
-      const result: GroupedMunicipality[] = Object.keys(byMunicipality).map(munId => {
+      const result: GroupedMunicipality[] = Object.keys(byMunicipality).map(groupKey => {
+         const group = byMunicipality[groupKey];
+         const munId = group.munId;
+
          // Resolve Nome do Município
          const munName = municipalities.find(m => m.id === munId)?.name || (munId === 'unknown' ? 'Município Desconhecido' : 'Município Global');
-
-         const group = byMunicipality[munId];
 
          // Process Unit Goals
          const unitGoals: GroupedUnit[] = Object.keys(group.units).map(uId => {
@@ -503,7 +521,10 @@ const Goals: React.FC = () => {
 
          return {
             municipalityId: munId,
+            groupKey: groupKey,
             municipalityName: munName,
+            startYear: group.startYear,
+            endYear: group.endYear,
             globalGoals: group.global,
             unitGoals: unitGoals,
             totalValue: totalValueGlobal + totalValueUnits,
@@ -585,17 +606,25 @@ const Goals: React.FC = () => {
       });
    };
 
-   // --- Bulk Edit Logic ---
    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
    const [bulkEditList, setBulkEditList] = useState<Goal[]>([]);
    const [bulkDeleteIds, setBulkDeleteIds] = useState<string[]>([]);
    const [currentBulkMunicipalityId, setCurrentBulkMunicipalityId] = useState<string>(''); // For adding new items
+   
+   // Field states for editing Vigency
+   const [bulkEditStartMonth, setBulkEditStartMonth] = useState<string>('');
+   const [bulkEditEndMonth, setBulkEditEndMonth] = useState<string>('');
 
    const handleOpenBulkEdit = (group: GroupedMunicipality) => {
       // Flatten goals to edit
       const goalsToEdit = [...group.globalGoals, ...group.unitGoals.flatMap(u => u.goals)];
       setBulkEditList(JSON.parse(JSON.stringify(goalsToEdit))); // Deep copy
       setCurrentBulkMunicipalityId(group.municipalityId);
+      
+      const firstGoal = goalsToEdit[0];
+      setBulkEditStartMonth(firstGoal?.startMonth || `${new Date().getFullYear()}-01-01`);
+      setBulkEditEndMonth(firstGoal?.endMonth || `${new Date().getFullYear()}-12-31`);
+      
       setBulkDeleteIds([]);
       setIsBulkEditModalOpen(true);
    };
@@ -633,8 +662,9 @@ const Goals: React.FC = () => {
 
          const promises = bulkEditList.map(goal => {
             const goalToSave = {
-
                ...goal,
+               startMonth: bulkEditStartMonth,
+               endMonth: bulkEditEndMonth,
                totalValue: (goal.annualTargetQuantity || goal.targetQuantity * 12) * (goal.unitValue || 0)
             };
             // Remove temp ID before saving to let backend/service generate a real ID
@@ -802,6 +832,8 @@ const Goals: React.FC = () => {
 
    const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (isLoading) return;
+      setIsLoading(true);
       try {
          if (formData.goalType === 'municipal' && selectedGoalsList.length > 0) {
             // Batch Save
@@ -819,7 +851,9 @@ const Goals: React.FC = () => {
                   competenceMonth: new Date().getFullYear().toString(), // Explicitly set Annual
                   unitValue: item.unitValue,
                   totalValue: item.monthlyTarget * item.unitValue,
-                  goalType: 'municipal'
+                  goalType: 'municipal',
+                  description: item.name, // Force description to be the procedure name
+                  contractName: formData.description // Preserve original description as contract name
                }, claims);
             });
             await Promise.all(promises);
@@ -848,6 +882,8 @@ const Goals: React.FC = () => {
       } catch (error) {
          console.error('Error saving goal:', error);
          alert('Erro ao salvar meta. Tente novamente.');
+      } finally {
+         setIsLoading(false);
       }
    };
 
@@ -961,37 +997,98 @@ const Goals: React.FC = () => {
 
    // --- Evolution Modal Logic ---
    const [isEvolutionModalOpen, setIsEvolutionModalOpen] = useState(false);
-   const [evolutionData, setEvolutionData] = useState<{ title: string, series: { name: string, data: number[] }[], categories: string[] } | null>(null);
+   const [showFullVigency, setShowFullVigency] = useState(false);
+   const [evolutionData, setEvolutionData] = useState<{ title: string, isPlurianual: boolean, annualCategories: string[], annualSeries: { data: number[] }[], plurianualCategories: string[], plurianualSeries: { data: number[] }[] } | null>(null);
 
    const handleOpenEvolution = (group: GroupedMunicipality) => {
       // Aggregate data for the municipality
       const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      const aggregatedData = new Array(12).fill(0);
+      
+      const baseYear = parseInt(vigencyYear);
+      const sY = parseInt(group.startYear) < baseYear && parseInt(group.startYear) > 2000 ? parseInt(group.startYear) : baseYear;
+      const eY = parseInt(group.endYear) > baseYear && parseInt(group.endYear) < 2100 ? parseInt(group.endYear) : baseYear;
 
-      // Combine global and unit goals
-      const allGoals = [...group.globalGoals, ...group.unitGoals.flatMap(u => u.goals)];
+      // Extract specific boundary months
+      const firstGoal = group.globalGoals[0] || group.unitGoals[0]?.goals[0];
+      const startMonthValue = firstGoal?.startMonth ? parseInt(firstGoal.startMonth.substring(5, 7)) - 1 : 0;
+      const endMonthValue = firstGoal?.endMonth ? parseInt(firstGoal.endMonth.substring(5, 7)) - 1 : 11;
 
-      let totalAggregated = 0;
-      allGoals.forEach(goal => {
-         if (goal.chartData && Array.isArray(goal.chartData)) {
-            goal.chartData.forEach((d, index) => {
-               const val = Number(d.value || 0);
-               if (!isNaN(val) && index < 12) {
-                  aggregatedData[index] += val;
-                  totalAggregated += val;
-               }
-            });
+      const annualData = new Array(12).fill(0);
+      const plurianualCategories: string[] = [];
+      const plurianualData: number[] = [];
+
+      let runningFlatIdx = 0;
+      const monthMapping: Record<string, number> = {};
+
+      for (let y = sY; y <= eY; y++) {
+         const loopStartM = y === sY ? startMonthValue : 0;
+         const loopEndM = y === eY ? endMonthValue : 11;
+         
+         for (let m = loopStartM; m <= loopEndM; m++) {
+            const mKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+            plurianualCategories.push(`${months[m]}/${String(y).slice(2)}`);
+            plurianualData.push(0);
+            monthMapping[mKey] = runningFlatIdx++;
          }
-      });
+      }
+
+      // Aggregate data using the API's pure GLOBAL_STATS un-inflated numbers
+      const globalKey = `GLOBAL_STATS_${group.municipalityId}_${group.startYear}_${group.endYear}`;
+      const globalStats = rawProgressMap[globalKey];
+
+      if (globalStats && globalStats.byMonth) {
+         Object.keys(globalStats.byMonth).forEach(monthKey => {
+            if (!monthKey.includes('-')) return; // Fallback
+            const [mY, mM] = monthKey.split('-');
+            const yearNum = parseInt(mY, 10);
+            const monthIdx = parseInt(mM, 10) - 1;
+            const value = globalStats.byMonth[monthKey];
+
+            if (yearNum === baseYear && monthIdx >= 0 && monthIdx < 12) {
+               annualData[monthIdx] += value;
+            }
+
+            const flatIdx = monthMapping[monthKey];
+            if (flatIdx !== undefined && flatIdx < plurianualData.length) {
+               plurianualData[flatIdx] += value;
+            }
+         });
+      } else {
+         // Fallback incase global key is missing or not processed
+         const allGoals = [...group.globalGoals, ...group.unitGoals.flatMap(u => u.goals)];
+         allGoals.forEach(goal => {
+            if (goal.chartData && Array.isArray(goal.chartData)) {
+               goal.chartData.forEach(d => {
+                  const val = Number(d.value || 0);
+                  if (isNaN(val)) return;
+                  
+                  if (!d.month.includes('-')) return;
+                  const [mY, mM] = d.month.split('-');
+                  const yearNum = parseInt(mY, 10);
+                  const monthIdx = parseInt(mM, 10) - 1;
+                  
+                  if (yearNum === baseYear && monthIdx >= 0 && monthIdx < 12) {
+                      annualData[monthIdx] += val;
+                  }
+
+                  const flatIdx = (yearNum - sY) * 12 + monthIdx;
+                  if (flatIdx >= 0 && flatIdx < plurianualData.length) {
+                      plurianualData[flatIdx] += val;
+                  }
+               });
+            }
+         });
+      }
 
       setEvolutionData({
          title: `Evolução Mensal - ${group.municipalityName}`,
-         categories: months,
-         series: [{
-            name: 'Produção Realizada',
-            data: aggregatedData
-         }]
+         isPlurianual: sY < eY,
+         annualCategories: months,
+         annualSeries: [{ data: annualData }],
+         plurianualCategories,
+         plurianualSeries: [{ data: plurianualData }]
       });
+      setShowFullVigency(false);
       setIsEvolutionModalOpen(true);
    };
 
@@ -1316,7 +1413,10 @@ const Goals: React.FC = () => {
                   <span className="text-sm text-gray-500 mr-2">Vigência:</span>
                   <select
                      value={vigencyYear}
-                     onChange={(e) => setVigencyYear(e.target.value)}
+                     onChange={(e) => {
+                        setGoals([]);
+                        setVigencyYear(e.target.value);
+                     }}
                      className="bg-transparent text-sm font-bold text-gray-900 dark:text-gray-100 outline-none cursor-pointer"
                   >
                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
@@ -1349,6 +1449,14 @@ const Goals: React.FC = () => {
             </div>
          </div>
 
+         {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-24 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mt-6">
+                <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Carregando série histórica de {vigencyYear}...</h3>
+                <p className="text-sm text-gray-500 mt-1">Isso levará apenas alguns segundos.</p>
+            </div>
+         ) : (
+            <>
          {/* Dashboard KPI */}
          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="p-6 bg-white dark:bg-gray-800 border-l-4 border-emerald-500">
@@ -1404,20 +1512,28 @@ const Goals: React.FC = () => {
          <div className="space-y-6">
             {groupedGoals.map((munGroup) => {
                return (
-                  <div key={munGroup.municipalityId} className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm animate-in fade-in duration-500">
+                  <div key={munGroup.groupKey} className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm animate-in fade-in duration-500">
                      {/* Header do Município (Collapsible) */}
                      <div
                         className="flex items-center justify-between p-5 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                      >
                         <div
                            className="flex items-center gap-3 flex-1 cursor-pointer"
-                           onClick={() => toggleCompetence(munGroup.municipalityId)}
+                           onClick={() => toggleCompetence(munGroup.groupKey)}
                         >
                            <div className="h-10 w-10 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg flex items-center justify-center">
                               <Building2 className="w-5 h-5" />
                            </div>
                            <div>
-                              <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize">{munGroup.municipalityName}</h2>
+                              <div className="flex flex-wrap items-center gap-2">
+                                 <h2 className="text-lg font-bold text-gray-900 dark:text-white capitalize leading-none">
+                                    {munGroup.municipalityName}
+                                 </h2>
+                                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/40 text-xs font-semibold shadow-sm">
+                                    <Calendar className="w-3 h-3 opacity-80" />
+                                    <span>{munGroup.startYear === munGroup.endYear ? munGroup.startYear : `${munGroup.startYear} - ${munGroup.endYear}`}</span>
+                                 </div>
+                              </div>
                               <p className="text-sm text-gray-500 dark:text-gray-400">
                                  {munGroup.totalGoals} metas pactuadas • {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(munGroup.totalValue)}
                               </p>
@@ -1496,16 +1612,16 @@ const Goals: React.FC = () => {
                            >
                               <Trash2 className="w-4 h-4 text-red-500" />
                            </Button>
-                           {expandedCompetences[munGroup.municipalityId]
-                              ? <ChevronDown className="w-5 h-5 text-gray-400 transform rotate-180 cursor-pointer" onClick={() => toggleCompetence(munGroup.municipalityId)} />
-                              : <ChevronDown className="w-5 h-5 text-gray-400 cursor-pointer" onClick={() => toggleCompetence(munGroup.municipalityId)} />
+                           {expandedCompetences[munGroup.groupKey]
+                              ? <ChevronDown className="w-5 h-5 text-gray-400 transform rotate-180 cursor-pointer" onClick={() => toggleCompetence(munGroup.groupKey)} />
+                              : <ChevronDown className="w-5 h-5 text-gray-400 cursor-pointer" onClick={() => toggleCompetence(munGroup.groupKey)} />
                            }
                         </div>
                      </div>
 
                      {/* Conteúdo Expansível do Município */}
                      <AnimatePresence>
-                        {expandedCompetences[munGroup.municipalityId] && (
+                        {expandedCompetences[munGroup.groupKey] && (
                            <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: 'auto', opacity: 1 }}
@@ -1968,41 +2084,58 @@ const Goals: React.FC = () => {
             isOpen={isEvolutionModalOpen}
             onClose={() => setIsEvolutionModalOpen(false)}
             title={evolutionData?.title || "Evolução da Produção"}
+            size={showFullVigency && evolutionData?.isPlurianual ? "4xl" : "2xl"}
          >
             {evolutionData && (
                <div className="space-y-6">
-                  <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex justify-between items-center">
+                  <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                      <div>
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white">{evolutionData.title}</h3>
                         <p className="text-sm text-gray-500">Produção acumulada mês a mês.</p>
                      </div>
-                     <div className="text-right">
-                        <p className="text-xs font-bold uppercase text-gray-500">Total Acumulado</p>
-                        <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                           {evolutionData.series[0].data.reduce((a, b) => a + b, 0).toLocaleString()}
-                        </p>
+                     <div className="flex items-center gap-4">
+                        {evolutionData.isPlurianual && (
+                           <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm hover:border-emerald-500 transition-colors">
+                              <input 
+                                 type="checkbox" 
+                                 className="rounded text-emerald-600 focus:ring-emerald-500"
+                                 checked={showFullVigency}
+                                 onChange={(e) => setShowFullVigency(e.target.checked)}
+                              />
+                              <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Resumo da Vigência Plurianual</span>
+                           </label>
+                        )}
+                        <div className="text-right">
+                           <p className="text-xs font-bold uppercase text-gray-500 cursor-default">Total Acumulado</p>
+                           <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                              {(showFullVigency ? evolutionData.plurianualSeries[0].data : evolutionData.annualSeries[0].data).reduce((a, b) => a + b, 0).toLocaleString()}
+                           </p>
+                        </div>
                      </div>
                   </div>
 
-                  <div className="h-64 flex items-end justify-between gap-2 px-2 border-b border-gray-200 dark:border-gray-600 pb-2">
-                     {evolutionData.series[0].data.map((value, index) => {
-                        const maxVal = Math.max(...evolutionData.series[0].data, 1);
-                        const heightPct = (value / maxVal) * 100;
+                  <div className="h-64 flex items-end justify-between gap-1 px-2 border-b border-gray-200 dark:border-gray-600 pb-2 overflow-x-auto">
+                     {(showFullVigency ? evolutionData.plurianualSeries[0].data : evolutionData.annualSeries[0].data).map((value, index) => {
+                        const targetData = showFullVigency ? evolutionData.plurianualSeries[0].data : evolutionData.annualSeries[0].data;
+                        const cats = showFullVigency ? evolutionData.plurianualCategories : evolutionData.annualCategories;
+                        const maxVal = Math.max(...targetData, 1);
+                        const heightPct = (value / maxVal) * 85;
                         return (
-                           <div key={index} className="flex flex-col items-center flex-1 h-full justify-end group">
+                           <div key={index} className="flex flex-col items-center flex-1 h-full justify-end group min-w-[30px]">
                               <div className="relative w-full flex-1 flex items-end justify-center">
-                                 <div className="relative w-full flex justify-center h-full items-end">
-                                    <span className="opacity-100 absolute bottom-full mb-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 transition-opacity whitespace-nowrap z-10">
-                                       {value > 0 ? value : ''}
-                                    </span>
+                                 <div className="relative w-full flex justify-center h-full items-end max-w-[40px]">
                                     <div
-                                       className="w-full mx-0.5 bg-indigo-500 rounded-t-sm hover:bg-indigo-600 transition-all cursor-crosshair relative"
+                                       className="w-full mx-0.5 bg-indigo-500 rounded-t-sm hover:bg-indigo-600 transition-all cursor-crosshair relative flex justify-center"
                                        style={{ height: `${Math.max(heightPct, 4)}%` }}
-                                    ></div>
+                                    >
+                                       <span className="absolute bottom-full mb-1 text-[10px] font-bold text-indigo-400 dark:text-indigo-300 z-10 scale-90 sm:scale-100 pb-1">
+                                          {value > 0 ? value.toLocaleString('pt-BR') : ''}
+                                       </span>
+                                    </div>
                                  </div>
                               </div>
-                              <span className="text-[10px] text-gray-500 dark:text-gray-400 mt-2 font-medium truncate w-full text-center">
-                                 {evolutionData.categories[index]}
+                              <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 mt-2 font-medium truncate w-full text-center">
+                                 {cats[index]}
                               </span>
                            </div>
                         );
@@ -2026,11 +2159,32 @@ const Goals: React.FC = () => {
             <div className="space-y-4">
                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg flex items-start gap-3">
                   <Info className="w-5 h-5 text-blue-600 mt-0.5" />
-                  <div>
+                  <div className="w-full">
                      <h4 className="text-sm font-bold text-blue-800 dark:text-blue-200">Edição em Lote</h4>
-                     <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
-                        Ajuste os quantitativos anuais e valores unitários das metas deste município. Clique em Salvar para aplicar todas as alterações.
+                     <p className="text-xs text-blue-600 dark:text-blue-300 mt-1 mb-3">
+                        Ajuste as datas de vigência da pactuação, os quantitativos anuais e valores unitários das metas deste município. Clique em Salvar para aplicar todas as alterações.
                      </p>
+                     
+                     <div className="flex gap-4 p-3 bg-white dark:bg-gray-800/50 rounded border border-blue-100 dark:border-blue-800/30">
+                        <div className="flex-1">
+                           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Início da Vigência</label>
+                           <input
+                              type="date"
+                              className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              value={bulkEditStartMonth}
+                              onChange={(e) => setBulkEditStartMonth(e.target.value)}
+                           />
+                        </div>
+                        <div className="flex-1">
+                           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Fim da Vigência</label>
+                           <input
+                              type="date"
+                              className="w-full text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                              value={bulkEditEndMonth}
+                              onChange={(e) => setBulkEditEndMonth(e.target.value)}
+                           />
+                        </div>
+                     </div>
                   </div>
                </div>
 
@@ -2157,6 +2311,8 @@ const Goals: React.FC = () => {
             onSelect={handleConfirmSigtap}
             competence={sigtapSourceCompetence}
          />
+            </>
+         )}
       </div >
    );
 };

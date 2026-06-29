@@ -70,7 +70,7 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
 
     try {
         if (action === 'create') {
-            const { email, name, cpf, phone, role, organizationId, organizationName } = userData;
+            const { email, name, cpf, phone, role, organizationId, organizationName, entityType } = userData;
 
             if (!email || !name || !role) { // Minimum required
                 throw new functions.https.HttpsError("invalid-argument", "Dados obrigatórios (email, nome, cargo) ausentes.");
@@ -91,6 +91,7 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 role: isCoordinationRole ? "COORDENAÇÃO" : ((role === "Coordenador Local" || role === "SUBSEDE") ? "SUBSEDE" : (role === "Administrador Geral" ? "ADMIN" : "USER")),
                 coordenation: isCoordinationRole ? true : undefined,
                 entityId: callerEntityId,
+                entityType: entityType || 'PRIVATE',
                 // Add specific organization ID if it's a SubSede/Municipality level user
                 municipalityId: organizationId !== 'matriz' ? organizationId : null
             };
@@ -108,6 +109,7 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 organizationName, // Denormalized for easier display
                 status: 'active',
                 entityId: callerEntityId,
+                entityType: entityType || 'PRIVATE',
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 createdBy: context.auth?.uid
             };
@@ -151,7 +153,7 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
             return { success: true, uid: userRecord.uid, password }; // Return password for initial sharing
 
         } else if (action === 'update') {
-            const { uid, name, cpf, phone, role, organizationId, organizationName } = userData;
+            const { uid, name, cpf, phone, role, organizationId, organizationName, entityType } = userData;
 
             // Verify target user logic (security check)
             const targetUserDoc = await db.collection("users").doc(uid).get();
@@ -175,24 +177,26 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 await auth.updateUser(uid, updateAuthData);
             }
 
-            // Update Claims if role/org changed
-            if (role || organizationId) {
+            // Update Claims if role/org/entityType changed
+            if (role || organizationId || entityType) {
                 const currentClaims = (await auth.getUser(uid)).customClaims || {};
                 const isCoordinationRole = role === "COORDENAÇÃO";
                 const newClaims = {
                     ...currentClaims,
                     role: isCoordinationRole ? "COORDENAÇÃO" : ((role === "Coordenador Local" || role === "SUBSEDE") ? "SUBSEDE" : (role === "Administrador Geral" ? "ADMIN" : "USER")),
                     coordenation: isCoordinationRole ? true : null, // Set to null to remove if demoted
+                    entityType: entityType || currentClaims.entityType || 'PRIVATE',
                     municipalityId: organizationId !== 'matriz' ? organizationId : null
                 };
                 await auth.setCustomUserClaims(uid, newClaims);
             }
 
             // Update Firestore
-            const updateData = {
+            const updateData: any = {
                 name, cpf, phone, role, organizationId, organizationName,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
             };
+            if (entityType) updateData.entityType = entityType;
 
             await db.collection("users").doc(uid).update(updateData);
 
@@ -223,7 +227,15 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 throw new functions.https.HttpsError("permission-denied", "Permissão insuficiente.");
             }
 
-            await auth.deleteUser(uid);
+            try {
+                await auth.deleteUser(uid);
+            } catch (error: any) {
+                if (error.code !== 'auth/user-not-found') {
+                    throw error;
+                }
+                console.warn(`Usuário ${uid} não encontrado no Auth. Prosseguindo com deleção no Firestore...`);
+            }
+
             await db.collection("users").doc(uid).delete();
 
             // Delete mirror if it existed

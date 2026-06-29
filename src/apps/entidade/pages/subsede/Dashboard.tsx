@@ -1,16 +1,39 @@
-import React from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Activity, Users, Map, TrendingUp, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Activity, Users, Map, TrendingUp, RefreshCw, Calendar } from 'lucide-react';
 import { StatCard, Card } from '../../components/ui/Components';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { CHART_COLORS_SUBSEDE } from '../../constants';
 import { useDashboardSubsedeData } from './useDashboardSubsedeData';
 
 const DashboardSubsede: React.FC = () => {
-    const { selectedCompetence } = useOutletContext<{ selectedCompetence: string }>();
-    const { production, professionals, units, goals, loading, syncing, syncData } = useDashboardSubsedeData(selectedCompetence);
+    const currentYear = new Date().getFullYear();
+    const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    const [selectedYear, setSelectedYear] = useState<string>(currentYear.toString());
+    const [selectedMonth, setSelectedMonth] = useState<string>('all');
+    const [selectedDay, setSelectedDay] = useState<string>('all');
 
-    // Need to define CHART_COLORS_SUBSEDE in constants, but we temporarily fallback
+    const getDaysInMonth = (year: string, month: string) => {
+        if (month === 'all') return [];
+        const days = new Date(parseInt(year), parseInt(month), 0).getDate();
+        return Array.from({ length: days }, (_, i) => String(i + 1));
+    };
+
+    // Reset day if month changes to 'all', or if day exceeds month length
+    useEffect(() => {
+        if (selectedMonth === 'all') {
+            setSelectedDay('all');
+        } else {
+            const daysInMonth = getDaysInMonth(selectedYear, selectedMonth);
+            if (selectedDay !== 'all' && !daysInMonth.includes(selectedDay)) {
+                setSelectedDay('all');
+            }
+        }
+    }, [selectedYear, selectedMonth]);
+
+    const { production, professionals, units, goals, loading, syncing, syncData } = useDashboardSubsedeData(selectedYear, selectedMonth, selectedDay);
     const colors = CHART_COLORS_SUBSEDE || { primary: '#ea580c', secondary: '#f97316' };
     const accentColorClass = 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400';
 
@@ -30,11 +53,11 @@ const DashboardSubsede: React.FC = () => {
             )}
 
             <div className={`space-y-6 transition-all duration-300 ${loading ? 'blur-sm opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                         Visão Geral - Coordenação Local
                     </h1>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <button
                             onClick={syncData}
                             disabled={syncing || loading}
@@ -44,26 +67,75 @@ const DashboardSubsede: React.FC = () => {
                             <RefreshCw className={`w-4 h-4 mr-2 ${(syncing) ? 'animate-spin' : ''}`} />
                             {syncing ? 'Sincronizando...' : 'Atualizar Dados'}
                         </button>
+                        
+                        <div className="flex flex-col sm:flex-row gap-2 mt-2 sm:mt-0">
+                            {/* Year Selector */}
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+                                <Calendar className="w-4 h-4 text-orange-600 dark:text-orange-500 mr-2 flex-shrink-0" />
+                                <select
+                                    value={selectedYear}
+                                    onChange={(e) => setSelectedYear(e.target.value)}
+                                    className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[70px]"
+                                >
+                                    <option value={currentYear.toString()}>Ano {currentYear}</option>
+                                    <option value={(currentYear - 1).toString()}>Ano {currentYear - 1}</option>
+                                    <option value={(currentYear - 2).toString()}>Ano {currentYear - 2}</option>
+                                </select>
+                            </div>
+
+                            {/* Month Selector */}
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+                                <select
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[100px]"
+                                >
+                                    <option value="all">Todos os Meses</option>
+                                    {monthNames.map((monthName, index) => (
+                                        <option key={index + 1} value={String(index + 1)}>{monthName}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Day Selector */}
+                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 flex items-center shadow-sm h-[38px] w-full sm:w-auto">
+                                <select
+                                    value={selectedDay}
+                                    onChange={(e) => setSelectedDay(e.target.value)}
+                                    disabled={selectedMonth === 'all'}
+                                    className="text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none focus:ring-0 p-0 py-0.5 cursor-pointer outline-none min-w-[60px] disabled:opacity-50"
+                                >
+                                    <option value="all">Dias</option>
+                                    {getDaysInMonth(selectedYear, selectedMonth).map((day) => (
+                                        <option key={day} value={day}>Dia {day}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard
-                        title="Produção Municipal"
+                        title="Produção Pactuada"
                         value={production.total.toLocaleString('pt-BR')}
                         icon={Activity}
-                        trend={`${production.trend}%`}
-                        trendUp={production.trendUp}
                         colorClass={accentColorClass}
-                        helpText="Soma total de todos os procedimentos realizados no município vigente."
+                        helpText="Soma total das metas pactuadas realizadas no município vigente."
+                    />
+                    <StatCard
+                        title="Produção Não Pactuada"
+                        value={(production.totalNonPactuated || 0).toLocaleString('pt-BR')}
+                        icon={Activity}
+                        trendSubtitle="Extra-teto"
+                        colorClass="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                        helpText="Soma total de procedimentos executados fora do teto físico (Extra-teto)."
                     />
                     <StatCard
                         title="Profissionais (Equipes)"
                         value={professionals.value.toLocaleString('pt-BR')}
                         icon={Users}
-                        trend={`${professionals.trend}%`}
-                        trendUp={professionals.trendUp}
                         colorClass="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
                         helpText="Total de profissionais ativos."
                     />
@@ -74,15 +146,6 @@ const DashboardSubsede: React.FC = () => {
                         trendUp={units?.trendUp ?? true}
                         colorClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
                         helpText="Quantidade de unidades de saúde (UBS/ESF) cadastradas."
-                    />
-                    <StatCard
-                        title="Metas Atingidas"
-                        value={goals.value}
-                        icon={TrendingUp}
-                        trend={`${goals.trend}%`}
-                        trendUp={goals.trendUp}
-                        colorClass="bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
-                        helpText="Percentual de metas atingidas."
                     />
                 </div>
 
@@ -99,6 +162,10 @@ const DashboardSubsede: React.FC = () => {
                                                 <stop offset="5%" stopColor={colors.primary} stopOpacity={0.3} />
                                                 <stop offset="95%" stopColor={colors.primary} stopOpacity={0} />
                                             </linearGradient>
+                                            <linearGradient id="colorProcsSubNonPact" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#9ca3af" stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor="#9ca3af" stopOpacity={0} />
+                                            </linearGradient>
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af' }} />
@@ -106,9 +173,10 @@ const DashboardSubsede: React.FC = () => {
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                                             itemStyle={{ color: '#fff' }}
-                                            formatter={(value: number) => [value.toLocaleString('pt-BR'), 'Procedimentos']}
+                                            formatter={(value: number, name: string) => [value.toLocaleString('pt-BR'), name === 'procedures' ? 'Pactuadas' : 'Não Pactuadas']}
                                         />
-                                        <Area type="monotone" dataKey="procedures" stroke={colors.primary} fillOpacity={1} fill="url(#colorProcsSub)" strokeWidth={3} />
+                                        <Area type="monotone" dataKey="nonPactuated" stackId="1" stroke="#9ca3af" fillOpacity={1} fill="url(#colorProcsSubNonPact)" strokeWidth={2} />
+                                        <Area type="monotone" dataKey="procedures" stackId="1" stroke={colors.primary} fillOpacity={1} fill="url(#colorProcsSub)" strokeWidth={3} />
                                     </AreaChart>
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">

@@ -18,7 +18,8 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
         '@root': path.resolve(__dirname, '../../'),
-      }
+      },
+      dedupe: ['react', 'react-dom', 'react-router-dom', 'lucide-react']
     },
     build: {
       rollupOptions: {

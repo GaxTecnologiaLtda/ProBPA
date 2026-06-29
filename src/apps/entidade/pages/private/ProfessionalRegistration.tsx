@@ -313,6 +313,16 @@ const ProfessionalRegistration: React.FC = () => {
                     id: customId,
                     updatedAt: serverTimestamp()
                 });
+
+                // --- NEW: Create Backup Mirror ---
+                const backupPath = `municipalities/${pathType}/${entityId}/${municipalityId}/registration_backups/${customId}`;
+                await firebaseSetDoc(doc(db, backupPath), {
+                    ...newProf,
+                    id: customId,
+                    isBackup: true,
+                    backupCreatedAt: serverTimestamp()
+                });
+                // --------------------------------
             } catch (syncErr) {
                 console.warn("Sync failed", syncErr);
             }

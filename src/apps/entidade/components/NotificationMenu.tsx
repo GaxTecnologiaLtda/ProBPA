@@ -123,7 +123,7 @@ const NotificationMenu: React.FC = () => {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute right-0 mt-2 w-80 md:w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 origin-top-right flex flex-col max-h-[calc(100vh-100px)]"
+                        className="fixed sm:absolute left-4 right-4 sm:left-auto sm:-right-2 top-[72px] sm:top-auto sm:mt-2 sm:w-80 md:w-96 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 origin-top sm:origin-top-right flex flex-col max-h-[calc(100vh-100px)]"
                     >
                         <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 shrink-0">
                             <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Notificações</h3>

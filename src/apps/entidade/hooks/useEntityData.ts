@@ -17,6 +17,7 @@ interface EntityData {
     phone?: string;
     responsible?: string;
     status?: string;
+    allowedTabs?: string[];
 }
 
 export function useEntityData(entityId: string | undefined) {

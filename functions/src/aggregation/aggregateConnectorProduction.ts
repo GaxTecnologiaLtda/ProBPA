@@ -75,7 +75,7 @@ export const runConnectorAggregation = async (
     let globalTotalProcessed = 0;
     let globalSummariesCreated = 0;
 
-    for (const compId of competencesToProcess) {
+    const processMonthPromises = competencesToProcess.map(async (compId) => {
         console.log(`[ConnectorAggregation] Processing Competence: ${compId}`);
         const competenceDocRef = competencesRef.doc(compId);
         const recordsRef = competenceDocRef.collection("extraction_records");
@@ -91,10 +91,53 @@ export const runConnectorAggregation = async (
             processedInThisComp++;
 
             // Duplicate filter
-            const rawCode = String(data.procedureCode || data.procedure?.code || '').toUpperCase();
-            const rawName = String(data.procedureName || data.procedure?.name || '').toUpperCase();
+            let rawCode = String(data.procedureCode || data.procedure?.code || '').toUpperCase();
+            let rawName = String(data.procedureName || data.procedure?.name || '').toUpperCase();
 
-            if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+            // Resgate heroico do SIGTAP pelo ID do documento (para Atividades Coletivas e Visitas que vêm sem procedureCode)
+            if (!rawCode || rawCode === '-' || rawCode === 'NULL') {
+                const parts = doc.id.split('_');
+                const suffix = parts[parts.length - 1];
+                if (suffix && suffix.length === 10 && !isNaN(Number(suffix))) {
+                    rawCode = suffix;
+                }
+            }
+
+            const pDataFallback = data.professional || {};
+            const pCbo = String(pDataFallback.cbo || '').trim();
+
+            if (pCbo === '251605' && rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                rawCode = '0301010030';
+                rawName = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
+                data.procedureCode = rawCode;
+                data.procedureName = rawName;
+                if (data.procedure) {
+                    data.procedure.code = rawCode;
+                    data.procedure.name = rawName;
+                }
+            } else if (rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
+                continue;
+            }
+
+            // Glosa: Procedimento inválido
+            if (!rawCode || rawCode === '-' || rawCode === 'NULL' || rawName.includes('NÃO ENCONTRADO')) {
+                continue;
+            }
+
+            const isCollective = String(data.recordType).toUpperCase().includes('COLETIVA') ||
+                rawName.includes('COLETIVA') ||
+                rawCode.startsWith('0101');
+            const isDomiciliar = String(data.recordType).toUpperCase().includes('DOMICILIAR') ||
+                rawName.includes('DOMICILIAR') ||
+                rawCode === '0301010137';
+
+            const hasPatientId = !!(data.patient?.cns || data.patient?.cpf);
+
+            // Glosa: Paciente não identificado
+            const pNameStr = String(data.patient?.name || data.patientName || '').trim().toUpperCase();
+            const hasPatientName = pNameStr && pNameStr !== 'NÃO IDENTIFICADO' && pNameStr !== 'NULL' && pNameStr !== '-';
+
+            if ((!hasPatientId || !hasPatientName) && !isCollective && !isDomiciliar) {
                 continue;
             }
 
@@ -137,7 +180,16 @@ export const runConnectorAggregation = async (
 
             // Resolve Unit
             const recCnesRaw = String(data.unit?.cnes || '');
-            const recCnes = recCnesRaw.trim();
+            let recCnes = recCnesRaw.trim();
+
+            const extId = String(data.externalId || '');
+            if (!recCnes && extId && !extId.startsWith('_-_') && !extId.startsWith('null-')) {
+                const possibleCnes = extId.split('-')[0];
+                if (possibleCnes && possibleCnes.length === 7 && !isNaN(Number(possibleCnes))) {
+                    recCnes = possibleCnes;
+                }
+            }
+
             const unitMatch = cnesMap.get(recCnes);
 
             if (recCnes.includes('2636247') || recCnesRaw.includes('2636247')) {
@@ -182,7 +234,7 @@ export const runConnectorAggregation = async (
 
         if (processedInThisComp === 0) {
             console.log(`[ConnectorAggregation] No records found in ${compId}.`);
-            continue;
+            return;
         }
 
         globalTotalProcessed += processedInThisComp;
@@ -228,7 +280,9 @@ export const runConnectorAggregation = async (
         }
 
         console.log(`[ConnectorAggregation] Finished ${compId}.`);
-    }
+    });
+
+    await Promise.all(processMonthPromises);
 
     const finalResult = { success: true, recordsProcessed: globalTotalProcessed, summariesCreated: globalSummariesCreated };
 
@@ -249,7 +303,7 @@ export const aggregateConnectorProduction = onRequest(
     {
         region: "southamerica-east1",
         timeoutSeconds: 540,
-        memory: "1GiB",
+        memory: "4GiB",
         cors: true,
     },
     async (req, res) => {
@@ -278,7 +332,7 @@ export const aggregateConnectorProduction = onRequest(
  * Scheduled job for Connector Aggregation
  * Runs daily at 10:00 UTC-3 (BRT)
  */
-export const scheduledConnectorAggregation = functions.pubsub.schedule('0 10 * * *')
+export const scheduledConnectorAggregation = functions.runWith({ memory: "2GB", timeoutSeconds: 540 }).pubsub.schedule('0 10 * * *')
     .timeZone('America/Sao_Paulo')
     .onRun(async (context) => {
         const db = admin.firestore();
@@ -291,8 +345,8 @@ export const scheduledConnectorAggregation = functions.pubsub.schedule('0 10 * *
         // Scan ALL municipalities dynamically by looking for 'extractions' collections
         const extractionsSnap = await db.collectionGroup('extractions').get();
 
-        for (const doc of extractionsSnap.docs) {
-            if (doc.id !== currentYear) continue; // Only process current year's extractions
+        const scheduledPromises = extractionsSnap.docs.map(async (doc) => {
+            if (doc.id !== currentYear) return; // Only process current year's extractions
 
             const pathSegments = doc.ref.path.split('/');
             // Expecting: municipalities / TYPE / ENT_ID / MUN_ID / extractions / YEAR
@@ -314,7 +368,9 @@ export const scheduledConnectorAggregation = functions.pubsub.schedule('0 10 * *
                     });
                 }
             }
-        }
+        });
+
+        await Promise.allSettled(scheduledPromises);
 
         console.log(`[ScheduledConnector] Daily run completed.`);
         await logSystemEvent(LogLevel.INFO, 'Scheduled Connector Aggregation Job Completed', { year: currentYear });

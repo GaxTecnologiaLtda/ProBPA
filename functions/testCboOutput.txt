@@ -1,0 +1,36 @@
+Error: 7 PERMISSION_DENIED: This API method requires billing to be enabled. Please enable billing on project pwplay-app-dc063 by visiting https://console.developers.google.com/billing/enable?project=pwplay-app-dc063 then retry. If you enabled billing for this project recently, wait a few minutes for the action to propagate to our systems and retry.
+    at callErrorFromStatus (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@grpc/grpc-js/src/call.ts:84:17)
+    at Object.onReceiveStatus (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@grpc/grpc-js/src/client.ts:612:51)
+    at Object.onReceiveStatus (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@grpc/grpc-js/src/client-interceptors.ts:424:48)
+    at /Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@grpc/grpc-js/src/resolving-call.ts:170:24
+    at processTicksAndRejections (node:internal/process/task_queues:85:11)
+for call at
+    at ServiceClientImpl.makeServerStreamRequest (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@grpc/grpc-js/src/client.ts:595:42)
+    at ServiceClientImpl.<anonymous> (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@grpc/grpc-js/src/make-client.ts:189:15)
+    at /Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/v1/firestore_client.js:242:33
+    at /Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/google-gax/src/streamingCalls/streamingApiCaller.ts:59:19
+    at /Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/google-gax/src/normalCalls/timeout.ts:54:13
+    at Object.request (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/google-gax/src/streamingCalls/streaming.ts:331:28)
+    at makeRequest (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/retry-request/index.js:159:28)
+    at retryRequest (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/retry-request/index.js:119:5)
+    at StreamProxy.setStream (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/google-gax/src/streamingCalls/streaming.ts:322:29)
+    at StreamingApiCaller.call (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/google-gax/src/streamingCalls/streamingApiCaller.ts:89:12)
+Caused by: Error
+    at QueryUtil._getResponse (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/reference/query-util.js:44:23)
+    at Query._getResponse (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/reference/query.js:784:32)
+    at Query._get (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/reference/query.js:777:35)
+    at /Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/reference/query.js:745:43
+    at /Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:110:30
+    at NoopContextManager.with (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@opentelemetry/api/src/context/NoopContextManager.ts:31:15)
+    at ContextAPI.with (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@opentelemetry/api/src/api/context.ts:77:42)
+    at NoopTracer.startActiveSpan (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@opentelemetry/api/src/trace/NoopTracer.ts:98:27)
+    at ProxyTracer.startActiveSpan (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@opentelemetry/api/src/trace/ProxyTracer.ts:51:20)
+    at EnabledTraceUtil.startActiveSpan (/Users/gabriel/GAX TECNOLOGIA/SYSTEMS/ProBPA/functions/node_modules/@google-cloud/firestore/build/src/telemetry/enabled-trace-util.js:102:28) {
+  code: 7,
+  details: 'This API method requires billing to be enabled. Please enable billing on project pwplay-app-dc063 by visiting https://console.developers.google.com/billing/enable?project=pwplay-app-dc063 then retry. If you enabled billing for this project recently, wait a few minutes for the action to propagate to our systems and retry.',
+  metadata: Metadata {
+    internalRepr: Map(1) { 'x-debug-tracking-id' => [Array] },
+    opaqueData: Map(0) {},
+    options: {}
+  }
+}

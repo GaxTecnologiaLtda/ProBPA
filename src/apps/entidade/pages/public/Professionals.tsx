@@ -361,8 +361,8 @@ const Professionals: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge type="neutral" className="hidden md:inline-flex">
-                    {munGroup.units.reduce((acc, u) => acc + u.professionals.length, 0)} Profissionais
+                  <Badge type="neutral" className="hidden sm:flex">
+                    {new Set(munGroup.units.flatMap(u => u.professionals.map(p => p.id))).size} Profissionais
                   </Badge>
                   <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                     {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" />}

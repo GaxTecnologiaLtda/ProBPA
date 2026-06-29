@@ -21,7 +21,9 @@ export interface RecentActivity {
 export interface FinancialStats {
     totalAnnualContracts: number;
     totalReceived: number;
+    currentMonthReceived: number;
     totalPending: number;
+    currentMonthExpected: number;
     totalOverdue: number;
 }
 
@@ -133,10 +135,14 @@ export const getFinancialOverview = async (): Promise<FinancialStats> => {
         const installmentsSnap = await getDocs(installmentsQuery);
 
         let totalReceived = 0;
+        let currentMonthReceived = 0;
         let totalPending = 0;
+        let currentMonthExpected = 0;
         let totalOverdue = 0;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
 
         installmentsSnap.forEach(doc => {
             // Check if installment belongs to an ACTIVE license
@@ -147,6 +153,17 @@ export const getFinancialOverview = async (): Promise<FinancialStats> => {
                 const data = doc.data();
                 const amount = Number(data.amount) || 0;
                 const dueDateStr = data.dueDate; // YYYY-MM-DD
+
+                if (dueDateStr) {
+                    const [y, m, d] = dueDateStr.split('-').map(Number);
+                    // Check if installment belongs to current month
+                    if (y === currentYear && m - 1 === currentMonth) {
+                        currentMonthExpected += amount;
+                        if (data.paid) {
+                            currentMonthReceived += amount;
+                        }
+                    }
+                }
 
                 if (data.paid) {
                     totalReceived += amount;
@@ -168,13 +185,15 @@ export const getFinancialOverview = async (): Promise<FinancialStats> => {
         return {
             totalAnnualContracts,
             totalReceived,
+            currentMonthReceived,
             totalPending,
+            currentMonthExpected,
             totalOverdue
         };
 
     } catch (error) {
         console.error("Error fetching financial stats:", error);
-        return { totalAnnualContracts: 0, totalReceived: 0, totalPending: 0, totalOverdue: 0 };
+        return { totalAnnualContracts: 0, totalReceived: 0, currentMonthReceived: 0, totalPending: 0, currentMonthExpected: 0, totalOverdue: 0 };
     }
 };
 
