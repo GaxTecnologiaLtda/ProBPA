@@ -210,12 +210,28 @@ const SubsedeRegisterProduction: React.FC = () => {
     const [isProfSearchOpen, setIsProfSearchOpen] = useState(false);
     const [profSearchTerm, setProfSearchTerm] = useState('');
     const profSearchRef = useRef<HTMLDivElement>(null);
+
+    // Custom Searchable Select State for Form Unit
+    const [isFormUnitSearchOpen, setIsFormUnitSearchOpen] = useState(false);
+    const [formUnitSearchTerm, setFormUnitSearchTerm] = useState('');
+    const formUnitSearchRef = useRef<HTMLDivElement>(null);
+
+    // Custom Searchable Select State for Form Professional
+    const [isFormProfSearchOpen, setIsFormProfSearchOpen] = useState(false);
+    const [formProfSearchTerm, setFormProfSearchTerm] = useState('');
+    const formProfSearchRef = useRef<HTMLDivElement>(null);
     
     // Auto-close on outside click
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (profSearchRef.current && !profSearchRef.current.contains(event.target as Node)) {
                 setIsProfSearchOpen(false);
+            }
+            if (formUnitSearchRef.current && !formUnitSearchRef.current.contains(event.target as Node)) {
+                setIsFormUnitSearchOpen(false);
+            }
+            if (formProfSearchRef.current && !formProfSearchRef.current.contains(event.target as Node)) {
+                setIsFormProfSearchOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -1067,7 +1083,7 @@ const SubsedeRegisterProduction: React.FC = () => {
                 let type: 'cns' | 'cpf' | 'name' | null = null;
 
                 // Prioritize CNS search if active
-                if (termCns.length >= 3) {
+                if (termCns.length >= 3 && !patientFound) {
                     type = 'cns';
                     // Prefix search: cns >= term && cns <= term + '\uf8ff'
                     q = query(
@@ -1076,7 +1092,7 @@ const SubsedeRegisterProduction: React.FC = () => {
                         where('cns', '<=', termCns + '\uf8ff'),
                         limit(5)
                     );
-                } else if (termCpf.length >= 3) {
+                } else if (termCpf.length >= 3 && !patientFound) {
                     type = 'cpf';
                     q = query(
                         patientsRef,
@@ -1084,7 +1100,7 @@ const SubsedeRegisterProduction: React.FC = () => {
                         where('cpf', '<=', termCpf + '\uf8ff'),
                         limit(5)
                     );
-                } else if (termName.length >= 3) {
+                } else if (termName.length >= 3 && !patientFound) {
                     type = 'name';
                     q = query(
                         patientsRef,
@@ -1480,10 +1496,6 @@ const SubsedeRegisterProduction: React.FC = () => {
                 setError('É obrigatório informar o Nome do paciente.');
                 return;
             }
-            if (!patientFound && !formData.patientDob) {
-                setError('Para novos pacientes, é obrigatório informar a Data de Nascimento/Idade do paciente.');
-                return;
-            }
             if (cleanCns.length > 0 && cleanCns.length !== 15) {
                 setError('CNS Inválido. O cartão SUS deve conter exatamente 15 números.');
                 return;
@@ -1496,10 +1508,6 @@ const SubsedeRegisterProduction: React.FC = () => {
             // Original Legacy validation
             if (!cleanCns && !cleanCpf && !formData.patientName) {
                 setError('Informe ao menos o CNS, CPF ou Nome do paciente');
-                return;
-            }
-            if (!patientFound && !formData.patientDob) {
-                setError('Para novos pacientes, é obrigatório informar a Data de Nascimento do paciente.');
                 return;
             }
         }
@@ -2106,7 +2114,7 @@ const SubsedeRegisterProduction: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
 
                 {/* CONTENT FORM */}
-                <Card className="p-5 border-l-4 border-l-medical-500">
+                <Card className="p-5 border-l-4 border-l-medical-500 overflow-visible">
                     <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                         <FileText size={20} className="text-medical-500" />
                         Identificação do Estabelecimento
@@ -2168,65 +2176,190 @@ const SubsedeRegisterProduction: React.FC = () => {
                                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-1">
                                         {formData.localAtendimento === '1' ? "Unidade de Realização (CNES) *" : "Unidade de Vínculo/Referência *"}
                                     </label>
-                                    <select
-                                        required
-                                        value={selectedUnitId}
-                                        onChange={(e) => {
-                                            setSelectedUnitId(e.target.value);
-                                            setSelectedProfessionalId(''); // Reset professional when unit changes
-                                        }}
-                                        className="flex h-12 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500 disabled:opacity-50 dark:text-gray-100"
-                                    >
-                                        <option value="" disabled>Selecione uma Unidade...</option>
-                                        {units.map(u => (
-                                            <option key={u.id} value={u.id}>{u.name}</option>
-                                        ))}
-                                    </select>
+                                    <div className="relative" ref={formUnitSearchRef}>
+                                        <div 
+                                            onClick={() => setIsFormUnitSearchOpen(!isFormUnitSearchOpen)}
+                                            className={cn(
+                                                "flex h-12 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm shadow-sm cursor-pointer focus-within:ring-2 focus-within:ring-medical-500 items-center justify-between group transition-colors",
+                                                !selectedUnitId && "text-gray-500 dark:text-gray-400"
+                                            )}
+                                        >
+                                            <div className="flex-1 truncate">
+                                                {selectedUnitId 
+                                                    ? <span className="text-gray-900 dark:text-white font-medium">{units.find(u => u.id === selectedUnitId)?.name}</span> 
+                                                    : <span>Selecione uma Unidade...</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                {selectedUnitId && (
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedUnitId(''); setSelectedProfessionalId(''); }}
+                                                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
+                                                <Search size={16} className="text-gray-400 group-hover:text-medical-500 transition-colors ml-1" />
+                                            </div>
+                                        </div>
+                                        
+                                        <AnimatePresence>
+                                            {isFormUnitSearchOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: -10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: -10 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className="absolute z-50 mt-2 w-full bg-white dark:bg-gray-800 shadow-xl rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden"
+                                                >
+                                                    <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+                                                        <div className="relative">
+                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                                            <input 
+                                                                autoFocus
+                                                                type="text" 
+                                                                placeholder="Buscar unidade por nome..." 
+                                                                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-transparent focus:border-medical-500 focus:bg-white dark:focus:bg-gray-800 rounded-lg outline-none transition-all dark:text-white"
+                                                                value={formUnitSearchTerm}
+                                                                onChange={(e) => setFormUnitSearchTerm(e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="max-h-60 overflow-y-auto p-1 custom-scrollbar">
+                                                        {units.filter(u => u.name.toLowerCase().includes(formUnitSearchTerm.toLowerCase())).length === 0 ? (
+                                                            <div className="px-3 py-4 text-center text-sm text-gray-500">Nenhuma unidade encontrada</div>
+                                                        ) : (
+                                                            units.filter(u => u.name.toLowerCase().includes(formUnitSearchTerm.toLowerCase())).map(u => (
+                                                                <button
+                                                                    key={u.id}
+                                                                    type="button"
+                                                                    onClick={() => { setSelectedUnitId(u.id); setSelectedProfessionalId(''); setIsFormUnitSearchOpen(false); setFormUnitSearchTerm(''); }}
+                                                                    className={cn(
+                                                                        "w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-between group",
+                                                                        selectedUnitId === u.id ? "bg-medical-50 text-medical-700 font-medium dark:bg-medical-900/30 dark:text-medical-400" : "hover:bg-gray-50 text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                                                                    )}
+                                                                >
+                                                                    <span>{u.name}</span>
+                                                                    {selectedUnitId === u.id && <CheckCircle size={16} className="text-medical-500" />}
+                                                                </button>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                 </div>
 
                                 <div className="flex flex-col gap-1">
                                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-1">
                                         Profissional Realizante *
                                     </label>
-                                    <select
-                                        required
-                                        disabled={!selectedUnitId}
-                                        value={selectedProfessionalId}
-                                        onChange={(e) => setSelectedProfessionalId(e.target.value)}
-                                        className="flex h-12 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-medical-500 disabled:opacity-50 dark:text-gray-100"
-                                    >
-                                        <option value="" disabled>
-                                            {!selectedUnitId ? "Selecione a Unidade primeiro..." : "Selecione um Profissional..."}
-                                        </option>
-                                        {professionals
-                                            // Filter professionals that actually have an assignment in the selected unit
-                                            .filter(p => !selectedUnitId || p.assignments?.some(a => a.unitId === selectedUnitId))
-                                            .flatMap(p => {
-                                                const relevantAssignments = (p.assignments || [])
-                                                    .map((a, idx) => ({ a, idx }))
-                                                    .filter(item => item.a.unitId === selectedUnitId);
+                                    <div className="relative" ref={formProfSearchRef}>
+                                        <div 
+                                            onClick={() => { if (selectedUnitId) setIsFormProfSearchOpen(!isFormProfSearchOpen); }}
+                                            className={cn(
+                                                "flex h-12 w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm shadow-sm items-center justify-between transition-colors",
+                                                !selectedUnitId ? "cursor-not-allowed opacity-50" : "cursor-pointer focus-within:ring-2 focus-within:ring-medical-500 group",
+                                                !selectedProfessionalId && "text-gray-500 dark:text-gray-400"
+                                            )}
+                                        >
+                                            <div className="flex-1 truncate">
+                                                {selectedProfessionalId 
+                                                    ? <span className="text-gray-900 dark:text-white font-medium">
+                                                        {(() => {
+                                                            const [pId, pIdx] = selectedProfessionalId.split('|');
+                                                            const p = professionals.find(prof => prof.id === pId);
+                                                            const a = p?.assignments?.[Number(pIdx)];
+                                                            return p && a ? `${p.name} - ${a.cbo || a.occupation || p.cbo || p.occupation || 'Sem CBO configurado'}` : p?.name ? `${p.name}` : '';
+                                                        })()}
+                                                      </span> 
+                                                    : <span>{!selectedUnitId ? "Selecione a Unidade primeiro..." : "Selecione um Profissional..."}</span>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                {selectedProfessionalId && selectedUnitId && (
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedProfessionalId(''); }}
+                                                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
+                                                <Search size={16} className={cn("transition-colors ml-1", selectedUnitId ? "text-gray-400 group-hover:text-medical-500" : "text-gray-300")} />
+                                            </div>
+                                        </div>
+                                        
+                                        <AnimatePresence>
+                                            {isFormProfSearchOpen && selectedUnitId && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: -10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: -10 }}
+                                                    transition={{ duration: 0.15 }}
+                                                    className="absolute z-50 mt-2 w-full bg-white dark:bg-gray-800 shadow-xl rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden"
+                                                >
+                                                    <div className="p-2 border-b border-gray-100 dark:border-gray-700">
+                                                        <div className="relative">
+                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                                            <input 
+                                                                autoFocus
+                                                                type="text" 
+                                                                placeholder="Buscar profissional por nome..." 
+                                                                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-transparent focus:border-medical-500 focus:bg-white dark:focus:bg-gray-800 rounded-lg outline-none transition-all dark:text-white"
+                                                                value={formProfSearchTerm}
+                                                                onChange={(e) => setFormProfSearchTerm(e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className="max-h-60 overflow-y-auto p-1 custom-scrollbar">
+                                                        {(() => {
+                                                            const filteredOptions = professionals
+                                                                .filter(p => p.assignments?.some(a => a.unitId === selectedUnitId))
+                                                                .filter(p => p.name.toLowerCase().includes(formProfSearchTerm.toLowerCase()))
+                                                                .flatMap(p => {
+                                                                    const relevantAssignments = (p.assignments || [])
+                                                                        .map((a, idx) => ({ a, idx }))
+                                                                        .filter(item => item.a.unitId === selectedUnitId);
 
-                                                if (relevantAssignments.length === 0) {
-                                                    // Fallback for cases where filter passed but no explicit assignment for unit is found
-                                                    const activeCbo = p.cbo || p.occupation || 'Sem CBO configurado';
-                                                    return [{
-                                                        value: p.id,
-                                                        label: `${p.name} - ${activeCbo}`
-                                                    }];
-                                                }
+                                                                    if (relevantAssignments.length === 0) {
+                                                                        const activeCbo = p.cbo || p.occupation || 'Sem CBO configurado';
+                                                                        return [{
+                                                                            id: `${p.id}|0`,
+                                                                            label: `${p.name} - ${activeCbo}`
+                                                                        }];
+                                                                    }
 
-                                                return relevantAssignments.map(item => ({
-                                                    value: `${p.id}|${item.idx}`,
-                                                    label: `${p.name} - ${item.a.cbo || item.a.occupation || 'Sem CBO configurado'}`
-                                                }));
-                                            })
-                                            .map(opt => (
-                                                <option key={opt.value} value={opt.value}>
-                                                    {opt.label}
-                                                </option>
-                                            ))
-                                        }
-                                    </select>
+                                                                    return relevantAssignments.map(({ a, idx }) => ({
+                                                                        id: `${p.id}|${idx}`,
+                                                                        label: `${p.name} - ${a.cbo || a.occupation || p.cbo || p.occupation || 'Sem CBO configurado'}`
+                                                                    }));
+                                                                });
+
+                                                            if (filteredOptions.length === 0) {
+                                                                return <div className="px-3 py-4 text-center text-sm text-gray-500">Nenhum profissional encontrado</div>;
+                                                            }
+
+                                                            return filteredOptions.map(opt => (
+                                                                <button
+                                                                    key={opt.id}
+                                                                    type="button"
+                                                                    onClick={() => { setSelectedProfessionalId(opt.id); setIsFormProfSearchOpen(false); setFormProfSearchTerm(''); }}
+                                                                    className={cn(
+                                                                        "w-full text-left px-3 py-2.5 text-sm rounded-lg transition-colors flex items-center justify-between group",
+                                                                        selectedProfessionalId === opt.id ? "bg-medical-50 text-medical-700 font-medium dark:bg-medical-900/30 dark:text-medical-400" : "hover:bg-gray-50 text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                                                                    )}
+                                                                >
+                                                                    <span>{opt.label}</span>
+                                                                    {selectedProfessionalId === opt.id && <CheckCircle size={16} className="text-medical-500" />}
+                                                                </button>
+                                                            ));
+                                                        })()}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                 </div>
                             </div>
                         </Card>
@@ -2394,8 +2527,11 @@ const SubsedeRegisterProduction: React.FC = () => {
                                                 placeholder="000 0000 0000 0000"
                                                 value={formData.patientCns}
                                                 onChange={e => {
-                                                    setFormData({ ...formData, patientCns: e.target.value });
-                                                    if (e.target.value === '') {
+                                                    let v = e.target.value.replace(/\D/g, '').slice(0, 15);
+                                                    v = v.replace(/^(\d{3})(\d)/, '$1 $2').replace(/^(\d{3})\s(\d{4})(\d)/, '$1 $2 $3').replace(/^(\d{3})\s(\d{4})\s(\d{4})(\d)/, '$1 $2 $3 $4');
+                                                    setFormData({ ...formData, patientCns: v });
+                                                    setPatientFound(false);
+                                                    if (v === '') {
                                                         setPatientSuggestions([]);
                                                         setShowPatientSuggestions(null);
                                                     }
@@ -2422,8 +2558,11 @@ const SubsedeRegisterProduction: React.FC = () => {
                                                 placeholder="000.000.000-00"
                                                 value={formData.patientCpf}
                                                 onChange={e => {
-                                                    setFormData({ ...formData, patientCpf: e.target.value });
-                                                    if (e.target.value === '') {
+                                                    let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+                                                    v = v.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+                                                    setFormData({ ...formData, patientCpf: v });
+                                                    setPatientFound(false);
+                                                    if (v === '') {
                                                         setPatientSuggestions([]);
                                                         setShowPatientSuggestions(null);
                                                     }
@@ -2451,6 +2590,7 @@ const SubsedeRegisterProduction: React.FC = () => {
                                                 value={formData.patientName}
                                                 onChange={e => {
                                                     setFormData({ ...formData, patientName: e.target.value.toUpperCase() });
+                                                    setPatientFound(false);
                                                     if (e.target.value === '') {
                                                         setPatientSuggestions([]);
                                                         setShowPatientSuggestions(null);
@@ -2800,8 +2940,20 @@ const SubsedeRegisterProduction: React.FC = () => {
                         }
 
                         {/* Botão de Ação */}
-                        <div className="pb-4">
-                            <Button type="submit" className="w-full h-14 text-lg bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-600/20 border-none" isLoading={loading}>
+                        <div className="pb-4 relative group">
+                            {(activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL') && procedures.filter(p => !!p.procedureCode).length === 0 && (
+                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-max max-w-[90vw] text-center bg-gray-900 dark:bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex items-center gap-1.5 shadow-lg border border-gray-700">
+                                    <AlertCircle size={14} className="text-red-400" />
+                                    <span>Adicione procedimentos à lista para habilitar o registro.</span>
+                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 dark:bg-gray-800 rotate-45 border-r border-b border-gray-700"></div>
+                                </div>
+                            )}
+                            <Button 
+                                type="submit" 
+                                className="w-full h-14 text-lg bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-600/20 border-none disabled:bg-gray-400 disabled:text-gray-200 disabled:shadow-none" 
+                                isLoading={loading}
+                                disabled={activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL' ? procedures.filter(p => !!p.procedureCode).length === 0 : false}
+                            >
                                 {(() => {
                                     const suffix = isLediTarget ? '(e-SUS/PEC)' : '(BPA)';
                                     switch (activeFicha) {

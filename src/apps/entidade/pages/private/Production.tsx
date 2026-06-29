@@ -1546,7 +1546,7 @@ const Production: React.FC = () => {
                </div>
             );
 
-         case 'financeiro': // Evolução Financeira
+         case 'financeiro_legacy': // Evolução Financeira
             return (
                <div className="space-y-6">
                   <div className="h-80 w-full">

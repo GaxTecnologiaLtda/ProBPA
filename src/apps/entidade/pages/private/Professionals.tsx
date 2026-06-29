@@ -1190,32 +1190,70 @@ const Professionals: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Select
-                  label="Município"
-                  value={newAssignment.municipalityId || ''}
-                  onChange={e => setNewAssignment({ ...newAssignment, municipalityId: e.target.value, unitId: '' })}
-                  className="md:col-span-2"
-                >
-                  <option value="">Selecione o Município...</option>
-                  {municipalities.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </Select>
-
-                <Select
-                  label="Unidade de Saúde"
-                  value={newAssignment.unitId || ''}
-                  onChange={e => setNewAssignment({ ...newAssignment, unitId: e.target.value })}
-                  className="md:col-span-2"
-                  disabled={!newAssignment.municipalityId}
-                >
-                  <option value="">{newAssignment.municipalityId ? 'Selecione a Unidade...' : 'Selecione um município primeiro'}</option>
-                  {units
-                    .filter(u => !newAssignment.municipalityId || u.municipalityId === newAssignment.municipalityId)
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name} (CNES: {u.cnes})</option>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Município
+                  </label>
+                  <input
+                    list="municipality-list"
+                    value={
+                      municipalities.find(m => m.id === newAssignment.municipalityId)
+                        ? municipalities.find(m => m.id === newAssignment.municipalityId)?.name
+                        : (newAssignment.municipalityName || '')
+                    }
+                    onChange={e => {
+                      const val = e.target.value;
+                      const matched = municipalities.find(m => m.name === val);
+                      setNewAssignment({
+                        ...newAssignment,
+                        municipalityName: val,
+                        municipalityId: matched ? matched.id : '',
+                        unitId: '',
+                        unitName: ''
+                      });
+                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all"
+                    placeholder="Selecione o Município..."
+                  />
+                  <datalist id="municipality-list">
+                    {municipalities.map(m => (
+                      <option key={m.id} value={m.name} />
                     ))}
-                </Select>
+                  </datalist>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Unidade de Saúde
+                  </label>
+                  <input
+                    list="unit-list"
+                    value={
+                      units.find(u => u.id === newAssignment.unitId)
+                        ? `${units.find(u => u.id === newAssignment.unitId)?.name} (CNES: ${units.find(u => u.id === newAssignment.unitId)?.cnes})`
+                        : (newAssignment.unitName || '')
+                    }
+                    onChange={e => {
+                      const val = e.target.value;
+                      const matched = units.find(u => `${u.name} (CNES: ${u.cnes})` === val || u.name === val);
+                      setNewAssignment({
+                        ...newAssignment,
+                        unitName: val,
+                        unitId: matched ? matched.id : ''
+                      });
+                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all disabled:opacity-50"
+                    placeholder={newAssignment.municipalityId ? 'Selecione a Unidade...' : 'Selecione um município primeiro'}
+                    disabled={!newAssignment.municipalityId}
+                  />
+                  <datalist id="unit-list">
+                    {units
+                      .filter(u => !newAssignment.municipalityId || u.municipalityId === newAssignment.municipalityId)
+                      .map(u => (
+                        <option key={u.id} value={`${u.name} (CNES: ${u.cnes})`} />
+                      ))}
+                  </datalist>
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

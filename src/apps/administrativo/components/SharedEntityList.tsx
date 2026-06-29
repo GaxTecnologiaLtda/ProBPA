@@ -35,11 +35,13 @@ import {
   MoreHorizontal,
   Phone,
   Plus,
+  Plus,
   Search,
   Trash2,
   UserCircle,
   UserPlus,
-  XCircle
+  XCircle,
+  LayoutDashboard
 } from 'lucide-react';
 
 interface SharedEntityListProps {
@@ -96,6 +98,54 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
   const [formData, setFormData] = useState<EntityFormState>(
     INITIAL_FORM_STATE
   );
+
+  // Tab Control Modal
+  const [isTabModalOpen, setIsTabModalOpen] = useState(false);
+  const [tabEntity, setTabEntity] = useState<AdminEntity | null>(null);
+  const [selectedTabs, setSelectedTabs] = useState<string[]>([]);
+  const [savingTabs, setSavingTabs] = useState(false);
+
+  const ALL_PRIVATE_TABS = [
+    "Visão Geral",
+    "Municípios",
+    "Rede de Unidades",
+    "Corpo Clínico",
+    "Ações e Programas",
+    "Metas Globais",
+    "Produção Global",
+    "Logs de Uso",
+    "Gestão Acessos",
+    "Cadastros Originais",
+    "Suporte Técnico",
+    "Configuração"
+  ];
+
+  const handleOpenTabModal = (entity: AdminEntity) => {
+    setTabEntity(entity);
+    setSelectedTabs(entity.allowedTabs || ALL_PRIVATE_TABS);
+    setIsTabModalOpen(true);
+  };
+
+  const handleToggleTab = (tab: string) => {
+    setSelectedTabs((prev) =>
+      prev.includes(tab) ? prev.filter((t) => t !== tab) : [...prev, tab]
+    );
+  };
+
+  const handleSaveTabs = async () => {
+    if (!tabEntity) return;
+    try {
+      setSavingTabs(true);
+      await updateEntity(tabEntity.id, { allowedTabs: selectedTabs });
+      setIsTabModalOpen(false);
+      await loadEntities();
+    } catch (err) {
+      console.error("Erro ao salvar abas:", err);
+      alert("Falha ao salvar configurações de abas.");
+    } finally {
+      setSavingTabs(false);
+    }
+  };
 
   const loadEntities = async () => {
     try {
@@ -516,6 +566,18 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 pl-2">
+                  {type === "PRIVATE" && (
+                    <Tooltip content="Configurar Abas (Módulos Permitidos)">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!px-2 text-slate-400 hover:text-indigo-500"
+                        onClick={() => handleOpenTabModal(entity)}
+                      >
+                        <LayoutDashboard className="w-4 h-4" />
+                      </Button>
+                    </Tooltip>
+                  )}
                   <Tooltip content="Conceder Acesso Master">
                     <Button
                       variant="ghost"
@@ -731,8 +793,93 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                 </Badge>
               </div>
             </div>
+            {selectedEntity.type === "PRIVATE" && (
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold block mb-2">
+                  Abas Liberadas
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {(selectedEntity.allowedTabs || ALL_PRIVATE_TABS).map((tab) => (
+                    <Badge key={tab} variant="neutral">
+                      {tab}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
+      </Modal>
+
+      {/* TAB CONTROL MODAL */}
+      <Modal
+        isOpen={isTabModalOpen}
+        onClose={() => setIsTabModalOpen(false)}
+        title={`Controle de Abas - ${tabEntity?.name}`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setIsTabModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveTabs} disabled={savingTabs}>
+              {savingTabs ? "Salvando..." : "Salvar Configurações"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Selecione quais módulos estarão visíveis no menu lateral para esta entidade privada. 
+            Isso se aplica a todos os usuários (Master e Coordenação) desta entidade.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            {ALL_PRIVATE_TABS.map((tab) => {
+              const isChecked = selectedTabs.includes(tab);
+              return (
+                <label
+                  key={tab}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    isChecked
+                      ? "border-corp-500 bg-corp-50 dark:bg-corp-900/20"
+                      : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 text-corp-600 rounded border-slate-300 focus:ring-corp-500"
+                    checked={isChecked}
+                    onChange={() => handleToggleTab(tab)}
+                  />
+                  <span
+                    className={`text-sm font-medium ${
+                      isChecked
+                        ? "text-corp-700 dark:text-corp-400"
+                        : "text-slate-700 dark:text-slate-300"
+                    }`}
+                  >
+                    {tab}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex justify-between">
+            <button
+              onClick={() => setSelectedTabs(ALL_PRIVATE_TABS)}
+              className="text-sm text-corp-600 hover:text-corp-700 dark:text-corp-400 dark:hover:text-corp-300"
+            >
+              Selecionar Todas
+            </button>
+            <button
+              onClick={() => setSelectedTabs([])}
+              className="text-sm text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
+            >
+              Desmarcar Todas
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* CREATE / EDIT MODAL */}

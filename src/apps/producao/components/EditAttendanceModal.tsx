@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Plus, Trash2, AlertTriangle, User, Stethoscope, Undo2, Loader2, Search } from 'lucide-react';
-import { Button, Input, Badge, cn } from './ui/BaseComponents';
+import { Button, Input, Select, Badge, cn } from './ui/BaseComponents';
 import { SigtapTreeSelector } from './SigtapTreeSelector';
 import { ProductionRecord } from '../types';
 import { softDeleteBpaRecord } from '../services/bpaService';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, limit, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { AppContext } from '../context';
+import { fetchProfessionalsByEntity } from '../../entidade/services/professionalsService';
+import { fetchUnitsByEntity } from '../../entidade/services/unitsService';
 
 function useDebounce<T>(value: T, delay: number): T {
     const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -59,6 +61,10 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
     const [patientId, setPatientId] = useState('');
     const [attendanceDate, setAttendanceDate] = useState('');
     const [competence, setCompetence] = useState('');
+    const [availableCompetences, setAvailableCompetences] = useState<{ competence: string; label: string }[]>([]);
+
+    const [professionals, setProfessionals] = useState<any[]>([]);
+    const [selectedProfessionalId, setSelectedProfessionalId] = useState<string>('');
 
     const [isSaving, setIsSaving] = useState(false);
     const [isSelectorOpen, setIsSelectorOpen] = useState(false);
@@ -74,6 +80,8 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
     const [patientSuggestions, setPatientSuggestions] = useState<any[]>([]);
     const [showPatientSuggestions, setShowPatientSuggestions] = useState<'cns' | 'cpf' | 'name' | null>(null);
     const [patientFound, setPatientFound] = useState(true);
+    const [isFetchingProfessionals, setIsFetchingProfessionals] = useState(false);
+    const [units, setUnits] = useState<any[]>([]);
 
     const baseRecord = attendanceRecords[0];
 
@@ -85,13 +93,18 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
             setPatientCpf(firstValid.patientCpf || '');
             setPatientFound(true);
             
-            // Extract patientId from firestore path
+            // Extract patientId and professionalId from firestore path
             let extractPatientId = '';
+            let extractProfessionalId = overrideContextData?.professionalId || '';
             if (firstValid.firestorePath) {
                 const parts = firstValid.firestorePath.split('/');
                 const pIdx = parts.indexOf('pacientes');
                 if (pIdx > -1 && parts.length > pIdx + 1) {
                     extractPatientId = parts[pIdx + 1];
+                }
+                const profIdx = parts.indexOf('professionals');
+                if (profIdx > -1 && parts.length > profIdx + 1) {
+                    extractProfessionalId = parts[profIdx + 1];
                 }
             }
             setPatientId(extractPatientId || firstValid.patientId || 'unknown_patient');
@@ -122,6 +135,94 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
             })));
         }
     }, [isOpen, attendanceRecords]);
+
+    // Generate last 36 months for Competence Select
+    useEffect(() => {
+        const options = [];
+        const today = new Date();
+        for (let i = 0; i < 36; i++) {
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const year = d.getFullYear();
+            const month = (d.getMonth() + 1).toString().padStart(2, '0');
+            const comp = `${year}-${month}`;
+            const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+            const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+            options.push({ competence: comp, label: formattedLabel });
+        }
+        setAvailableCompetences(options);
+    }, []);
+
+    // Auto-update competence based on attendance date
+    useEffect(() => {
+        if (attendanceDate) {
+            // Use T12:00:00 to avoid timezone shifts
+            const date = new Date(`${attendanceDate}T12:00:00`);
+            if (!isNaN(date.getTime())) {
+                const year = date.getFullYear();
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const newCompetence = `${year}-${month}`;
+
+                if (newCompetence !== competence) {
+                    setCompetence(newCompetence);
+
+                    // Ensure this competence is available in the select options
+                    setAvailableCompetences(prev => {
+                        const exists = prev.some(c => c.competence === newCompetence);
+                        if (exists) return prev;
+
+                        const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                        const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+                        const newOptions = [...prev, { competence: newCompetence, label: formattedLabel }];
+                        // Sort descending by competence (YYYY-MM)
+                        return newOptions.sort((a, b) => b.competence.localeCompare(a.competence));
+                    });
+                }
+            }
+        }
+    }, [attendanceDate, competence]);
+
+    // Fetch Professionals Effect
+    useEffect(() => {
+        const entityId = overrideContextData?.entityId || user?.entityId;
+        if (isOpen && entityId && baseRecord) {
+            setIsFetchingProfessionals(true);
+            Promise.all([
+                fetchProfessionalsByEntity(entityId),
+                fetchUnitsByEntity(entityId)
+            ]).then(([profs, unitsData]) => {
+                setUnits(unitsData);
+                const munId = overrideContextData?.municipalityId || user?.municipalityId;
+                let filteredProfs = profs;
+                if (munId) {
+                    filteredProfs = profs.filter(p => p.assignments?.some((a: any) => a.municipalityId === munId));
+                }
+                setProfessionals(filteredProfs);
+
+                let extractProfessionalId = overrideContextData?.professionalId || '';
+                let extractUnitId = baseRecord.unitId || '';
+                if (baseRecord.firestorePath) {
+                    const parts = baseRecord.firestorePath.split('/');
+                    const profIdx = parts.indexOf('professionals');
+                    const uIdx = parts.indexOf('bpai_records');
+                    if (profIdx > -1 && parts.length > profIdx + 1) extractProfessionalId = parts[profIdx + 1];
+                    if (uIdx > -1 && parts.length > uIdx + 1) extractUnitId = parts[uIdx + 1];
+                }
+
+                const p = filteredProfs.find(p => p.id === extractProfessionalId);
+                if (p) {
+                    const aIdx = p.assignments?.findIndex((a: any) => a.unitId === extractUnitId);
+                    if (aIdx !== undefined && aIdx > -1) {
+                        setSelectedProfessionalId(`${p.id}|${aIdx}`);
+                    } else {
+                        setSelectedProfessionalId(`${p.id}|0`);
+                    }
+                } else if (extractProfessionalId) {
+                    setSelectedProfessionalId(`${extractProfessionalId}|0`);
+                }
+            }).catch(err => console.error("Error fetching professionals:", err))
+              .finally(() => setIsFetchingProfessionals(false));
+        }
+    }, [isOpen, overrideContextData?.entityId, user?.entityId, overrideContextData?.municipalityId, user?.municipalityId, baseRecord]);
 
     // Patient Search Effect
     useEffect(() => {
@@ -258,17 +359,30 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
             // (since baseRecord.patientId might be missing on some interfaces)
             let currentPathPatientId = baseRecord.patientId || '';
             let currentPathCompetence = '';
+            let currentPathProfessionalId = '';
+            let currentPathUnitId = baseRecord.unitId || '';
             if (baseRecord.firestorePath) {
                 const pParts = baseRecord.firestorePath.split('/');
                 const pIdx = pParts.indexOf('pacientes');
                 if (pIdx > -1 && pParts.length > pIdx + 1) currentPathPatientId = pParts[pIdx + 1];
                 const compIdx = pParts.indexOf('competencias');
                 if (compIdx > -1 && pParts.length > compIdx + 1) currentPathCompetence = pParts[compIdx + 1];
+                const profIdx = pParts.indexOf('professionals');
+                if (profIdx > -1 && pParts.length > profIdx + 1) currentPathProfessionalId = pParts[profIdx + 1];
+                const uIdx = pParts.indexOf('bpai_records');
+                if (uIdx > -1 && pParts.length > uIdx + 1) currentPathUnitId = pParts[uIdx + 1];
             }
             
+            const [selProfId, selProfIdx] = selectedProfessionalId ? selectedProfessionalId.split('|') : ['', ''];
+            const selProf = professionals.find(p => p.id === selProfId);
+            const selAssignment = selProf && selProfIdx ? selProf.assignments[parseInt(selProfIdx)] : null;
+            const selUnitId = selAssignment ? selAssignment.unitId : currentPathUnitId;
+
             const patientIdChanged = patientId !== currentPathPatientId;
             const competenceChanged = competence !== currentPathCompetence;
-            const needsMove = dateChanged || patientIdChanged || competenceChanged;
+            const professionalChanged = selProfId && currentPathProfessionalId && selProfId !== currentPathProfessionalId;
+            const unitChanged = selUnitId && currentPathUnitId && selUnitId !== currentPathUnitId;
+            const needsMove = dateChanged || patientIdChanged || competenceChanged || professionalChanged || unitChanged;
 
             const nameChanged = patientName !== baseRecord.patientName;
             const cnsChanged = patientCns !== baseRecord.patientCns;
@@ -286,10 +400,18 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
                     const dayKey = `${dd}-${mm}-${yyyy}`;
                     
                     const compIdx = pathParts.indexOf('competencias');
+                    const profIdx = pathParts.indexOf('professionals');
+                    const uIdx = pathParts.indexOf('bpai_records');
                     if (compIdx > -1) {
                         pathParts[compIdx + 1] = compMonth;
                         pathParts[compIdx + 3] = dayKey;
                         pathParts[compIdx + 5] = patientId;
+                        if (profIdx > -1 && selProfId) {
+                            pathParts[profIdx + 1] = selProfId;
+                        }
+                        if (uIdx > -1 && selUnitId) {
+                            pathParts[uIdx + 1] = selUnitId;
+                        }
                         targetCollectionPath = pathParts.slice(0, -1).join('/'); 
                     }
                 } else {
@@ -346,6 +468,12 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
             if (nameChanged) updatePayload.patientName = patientName;
             if (cnsChanged) updatePayload.patientCns = patientCns;
             if (cpfChanged) updatePayload.patientCpf = patientCpf;
+            if (professionalChanged || unitChanged || (selAssignment && baseRecord.cbo !== selAssignment.cbo)) {
+                if (selProfId) updatePayload.professionalId = selProfId;
+                if (selProf) updatePayload.professionalName = selProf.name;
+                if (selUnitId) updatePayload.unitId = selUnitId;
+                if (selAssignment?.cbo) updatePayload.cbo = selAssignment.cbo;
+            }
             
             if (dateChanged || competenceChanged) {
                 if (dateChanged) updatePayload.attendanceDate = attendanceDate;
@@ -374,6 +502,8 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
                         quantity: p.quantity,
                         cidCodes: p.cidCodes || [],
                         status: 'pending', // Ready for cloud sync
+                        professionalId: selProfId || overrideContextData?.professionalId || user?.professionalId || user?.id || '',
+                        unitId: selUnitId || overrideContextData?.unitId || user?.unitId || '',
                         ...(overrideContextData?.source ? { source: overrideContextData.source } : {})
                     };
                     if (!newDocData.createdAt) newDocData.createdAt = new Date();
@@ -435,25 +565,43 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
     const cpfChanged = patientCpf !== (baseRecord?.patientCpf || '');
     const patientDataChangedCount = (nameChanged || cnsChanged || cpfChanged) ? 1 : 0; // Count as 1 block change
     
-    // Check for structural changes (Date or Patient ID or Competence) that require move
     const dateChanged = attendanceDate !== (baseRecord?.date || '');
     let currentPathPatientId = baseRecord?.patientId || '';
     let currentPathCompetenceUI = '';
+    let currentPathProfessionalIdUI = '';
     if (baseRecord?.firestorePath) {
         const pParts = baseRecord.firestorePath.split('/');
         const pIdx = pParts.indexOf('pacientes');
         if (pIdx > -1 && pParts.length > pIdx + 1) currentPathPatientId = pParts[pIdx + 1];
         const compIdx = pParts.indexOf('competencias');
         if (compIdx > -1 && pParts.length > compIdx + 1) currentPathCompetenceUI = pParts[compIdx + 1];
+        const profIdx = pParts.indexOf('professionals');
+        if (profIdx > -1 && pParts.length > profIdx + 1) currentPathProfessionalIdUI = pParts[profIdx + 1];
     }
     const patientIdChanged = patientId !== currentPathPatientId;
     const competenceChangedUI = competence !== currentPathCompetenceUI;
-    const structuralChangesCount = (dateChanged || patientIdChanged || competenceChangedUI) ? 1 : 0;
+    const selProfIdUI = selectedProfessionalId ? selectedProfessionalId.split('|')[0] : '';
+    const professionalChangedUI = selProfIdUI && currentPathProfessionalIdUI && selProfIdUI !== currentPathProfessionalIdUI;
+    const structuralChangesCount = (dateChanged || patientIdChanged || competenceChangedUI || professionalChangedUI) ? 1 : 0;
 
     const quantityChangesCount = procedures.filter(p => p.status === 'active' && p.originalRecord && p.quantity !== p.originalRecord.quantity).length;
 
     const changesCount = procedures.filter(p => p.status === 'pending_add' || p.status === 'pending_remove').length + patientDataChangedCount + quantityChangesCount + structuralChangesCount;
     const compYYYYMM = competence ? competence.replace('-', '') : (baseRecord ? baseRecord.date.replace(/-/g, '').substring(0, 6) : ''); 
+
+    const [pId, pIdx] = selectedProfessionalId ? selectedProfessionalId.split('|') : ['', ''];
+    const pSel = professionals.find(p => p.id === pId);
+    const aSel = pSel && pIdx ? pSel.assignments?.[parseInt(pIdx)] : null;
+    let renderUnitId = aSel?.unitId;
+
+    if (!renderUnitId && baseRecord?.firestorePath) {
+        const pParts = baseRecord.firestorePath.split('/');
+        const uIdx = pParts.indexOf('bpai_records');
+        if (uIdx > -1 && pParts.length > uIdx + 1) renderUnitId = pParts[uIdx + 1];
+    }
+    if (!renderUnitId) renderUnitId = baseRecord?.unitId;
+
+    const renderUnitName = units.find(u => u.id === renderUnitId)?.name;
 
     return (
         <div className="fixed inset-0 z-[160] flex items-center justify-center p-4">
@@ -495,7 +643,7 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
                 <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
                     {/* Patient Section */}
                     <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-medical-600 dark:text-medical-400 font-bold mb-2 pt-2">
+                        <div className="flex items-center gap-2 text-medical-600 dark:text-gray-100 font-bold mb-2 pt-2">
                             <User size={18} />
                             <h3>Dados do Atendimento</h3>
                         </div>
@@ -503,27 +651,56 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
                             
                             <div className="col-span-1 sm:col-span-2 relative mb-2">
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                    Editar Competência (Mês/Ano)
+                                    Profissional Realizante {renderUnitName ? `— ${renderUnitName}` : ''}
                                 </label>
-                                <input
-                                    type="month"
-                                    value={competence}
-                                    onChange={(e) => setCompetence(e.target.value)}
-                                    className="flex h-10 w-full sm:w-1/2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:focus-visible:ring-gray-300"
-                                    disabled={isSaving}
+                                <Select
+                                    value={selectedProfessionalId}
+                                    onChange={(e) => setSelectedProfessionalId(e.target.value)}
+                                    className="w-full"
+                                    disabled={isSaving || isFetchingProfessionals}
+                                    options={isFetchingProfessionals ? [
+                                        { value: "", label: "Carregando profissionais..." }
+                                    ] : [
+                                        { value: "", label: "Selecione..." },
+                                        ...professionals.flatMap(p => 
+                                            (p.assignments || []).map((a: any, idx: number) => {
+                                                const cboText = a.cbo || a.occupation || 'Sem CBO configurado';
+                                                return {
+                                                    value: `${p.id}|${idx}`,
+                                                    label: `${p.name} - ${cboText}`
+                                                };
+                                            })
+                                        )
+                                    ]}
                                 />
                             </div>
 
-                            <div className="col-span-1 sm:col-span-2 relative mb-2">
+                            <div className="col-span-1 relative mb-2">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                    Editar Competência (Mês/Ano)
+                                </label>
+                                <Select
+                                    value={competence}
+                                    onChange={(e) => setCompetence(e.target.value)}
+                                    className="w-full"
+                                    disabled={isSaving}
+                                    options={availableCompetences.map(c => ({
+                                        value: c.competence,
+                                        label: c.label
+                                    }))}
+                                />
+                            </div>
+
+                            <div className="col-span-1 relative mb-2">
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
                                     Data de Realização
                                 </label>
-                                <input
+                                <Input
                                     type="date"
                                     value={attendanceDate}
                                     onChange={(e) => setAttendanceDate(e.target.value)}
                                     max={new Date().toISOString().split('T')[0]}
-                                    className="flex h-10 w-full sm:w-1/2 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-gray-950 dark:focus-visible:ring-gray-300"
+                                    className="w-full"
                                     disabled={isSaving}
                                 />
                             </div>
@@ -628,7 +805,7 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
                     {/* Procedures Section */}
                     <div className="space-y-3 relative">
                         <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2 text-medical-600 dark:text-medical-400 font-bold">
+                            <div className="flex items-center gap-2 text-medical-600 dark:text-gray-100 font-bold">
                                 <Stethoscope size={18} />
                                 <h3>Procedimentos Registrados</h3>
                             </div>
@@ -636,7 +813,7 @@ export const EditAttendanceModal: React.FC<EditAttendanceModalProps> = ({ isOpen
                                 onClick={() => setIsSelectorOpen(true)}
                                 size="sm" 
                                 variant="outline" 
-                                className="border-medical-200 text-medical-700 hover:bg-medical-50 dark:border-medical-800 dark:text-medical-300 dark:hover:bg-medical-900/30"
+                                className="border-medical-200 text-medical-700 hover:bg-medical-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                                 disabled={isSaving}
                             >
                                 <Plus size={16} className="mr-1" />

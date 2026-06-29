@@ -86,6 +86,7 @@ const ProfessionalsSubsede: React.FC = () => {
             let filteredProfs = unit.professionals.filter(p => {
                 // Text Search
                 const matchesSearch = !searchTerm ||
+                    unit.unitName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     p.cns.includes(searchTerm) ||
                     p.cpf.includes(searchTerm) ||

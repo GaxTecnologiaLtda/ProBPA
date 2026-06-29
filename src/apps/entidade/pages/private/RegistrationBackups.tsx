@@ -87,11 +87,18 @@ const RegistrationBackups: React.FC = () => {
         setIsViewModalOpen(true);
     };
 
-    const filteredBackups = backups.filter(b =>
-        (b.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (b.cpf || '').includes(searchTerm.replace(/\D/g, '')) ||
-        (b.cns || '').includes(searchTerm)
-    );
+    const filteredBackups = backups.filter(b => {
+        if (!searchTerm) return true;
+        
+        const lowerTerm = searchTerm.toLowerCase();
+        const numericTerm = searchTerm.replace(/\D/g, '');
+
+        const matchName = (b.name || '').toLowerCase().includes(lowerTerm);
+        const matchCpf = numericTerm ? (b.cpf || '').replace(/\D/g, '').includes(numericTerm) : false;
+        const matchCns = numericTerm ? (b.cns || '').replace(/\D/g, '').includes(numericTerm) : false;
+
+        return matchName || matchCpf || matchCns;
+    });
 
     if (loading) {
         return <div className="p-8 text-center text-gray-500 flex flex-col items-center">

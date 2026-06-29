@@ -317,6 +317,8 @@ service cloud.firestore {
              
              allow create, update, delete: if isAdmin() 
                                            || isMasterOf(entityId);
+             
+             allow update: if isCoordinationOf(entityId);
                                            
              // PUBLIC REGISTRATION: Allow create (Sync Context)
              allow create: if true;
@@ -536,7 +538,9 @@ service cloud.firestore {
        allow create: if true; // Validation logic should be in backend triggers ideally or limited here (e.g. active == true)
        
        allow create: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && request.resource.data.entityId == request.auth.token.entityId);
-       allow update: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId);
+       allow update: if isAdmin() 
+                     || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId)
+                     || (request.auth != null && request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId);
        allow delete: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId);
     }
 

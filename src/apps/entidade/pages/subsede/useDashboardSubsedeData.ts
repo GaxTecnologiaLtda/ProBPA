@@ -31,7 +31,7 @@ export interface DashboardSubsedeStats {
     syncData: () => Promise<void>;
 }
 
-export const useDashboardSubsedeData = (competence: string = 'Global') => {
+export const useDashboardSubsedeData = (selectedYear: string, selectedMonth: string, selectedDay: string) => {
     const { claims } = useAuth();
     const [stats, setStats] = useState<DashboardSubsedeStats>({
         production: { total: 0, totalNonPactuated: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
@@ -55,18 +55,54 @@ export const useDashboardSubsedeData = (competence: string = 'Global') => {
 
         setLoading(true);
         try {
-            const currentYear = new Date().getFullYear().toString();
-            const getStatsFn = httpsCallable(functions, 'getDashboardSubsedeStats');
-            const response = await getStatsFn({ year: currentYear, municipalityId: claims.municipalityId, competence });
-            const data = response.data as any;
+            let year = selectedYear;
+            let month: string | undefined = undefined;
+            let day: string | undefined = undefined;
 
-            setStats({
-                ...stats,
-                production: data.production || stats.production,
-                professionals: data.professionals || stats.professionals,
-                units: data.units || stats.units,
-                goals: data.goals || stats.goals,
-            });
+            if (selectedMonth !== 'all') {
+                month = `${year}-${selectedMonth.padStart(2, '0')}`;
+            }
+
+            if (selectedDay !== 'all') {
+                day = selectedDay.padStart(2, '0');
+            }
+
+            const cacheKey = `dashboardSubsedeStats_${claims.municipalityId}_${selectedYear}_${selectedMonth}_${selectedDay}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            let data = null;
+
+            if (cachedData) {
+                try {
+                    const parsed = JSON.parse(cachedData);
+                    const now = new Date().getTime();
+                    // 24 hours in milliseconds
+                    if (now - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                        data = parsed.data;
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse cached dashboard stats', e);
+                }
+            }
+
+            if (!data) {
+                const getStatsFn = httpsCallable(functions, 'getDashboardSubsedeStats');
+                const response = await getStatsFn({ year, month, day, municipalityId: claims.municipalityId });
+                data = response.data as any;
+                
+                // Save to cache
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    timestamp: new Date().getTime(),
+                    data
+                }));
+            }
+
+            setStats(prevStats => ({
+                ...prevStats,
+                production: data.production || prevStats.production,
+                professionals: data.professionals || prevStats.professionals,
+                units: data.units || prevStats.units,
+                goals: data.goals || prevStats.goals,
+            }));
         } catch (error) {
             console.error('Failed to load dashboard subsede stats:', error);
             // Provide fallback mock data so the panel doesn't crash if the function isn't ready
@@ -85,8 +121,12 @@ export const useDashboardSubsedeData = (competence: string = 'Global') => {
         if (!claims?.entityId || !claims?.municipalityId) return;
         setSyncing(true);
         try {
-            const triggerRefreshFn = httpsCallable(functions, 'triggerDashboardSubsedeRefresh');
-            await triggerRefreshFn({ year: new Date().getFullYear().toString(), municipalityId: claims.municipalityId });
+            // Bypass cache logic on manual sync by passing skipCache or just clearing it
+            const cacheKey = `dashboardSubsedeStats_${claims.municipalityId}_${selectedYear}_${selectedMonth}_${selectedDay}`;
+            localStorage.removeItem(cacheKey);
+
+            // Se houvesse uma function triggerDashboardSubsedeRefresh, chamaria ela aqui. 
+            // Como a atualização já roda getDashboardSubsedeStats, vamos apenas recarregar ignorando cache.
             await load();
         } catch (error) {
             console.error('Failed to sync dashboard data:', error);
@@ -98,7 +138,7 @@ export const useDashboardSubsedeData = (competence: string = 'Global') => {
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [claims?.entityId, claims?.municipalityId, competence]);
+    }, [claims?.entityId, claims?.municipalityId, selectedYear, selectedMonth, selectedDay]);
 
     return { ...stats, loading, syncing, syncData };
 };

@@ -4,6 +4,7 @@
 # Whitelist specific project directories (and their contents)
 !/functions/
 !/connector_app/
+!/ConectorPec Ultra/
 !/src/
 !/pacote_transferencia_windows/
 

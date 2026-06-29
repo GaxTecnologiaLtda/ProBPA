@@ -175,7 +175,7 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
     if (!isOpen) return null;
 
     const modalContent = (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4 text-slate-800 dark:text-slate-100 font-sans">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4 text-slate-800 dark:text-slate-100 font-sans">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -348,7 +348,7 @@ export const SigtapTreeSelector: React.FC<SigtapTreeSelectorProps> = ({ isOpen, 
                                                 </Button>
                                                 <Button
                                                     onClick={() => handleSelectProcedure(proc)}
-                                                    className="w-full md:w-auto bg-medical-600 hover:bg-medical-700 text-white shadow-lg shadow-medical-500/30"
+                                                    className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/30"
                                                 >
                                                     <Check size={16} className="mr-2" />
                                                     Selecionar

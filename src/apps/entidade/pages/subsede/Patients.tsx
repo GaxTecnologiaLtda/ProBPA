@@ -94,7 +94,7 @@ const Patients: React.FC = () => {
   const handleDeletePatient = async (patientId: string) => {
     if (!window.confirm("Tem certeza que deseja excluir permanentemente este paciente da base do município?")) return;
     try {
-      const deleteFn = httpsCallable(functions, 'deletePatient');
+      const deleteFn = httpsCallable(functions, 'deletePatientRecord');
       await deleteFn({ entityId, municipalityId, patientId });
       setPatientsList(prev => prev.filter(p => p.id !== patientId));
       logAction({
@@ -115,7 +115,7 @@ const Patients: React.FC = () => {
     if (!editingPatient || !municipalityId || !entityId) return;
     setEditingPatientLoading(true);
     try {
-      const updateFn = httpsCallable(functions, 'updatePatient');
+      const updateFn = httpsCallable(functions, 'updatePatientRecord');
       await updateFn({
          entityId,
          municipalityId,

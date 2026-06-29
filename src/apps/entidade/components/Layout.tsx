@@ -19,7 +19,7 @@ import {
   AlertTriangle,
   Calendar,
   ChevronDown,
-  History
+  History, PlayCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EntityType } from '../types';
@@ -149,7 +149,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
     { icon: Activity, label: 'Produção Global', path: '/privado/producao' },
     { icon: FileText, label: 'Logs de Uso', path: '/privado/logs' },
     { icon: Users, label: 'Gestão Acessos', path: '/privado/usuarios' },
-    { icon: History, label: 'Cadastros Originais', path: '/privado/cadastros-originais' },
+    { icon: History, PlayCircle, label: 'Cadastros Originais', path: '/privado/cadastros-originais' },
     { icon: LifeBuoy, label: 'Suporte Técnico', path: '/privado/suporte' },
     { icon: Settings, label: 'Configuração', path: '/privado/configuracoes' },
   ];
@@ -164,11 +164,19 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
     menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Cadastros Originais');
   }
 
+  // Filter based on entity contractual allowed tabs
+  if (type === 'private' && entity?.allowedTabs && Array.isArray(entity.allowedTabs)) {
+    // Only filter if allowedTabs is explicitly defined, to keep backward compatibility
+    menuItemsPrivate = menuItemsPrivate.filter(item => entity.allowedTabs!.includes(item.label));
+  }
+
+
   const menuItemsSubsede = [
     { icon: LayoutDashboard, label: 'Visão Geral', path: '/subsede/dashboard' },
     { icon: Users, label: 'Corpo Clínico Local', path: '/subsede/profissionais' },
     { icon: Users, label: 'Pacientes', path: '/subsede/pacientes' },
     { icon: Activity, label: 'Produção Municipal', path: '/subsede/producao' },
+    { icon: PlayCircle, label: 'Tutoriais', path: '/subsede/tutoriais' },
   ];
 
   const menuItems = type === 'public' ? menuItemsPublic : type === 'subsede' ? menuItemsSubsede : menuItemsPrivate;
@@ -322,26 +330,6 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
           </div>
 
           <div className="flex items-center gap-4">
-            {type === 'subsede' && claims?.role === 'SUBSEDE' && (
-              <div className="hidden sm:flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors relative">
-                <Calendar className="w-4 h-4 text-orange-500" />
-                <select
-                  value={selectedCompetence}
-                  onChange={(e) => setSelectedCompetence(e.target.value)}
-                  className="appearance-none bg-transparent text-sm font-medium text-gray-700 dark:text-gray-200 capitalize cursor-pointer focus:outline-none pr-4"
-                >
-                  {competenceOptions.map(opt => (
-                    <option key={opt} value={opt} className="text-gray-900 bg-white dark:bg-gray-800 dark:text-gray-100">
-                      {opt === 'Global' ? 'Todas as Competências' : opt}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-gray-500">
-                  <ChevronDown className="w-3 h-3" />
-                </div>
-              </div>
-            )}
-
             <button
               onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"

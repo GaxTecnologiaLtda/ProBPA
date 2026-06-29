@@ -160,12 +160,13 @@ export const SigtapBrowserModal: React.FC<SigtapBrowserModalProps> = ({ isOpen, 
                         <div className="flex flex-col gap-2 items-center">
                             {onSelect && (
                                 <Button
-                                    size="sm"
+                                    type="button"
+                                    variant="secondary"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleSelectProcedure(proc);
                                     }}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1"
+                                    className="text-xs px-3 py-1"
                                 >
                                     Selecionar
                                 </Button>

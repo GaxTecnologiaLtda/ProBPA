@@ -101,8 +101,8 @@ export const professionalSetClaims = functions
                 name,
                 email,
                 active: true,
-                access: "PRODUCTION",
-                assignments: data.assignments || []
+                access: "PRODUCTION"
+                // REMOVIDO: assignments: data.assignments || [] - excedia o limite de 1000 bytes do Firebase
             };
 
             await auth.setCustomUserClaims(uid, claims);

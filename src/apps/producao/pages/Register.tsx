@@ -647,11 +647,11 @@ export const Register: React.FC = () => {
                 let type: 'cns' | 'cpf' | 'name' | null = null;
 
                 // Prioritize CNS search if active
-                if (termCns.length >= 3) {
+                if (termCns.length >= 3 && !patientFound) {
                     type = 'cns';
                     qScoped = query(patientsRef, where('cns', '>=', termCns), where('cns', '<=', termCns + '\uf8ff'), limit(5));
                     if (patientsRef !== legacyRef) qLegacy = query(legacyRef, where('cns', '>=', termCns), where('cns', '<=', termCns + '\uf8ff'), limit(5));
-                } else if (termCpf.length >= 3) {
+                } else if (termCpf.length >= 3 && !patientFound) {
                     type = 'cpf';
                     qScoped = query(patientsRef, where('cpf', '>=', termCpf), where('cpf', '<=', termCpf + '\uf8ff'), limit(5));
                     if (patientsRef !== legacyRef) qLegacy = query(legacyRef, where('cpf', '>=', termCpf), where('cpf', '<=', termCpf + '\uf8ff'), limit(5));
@@ -2049,6 +2049,7 @@ export const Register: React.FC = () => {
                                                 v = v.replace(/(\d{4})(\d)/, '$1 $2');
 
                                                 setFormData({ ...formData, patientCns: v });
+                                                setPatientFound(false);
                                                 if (v === '') {
                                                     setPatientSuggestions([]);
                                                     setShowPatientSuggestions(null);
@@ -2084,6 +2085,7 @@ export const Register: React.FC = () => {
                                                 v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
 
                                                 setFormData({ ...formData, patientCpf: v });
+                                                setPatientFound(false);
                                                 if (v === '') {
                                                     setPatientSuggestions([]);
                                                     setShowPatientSuggestions(null);
@@ -2112,6 +2114,7 @@ export const Register: React.FC = () => {
                                             value={formData.patientName}
                                             onChange={e => {
                                                 setFormData({ ...formData, patientName: e.target.value });
+                                                setPatientFound(false);
                                                 if (e.target.value === '') {
                                                     setPatientSuggestions([]);
                                                     setShowPatientSuggestions(null);
@@ -2516,7 +2519,7 @@ export const Register: React.FC = () => {
 
                 {/* Botão de Ação */}
                 <div className="pb-4 relative group">
-                    {(activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL') && procedures.length === 0 && (
+                    {(activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL') && procedures.filter(p => !!p.procedureCode).length === 0 && (
                         <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-max max-w-[90vw] text-center bg-gray-900 dark:bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 flex items-center gap-1.5 shadow-lg border border-gray-700">
                             <AlertCircle size={14} className="text-red-400" />
                             <span>Adicione procedimentos à lista para habilitar o registro.</span>
@@ -2529,7 +2532,7 @@ export const Register: React.FC = () => {
                         className="w-full h-14 text-lg shadow-lg shadow-medical-500/20"
                         onClick={handleSubmit}
                         isLoading={loading}
-                        disabled={activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL' ? procedures.length === 0 : false}
+                        disabled={activeFicha !== 'DOMICILIAR' && activeFicha !== 'COLETIVA' && activeFicha !== 'VACINACAO' && activeFicha !== 'INDIVIDUAL' ? procedures.filter(p => !!p.procedureCode).length === 0 : false}
                     >
                         {(() => {
                             const suffix = isLediTarget ? '(e-SUS/PEC)' : '(BPA)';

@@ -14,15 +14,8 @@ export const getDashboardSubsedeStats = functions
         const entityId = context.auth.token.entityId;
         const municipalityId = data.municipalityId || context.auth.token.municipalityId;
         const year = data.year || String(new Date().getFullYear());
-        const rawCompetence = data.competence || 'Global';
-
-        let targetCompetence = '';
-        if (rawCompetence !== 'Global') {
-            const parts = rawCompetence.split('/');
-            if (parts.length === 2) {
-                targetCompetence = `${parts[1]}-${parts[0]}`; // Converts MM/YYYY to YYYY-MM
-            }
-        }
+        const month = data.month; // Optional YYYY-MM
+        const day = data.day; // Optional DD
 
         const db = admin.firestore();
 
@@ -39,14 +32,13 @@ export const getDashboardSubsedeStats = functions
                 throw new functions.https.HttpsError('not-found', 'Entity not found.');
             }
 
+            const entityData = entityDoc.data();
+            const entityType = (entityData?.type === 'Privada' || entityData?.type === 'PRIVATE') ? 'PRIVATE' : 'PUBLIC';
+
             // 3. Parallel fetch of Contextual Counts (Professionals & Units & Goals)
-            // Note: Since professional paths might differ slightly based on PUBLIC vs PRIVATE, we can just query root and filter the array by assignment.
-            // But since SUBSEDE has them securely mirrored at `municipalities/PRIVATE/{entId}/{munId}/professionals`, we can just query that!
-            // Wait, what if it's PUBLIC? Let's query root and filter by municipalityId assignment or just try both.
-            // Actually, we can fetch from root `professionals` where `entityId == entityId` and filter in memory since auth rules allow.
             const allProfsQuery = db.collection('professionals').where('entityId', '==', entityId);
 
-            const unitsQuery = db.collection('units').where('entityId', '==', entityId).where('municipalityId', '==', municipalityId);
+            const unitsQuery = db.collection(`municipalities/${entityType}/${entityId}/${municipalityId}/units`);
 
             // Goals mapped to municipality
             const goalsQuery = db.collectionGroup('goals').where('entityId', '==', entityId);
@@ -171,17 +163,22 @@ export const getDashboardSubsedeStats = functions
                 }
 
                 // Filter Logic:
-                // If a specific competence is requested, match it exactly.
-                // Otherwise ("Global"), match the requested year.
-                if (targetCompetence) {
-                    if (normalizedCompetence !== targetCompetence) isRelevant = false;
-                    else isRelevant = true;
-                } else {
-                    if (normalizedCompetence.startsWith(year)) isRelevant = true;
-                    else isRelevant = false;
+                // If a specific month is requested, match it exactly.
+                // Otherwise match the requested year.
+                if (month) {
+                    if (normalizedCompetence === month) isRelevant = true;
+                } else if (normalizedCompetence.startsWith(year)) {
+                    isRelevant = true;
                 }
 
                 if (!isRelevant) continue;
+
+                if (day) {
+                    // doc.id is typically DD-MM-YYYY
+                    if (!doc.id.startsWith(`${day}-`)) {
+                        continue;
+                    }
+                }
 
                 if (!data.units) continue;
 

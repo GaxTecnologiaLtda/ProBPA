@@ -7,6 +7,7 @@ import { collection, query, where, getDocs, collectionGroup, orderBy, limit, doc
 import { db } from '../../firebase';
 import { Municipality, Professional } from '../../types';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
+import { SIGTAP_DICTIONARY, normalizeVaccine } from '../../services/municipalityReportService';
 
 interface ConnectorDashboardProps {
     entityId: string;
@@ -39,6 +40,8 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
     const [selectedProf, setSelectedProf] = useState<Professional | null>(null);
     const [detailsData, setDetailsData] = useState<ExtractedRecord[]>([]);
     const [loadingDetails, setLoadingDetails] = useState(false);
+    const [detailsCurrentPage, setDetailsCurrentPage] = useState(1);
+    const detailsPageSize = 100;
 
     // Sync selected mun if list changes
     useEffect(() => {
@@ -251,6 +254,19 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                 let rawName = String(doc.procedure?.name || doc.procedureName || '').toUpperCase();
                 const cbo = String(doc.professional?.cbo || '').trim();
 
+                // SIGTAP NORMALIZATION
+                const normObj = SIGTAP_DICTIONARY[rawCode];
+                if (normObj) {
+                    rawCode = normObj.code;
+                    rawName = normObj.name;
+                } else if (String(doc.recordType || '').toUpperCase() === 'VACCINATION' || rawName.includes('VACINA')) {
+                    const vacNorm = normalizeVaccine(rawName, String(doc.recordType || ''));
+                    if (vacNorm) {
+                        rawCode = vacNorm.code;
+                        rawName = vacNorm.name;
+                    }
+                }
+
                 // Social worker exception for generic primary care consultation (CBO 251605)
                 if (cbo === '251605' && rawCode === 'CONSULTA' && rawName.includes('ATENDIMENTO INDIVIDUAL')) {
                     rawCode = '0301010030';
@@ -356,6 +372,18 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                 let aName = String(a.procedure?.name || a.procedureName || '').toUpperCase();
                 const aCbo = String(a.professional?.cbo || '').trim();
                 
+                const aNormObj = SIGTAP_DICTIONARY[aCode];
+                if (aNormObj) {
+                    aCode = aNormObj.code;
+                    aName = aNormObj.name;
+                } else if (String(a.recordType || '').toUpperCase() === 'VACCINATION' || aName.includes('VACINA')) {
+                    const aVacNorm = normalizeVaccine(aName, String(a.recordType || ''));
+                    if (aVacNorm) {
+                        aCode = aVacNorm.code;
+                        aName = aVacNorm.name;
+                    }
+                }
+
                 if (aCbo === '251605' && aCode === 'CONSULTA' && aName.includes('ATENDIMENTO INDIVIDUAL')) {
                     aCode = '0301010030';
                 }
@@ -371,6 +399,18 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                 let bCode = String(b.procedure?.code || b.procedureCode || '').toUpperCase();
                 let bName = String(b.procedure?.name || b.procedureName || '').toUpperCase();
                 const bCbo = String(b.professional?.cbo || '').trim();
+
+                const bNormObj = SIGTAP_DICTIONARY[bCode];
+                if (bNormObj) {
+                    bCode = bNormObj.code;
+                    bName = bNormObj.name;
+                } else if (String(b.recordType || '').toUpperCase() === 'VACCINATION' || bName.includes('VACINA')) {
+                    const bVacNorm = normalizeVaccine(bName, String(b.recordType || ''));
+                    if (bVacNorm) {
+                        bCode = bVacNorm.code;
+                        bName = bVacNorm.name;
+                    }
+                }
 
                 if (bCbo === '251605' && bCode === 'CONSULTA' && bName.includes('ATENDIMENTO INDIVIDUAL')) {
                     bCode = '0301010030';
@@ -391,8 +431,9 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                 return (b.productionDate || '').localeCompare(a.productionDate || '');
             });
 
-            // Paginate (Top 100)
-            setDetailsData(filtered.slice(0, 100) as ExtractedRecord[]);
+            // Set all filtered records for pagination
+            setDetailsData(filtered as ExtractedRecord[]);
+            setDetailsCurrentPage(1);
 
         } catch (error) {
             console.error("Error loading details:", error);
@@ -569,16 +610,36 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                                        {detailsData.map(row => {
+                                        {detailsData.slice((detailsCurrentPage - 1) * detailsPageSize, detailsCurrentPage * detailsPageSize).map(row => {
                                             let code = (row.procedure.code || '').toUpperCase();
                                             let name = (row.procedure.name || '').toUpperCase();
                                             const cbo = String(row.professional?.cbo || '').trim();
 
                                             let isOverrideApplied = false;
+                                            let overrideReason = '';
+
+                                            // SIGTAP NORMALIZATION
+                                            const normObj = SIGTAP_DICTIONARY[code];
+                                            if (normObj) {
+                                                overrideReason = `Originalmente extraído como "${code}", convertido via Dicionário SIGTAP.`;
+                                                code = normObj.code;
+                                                name = normObj.name;
+                                                isOverrideApplied = true;
+                                            } else if (String(row.recordType || '').toUpperCase() === 'VACCINATION' || name.includes('VACINA')) {
+                                                const vacNorm = normalizeVaccine(name, String(row.recordType || ''));
+                                                if (vacNorm) {
+                                                    overrideReason = `Originalmente extraído como "${code}", convertido para a via de administração correspondente.`;
+                                                    code = vacNorm.code;
+                                                    name = vacNorm.name;
+                                                    isOverrideApplied = true;
+                                                }
+                                            }
+
                                             // Social worker exception for generic primary care consultation (CBO 251605)
                                             if (cbo === '251605' && code === 'CONSULTA' && name.includes('ATENDIMENTO INDIVIDUAL')) {
                                                 code = '0301010030';
                                                 name = 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)';
+                                                overrideReason = `Originalmente extraído do e-SUS como "CONSULTA" (Atend. Individual), este registro foi convertido nativamente para o código 0301010030.`;
                                                 isOverrideApplied = true;
                                             }
 
@@ -617,8 +678,8 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
                                                                         <div className="group/tooltip relative inline-flex items-center ml-2">
                                                                             <Info className="w-3.5 h-3.5 text-blue-500 cursor-help transition-transform hover:scale-110" />
                                                                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-gray-900 text-white text-[10px] whitespace-normal rounded shadow-xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-[60] text-center border border-gray-700 font-normal">
-                                                                                <strong>Regra de Exceção SIGTAP</strong><br/>
-                                                                                Originalmente extraído do e-SUS como <span className="text-orange-300">"CONSULTA" (Atend. Individual)</span>, este registro foi convertido nativamente para o código <span className="text-blue-300">0301010030</span>.
+                                                                                <strong>Normalização SIGTAP</strong><br/>
+                                                                                {overrideReason}
                                                                                 <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900"></div>
                                                                             </div>
                                                                         </div>
@@ -641,8 +702,28 @@ const ConnectorDashboard: React.FC<ConnectorDashboardProps> = ({ entityId, munic
 
                         {/* Modal Footer */}
                         <div className="p-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-xl flex justify-between items-center">
-                            <span className="text-xs text-gray-400 ml-2">Exibindo os últimos 100 registros.</span>
-                            <Button variant="outline" onClick={() => setSelectedProf(null)}>Fechar</Button>
+                            <span className="text-xs text-gray-500 ml-2">
+                                Exibindo {detailsData.length > 0 ? (detailsCurrentPage - 1) * detailsPageSize + 1 : 0} a {Math.min(detailsCurrentPage * detailsPageSize, detailsData.length)} de {detailsData.length} registros.
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={detailsCurrentPage === 1}
+                                    onClick={() => setDetailsCurrentPage(prev => prev - 1)}
+                                >
+                                    Anterior
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={detailsCurrentPage * detailsPageSize >= detailsData.length}
+                                    onClick={() => setDetailsCurrentPage(prev => prev + 1)}
+                                >
+                                    Próximo
+                                </Button>
+                                <Button variant="ghost" onClick={() => setSelectedProf(null)}>Fechar</Button>
+                            </div>
                         </div>
                     </div>
                 </div>

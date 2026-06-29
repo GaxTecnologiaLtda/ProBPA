@@ -197,6 +197,10 @@ export const ProcedureCard: React.FC<ProcedureCardProps> = ({
                 return;
             }
 
+            if (data.procedureCode && debouncedSearchTerm === `${data.procedureCode} - ${data.procedureName}`) {
+                return;
+            }
+
             console.log("[ProcedureCard] Starting search...");
             setIsSearching(true);
             try {

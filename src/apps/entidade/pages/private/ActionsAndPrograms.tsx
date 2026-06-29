@@ -45,6 +45,93 @@ function useDebounce<T>(value: T, delay: number): T {
     return debouncedValue;
 }
 
+// Helper para buscar assinaturas com fallback de CNS/CPF para ações legadas
+const fetchSignatureForProfessionalFallback = async (actionProf: any, entityId: string, municipalityId: string | undefined) => {
+    let signatureUrl: string | undefined = undefined;
+    let signatureBase64: string | undefined = undefined;
+
+    try {
+        if (actionProf.id) {
+            // 1. Try Action Professionals Base FIRST
+            const actionProfDoc = await getDoc(doc(db, `entities/${entityId}/professionalsActions`, actionProf.id));
+            if (actionProfDoc.exists()) {
+                const data = actionProfDoc.data();
+                signatureUrl = data.signatureUrl;
+                signatureBase64 = data.signatureBase64;
+            }
+
+            // 2. Try municipality scoped
+            if (!signatureUrl && !signatureBase64 && municipalityId && municipalityId !== 'others') {
+                const profDoc = await getDoc(doc(db, `municipalities/PRIVATE/${entityId}/${municipalityId}/professionals`, actionProf.id));
+                if (profDoc.exists()) {
+                    const data = profDoc.data();
+                    signatureUrl = data.signatureUrl;
+                    signatureBase64 = data.signatureBase64;
+                }
+            }
+
+            // 3. Try collection group 'professionals' fallback by ID
+            if (!signatureUrl && !signatureBase64) {
+                const profQuery = query(collectionGroup(db, 'professionals'), where('id', '==', actionProf.id), limit(1));
+                const profSnap = await getDocs(profQuery);
+                if (!profSnap.empty) {
+                    const data = profSnap.docs[0].data() as any;
+                    signatureUrl = data.signatureUrl;
+                    signatureBase64 = data.signatureBase64;
+                }
+            }
+        }
+
+        // 4. Fallback by CNS
+        if (!signatureUrl && !signatureBase64 && actionProf.cns) {
+            const cnsActionQuery = query(collection(db, `entities/${entityId}/professionalsActions`), where('cns', '==', actionProf.cns), limit(1));
+            const cnsActionSnap = await getDocs(cnsActionQuery);
+            if (!cnsActionSnap.empty) {
+                const data = cnsActionSnap.docs[0].data() as any;
+                signatureUrl = data.signatureUrl;
+                signatureBase64 = data.signatureBase64;
+            } else {
+                const cnsQuery = query(collectionGroup(db, 'professionals'), where('cns', '==', actionProf.cns), limit(1));
+                const cnsSnap = await getDocs(cnsQuery);
+                if (!cnsSnap.empty) {
+                    const data = cnsSnap.docs[0].data() as any;
+                    signatureUrl = data.signatureUrl;
+                    signatureBase64 = data.signatureBase64;
+                }
+            }
+        }
+
+        // 5. Fallback by CPF
+        if (!signatureUrl && !signatureBase64 && actionProf.cpf) {
+            const cpfActionQuery = query(collection(db, `entities/${entityId}/professionalsActions`), where('cpf', '==', actionProf.cpf), limit(1));
+            const cpfActionSnap = await getDocs(cpfActionQuery);
+            if (!cpfActionSnap.empty) {
+                const data = cpfActionSnap.docs[0].data() as any;
+                signatureUrl = data.signatureUrl;
+                signatureBase64 = data.signatureBase64;
+            } else {
+                const cpfQuery = query(collectionGroup(db, 'professionals'), where('cpf', '==', actionProf.cpf), limit(1));
+                const cpfSnap = await getDocs(cpfQuery);
+                if (!cpfSnap.empty) {
+                    const data = cpfSnap.docs[0].data() as any;
+                    signatureUrl = data.signatureUrl;
+                    signatureBase64 = data.signatureBase64;
+                }
+            }
+        }
+
+        // Load image if only URL exists
+        if (signatureUrl && !signatureBase64) {
+            const loadedSig = await municipalityReportService.loadImage(signatureUrl);
+            if (loadedSig) signatureBase64 = loadedSig;
+        }
+    } catch (err) {
+        console.log("Could not fetch professional signature", err);
+    }
+
+    return { signatureUrl, signatureBase64 };
+};
+
 const ActionsAndPrograms: React.FC = () => {
     const { claims, user } = useAuth();
     const { entity } = useEntityData(claims?.entityId);
@@ -1164,50 +1251,7 @@ const ActionsAndPrograms: React.FC = () => {
             // Fetch Full Professional Profiles to get Signatures
             const fullProfessionals = await Promise.all(
                 action.professionals.map(async (actionProf) => {
-                    let signatureUrl: string | undefined = undefined;
-                    let signatureBase64: string | undefined = undefined;
-
-                    if (actionProf.id) {
-                        try {
-                            // 1. Try Action Professionals Base FIRST (most likely place for action-specific signatures)
-                            const actionProfDoc = await getDoc(doc(db, `entities/${claims.entityId}/professionalsActions`, actionProf.id));
-                            if (actionProfDoc.exists()) {
-                                const data = actionProfDoc.data();
-                                signatureUrl = data.signatureUrl;
-                                signatureBase64 = data.signatureBase64;
-                            }
-
-                            // 2. Try municipality scoped if action has municipalityId
-                            if (!signatureUrl && !signatureBase64 && action.municipalityId) {
-                                const profDoc = await getDoc(doc(db, `municipalities/PRIVATE/${claims.entityId}/${action.municipalityId}/professionals`, actionProf.id));
-                                if (profDoc.exists()) {
-                                    const data = profDoc.data();
-                                    signatureUrl = data.signatureUrl;
-                                    signatureBase64 = data.signatureBase64;
-                                }
-                            }
-
-                            // 3. Try collection group 'professionals' fallback
-                            if (!signatureUrl && !signatureBase64) {
-                                const profQuery = query(collectionGroup(db, 'professionals'), where('id', '==', actionProf.id), limit(1));
-                                const profSnap = await getDocs(profQuery);
-                                if (!profSnap.empty) {
-                                    const data = profSnap.docs[0].data() as any;
-                                    signatureUrl = data.signatureUrl;
-                                    signatureBase64 = data.signatureBase64;
-                                }
-                            }
-
-                            // Load image if only URL exists
-                            if (signatureUrl && !signatureBase64) {
-                                const loadedSig = await municipalityReportService.loadImage(signatureUrl);
-                                if (loadedSig) signatureBase64 = loadedSig;
-                            }
-
-                        } catch (err) {
-                            console.log("Could not fetch professional signature", err);
-                        }
-                    }
+                    const { signatureUrl, signatureBase64 } = await fetchSignatureForProfessionalFallback(actionProf, claims.entityId!, action.municipalityId);
 
                     return {
                         name: actionProf.name,
@@ -1302,43 +1346,7 @@ const ActionsAndPrograms: React.FC = () => {
 
             const fullProfessionals = await Promise.all(
                 selectedProfsMeta.map(async (actionProf) => {
-                    let signatureUrl: string | undefined = undefined;
-                    let signatureBase64: string | undefined = undefined;
-
-                    if (actionProf.id) {
-                        try {
-                            const actionProfDoc = await getDoc(doc(db, `entities/${claims.entityId}/professionalsActions`, actionProf.id));
-                            if (actionProfDoc.exists()) {
-                                const data = actionProfDoc.data();
-                                signatureUrl = data.signatureUrl;
-                                signatureBase64 = data.signatureBase64;
-                            }
-
-                            if (!signatureUrl && !signatureBase64 && batchExportMunGroup.municipalityId && batchExportMunGroup.municipalityId !== 'others') {
-                                const profDoc = await getDoc(doc(db, `municipalities/PRIVATE/${claims.entityId}/${batchExportMunGroup.municipalityId}/professionals`, actionProf.id));
-                                if (profDoc.exists()) {
-                                    const data = profDoc.data();
-                                    signatureUrl = data.signatureUrl;
-                                    signatureBase64 = data.signatureBase64;
-                                }
-                            }
-
-                            if (!signatureUrl && !signatureBase64) {
-                                const profQuery = query(collectionGroup(db, 'professionals'), where('id', '==', actionProf.id), limit(1));
-                                const profSnap = await getDocs(profQuery);
-                                if (!profSnap.empty) {
-                                    const data = profSnap.docs[0].data() as any;
-                                    signatureUrl = data.signatureUrl;
-                                    signatureBase64 = data.signatureBase64;
-                                }
-                            }
-
-                            if (signatureUrl && !signatureBase64) {
-                                const loadedSig = await municipalityReportService.loadImage(signatureUrl);
-                                if (loadedSig) signatureBase64 = loadedSig;
-                            }
-                        } catch (err) { }
-                    }
+                    const { signatureUrl, signatureBase64 } = await fetchSignatureForProfessionalFallback(actionProf, claims.entityId!, batchExportMunGroup.municipalityId);
 
                     return {
                         id: actionProf.id,
@@ -2168,7 +2176,6 @@ const ActionsAndPrograms: React.FC = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        disabled={!productionForm.patientId}
                                         onClick={() => setIsSigtapModalOpen(true)}
                                         className="h-8 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
                                     >
@@ -2200,7 +2207,7 @@ const ActionsAndPrograms: React.FC = () => {
                                                 initial={{ opacity: 0, y: -10 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -10 }}
-                                                className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 max-h-[300px] overflow-y-auto"
+                                                className="relative z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 max-h-[500px] overflow-y-auto"
                                             >
                                                 {procedureSearchResults.map((proc) => (
                                                     <div
@@ -2464,6 +2471,7 @@ const ActionsAndPrograms: React.FC = () => {
                 isOpen={isProfessionalBaseModalOpen}
                 onClose={() => setIsProfessionalBaseModalOpen(false)}
                 title="Base de Profissionais (Ações e Programas)"
+                className="max-w-4xl w-full sm:w-[85vw]"
             >
                 <div className="space-y-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -2504,9 +2512,11 @@ const ActionsAndPrograms: React.FC = () => {
                                 <Input label="CPF *" placeholder="Obrigatório" value={baseProfForm.cpf} onChange={e => setBaseProfForm({ ...baseProfForm, cpf: e.target.value })} />
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6">
-                                <Input label="CNS (Cartão SUS)" placeholder="Opcional" value={baseProfForm.cns} onChange={e => setBaseProfForm({ ...baseProfForm, cns: e.target.value })} />
-                                <div className="flex flex-col">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-5 md:gap-6">
+                                <div className="sm:col-span-1">
+                                    <Input label="CNS (Cartão SUS)" placeholder="Opcional" value={baseProfForm.cns} onChange={e => setBaseProfForm({ ...baseProfForm, cns: e.target.value })} />
+                                </div>
+                                <div className="flex flex-col sm:col-span-2">
                                     <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">CBO (OCUPAÇÃO)</label>
                                     <input
                                         list="cbo-list-actions"
@@ -2519,7 +2529,9 @@ const ActionsAndPrograms: React.FC = () => {
                                         {CBO_LIST.map((group) => group.options.map(opt => <option key={opt.value} value={opt.label} />))}
                                     </datalist>
                                 </div>
-                                <Input label="Conselho (Ex: CRM)" placeholder="Opcional" value={baseProfForm.conselho} onChange={e => setBaseProfForm({ ...baseProfForm, conselho: e.target.value })} />
+                                <div className="sm:col-span-1">
+                                    <Input label="Conselho (Ex: CRM)" placeholder="Opcional" value={baseProfForm.conselho} onChange={e => setBaseProfForm({ ...baseProfForm, conselho: e.target.value })} />
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 md:gap-6">

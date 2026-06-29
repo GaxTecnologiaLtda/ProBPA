@@ -72,11 +72,21 @@ export const unitComparativeReportService = {
             doc.text((options.municipalityName || 'MUNICÍPIO NÃO INFORMADO').toUpperCase(), pageWidth / 2, 28, { align: 'center' });
         };
 
+        const numUnits = options.municipalityUnits.length;
+        const isDense = numUnits > 12;
+        const isVeryDense = numUnits > 20;
+
+        const baseFontSize = isVeryDense ? 3.5 : (isDense ? 4 : 5);
+        const headFontSize = isVeryDense ? 3.5 : (isDense ? 4 : 4.5);
+        const procCellWidth = isVeryDense ? 20 : (isDense ? 28 : 35);
+        const unitMinCellWidth = isVeryDense ? 5 : (isDense ? 7 : 10);
+        const codCellWidth = isVeryDense ? 8 : 10;
+
         const head: any[] = [
             [
-                { content: 'Cód.', styles: { halign: 'center' as const, cellWidth: 10 } },
-                { content: 'Procedimento (Meta Global)', styles: { cellWidth: 35 } },
-                ...options.municipalityUnits.map(u => ({ content: u.name.toUpperCase(), styles: { halign: 'center' as const, minCellWidth: 10, overflow: 'linebreak' as const } })),
+                { content: 'Cód.', styles: { halign: 'center' as const, cellWidth: codCellWidth } },
+                { content: 'Procedimento (Meta Global)', styles: { cellWidth: procCellWidth } },
+                ...options.municipalityUnits.map(u => ({ content: u.name.toUpperCase(), styles: { halign: 'center' as const, minCellWidth: unitMinCellWidth, overflow: 'linebreak' as const } })),
                 { content: 'Total\nUnid.', styles: { halign: 'center' as const, fillColor: [224, 255, 255] } },
                 { content: 'Meta\nmês IRB', styles: { halign: 'center' as const, fillColor: [255, 255, 255] } },
                 { content: 'Diferença', styles: { halign: 'center' as const, fillColor: [255, 200, 200] } },
@@ -220,19 +230,19 @@ export const unitComparativeReportService = {
                     startY: startY + 2,
                     head: [
                         [
-                            { content: 'Cód.', styles: { halign: 'center' as const, cellWidth: 15 } },
-                            { content: 'Procedimento', styles: { cellWidth: 50 } },
-                            ...options.municipalityUnits.map(u => ({ content: u.name.toUpperCase(), styles: { halign: 'center' as const, minCellWidth: 10, overflow: 'linebreak' as const } })),
+                            { content: 'Cód.', styles: { halign: 'center' as const, cellWidth: codCellWidth } },
+                            { content: 'Procedimento', styles: { cellWidth: procCellWidth } },
+                            ...options.municipalityUnits.map(u => ({ content: u.name.toUpperCase(), styles: { halign: 'center' as const, minCellWidth: unitMinCellWidth, overflow: 'linebreak' as const } })),
                             { content: 'Total', styles: { halign: 'center' as const, fillColor: [224, 255, 255] } }
                         ]
                     ],
                     body: tableBody,
                     theme: 'grid',
-                    styles: { fontSize: 5, cellPadding: { top: 1, right: 0.5, bottom: 1, left: 0.5 }, lineWidth: 0.1, lineColor: 200, overflow: 'linebreak', halign: 'left', valign: 'middle' },
-                    headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', fontSize: 4.5, cellPadding: 1 },
+                    styles: { fontSize: baseFontSize, cellPadding: { top: 1, right: 0.5, bottom: 1, left: 0.5 }, lineWidth: 0.1, lineColor: 200, overflow: 'linebreak', halign: 'left', valign: 'middle' },
+                    headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', fontSize: headFontSize, cellPadding: 1 },
                     columnStyles: {
-                        0: { cellWidth: 15, halign: 'center' },
-                        1: { cellWidth: 50, halign: 'left' }
+                        0: { cellWidth: codCellWidth, halign: 'center' },
+                        1: { cellWidth: procCellWidth, halign: 'left' }
                     },
                     didDrawPage: (data) => {
                         drawHeader();
@@ -257,11 +267,11 @@ export const unitComparativeReportService = {
                 head: head,
                 body: body,
                 theme: 'grid',
-                styles: { fontSize: 5, cellPadding: { top: 1, right: 0.5, bottom: 1, left: 0.5 }, lineWidth: 0.1, lineColor: 200, overflow: 'linebreak', halign: 'center', valign: 'middle' },
-                headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', fontSize: 4.5, cellPadding: 1 },
+                styles: { fontSize: baseFontSize, cellPadding: { top: 1, right: 0.5, bottom: 1, left: 0.5 }, lineWidth: 0.1, lineColor: 200, overflow: 'linebreak', halign: 'center', valign: 'middle' },
+                headStyles: { fillColor: [220, 220, 220], textColor: 0, fontStyle: 'bold', fontSize: headFontSize, cellPadding: 1 },
                 columnStyles: {
-                    0: { cellWidth: 10, halign: 'center' },
-                    1: { cellWidth: 35, halign: 'left' }
+                    0: { cellWidth: codCellWidth, halign: 'center' },
+                    1: { cellWidth: procCellWidth, halign: 'left' }
                 },
                 didDrawPage: (data) => {
                     drawHeader();
@@ -278,7 +288,8 @@ export const unitComparativeReportService = {
             ? `${options.startDate}_a_${options.endDate}`
             : options.competence.replace('/', '-');
 
-        doc.save(`Comparativo_Unidades_${options.municipalityName.replace(/[^a-z0-9]/gi, '_')}_${fileNameSuffix}.pdf`);
+        const pdfBlobUrl = doc.output('bloburl');
+        window.open(pdfBlobUrl, '_blank');
     },
 
     generateExcel: async (options: UnitComparativeReportOptions) => {

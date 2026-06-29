@@ -36,6 +36,7 @@ export interface AdminEntity {
     address?: string;
     managerRole?: string;
     entityKind?: string; // tipo detalhado: prefeitura, OSC, instituto etc.
+    allowedTabs?: string[];
 }
 
 export type NewEntityInput = {
@@ -55,6 +56,7 @@ export type NewEntityInput = {
     address?: string;
     managerRole?: string;
     entityKind?: string;
+    allowedTabs?: string[];
 };
 
 function mapFirestoreTypeToEntityType(type: string): EntityType {
@@ -121,6 +123,7 @@ export async function fetchEntitiesByType(type: EntityType): Promise<AdminEntity
             address: data.address,
             managerRole: data.managerRole,
             entityKind: data.entityKind,
+            allowedTabs: data.allowedTabs,
         } satisfies AdminEntity;
     });
 }
@@ -150,6 +153,7 @@ export async function fetchAllEntities(): Promise<AdminEntity[]> {
             address: data.address,
             managerRole: data.managerRole,
             entityKind: data.entityKind,
+            allowedTabs: data.allowedTabs,
         } satisfies AdminEntity;
     });
 }

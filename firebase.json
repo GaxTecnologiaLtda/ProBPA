@@ -69,6 +69,21 @@
           "destination": "/index.html"
         }
       ]
+    },
+    {
+      "target": "hospitalar",
+      "public": "src/apps/hospitalar/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
     }
   ],
   "storage": {

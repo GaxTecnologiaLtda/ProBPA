@@ -33,6 +33,7 @@ import RegistrationBackups from './pages/private/RegistrationBackups';
 import DashboardSubsede from './pages/subsede/Dashboard';
 import ProfessionalsSubsede from './pages/subsede/Professionals';
 import ProductionSubsede from './pages/subsede/Production';
+import TutorialsSubsede from './pages/subsede/Tutorials';
 import PatientsSubsede from './pages/subsede/Patients';
 
 import { AuthProvider } from './context/AuthContext';
@@ -85,6 +86,7 @@ const App: React.FC = () => {
             <Route path="profissionais" element={<ProfessionalsSubsede />} />
             <Route path="pacientes" element={<PatientsSubsede />} />
             <Route path="producao" element={<ProductionSubsede />} />
+            <Route path="tutoriais" element={<TutorialsSubsede />} />
           </Route>
         </Routes>
       </HashRouter>

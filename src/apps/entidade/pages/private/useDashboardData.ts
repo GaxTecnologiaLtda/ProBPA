@@ -69,21 +69,46 @@ export const useDashboardData = (selectedYear: string, selectedMonth: string, se
                 day = selectedDay.padStart(2, '0');
             }
 
-            const getStatsFn = httpsCallable(functions, 'getDashboardStats');
-            const payload: any = { year, month, day };
-            if (selectedMunicipality && selectedMunicipality !== 'all') {
-                payload.municipalityId = selectedMunicipality;
-            }
-            const response = await getStatsFn(payload);
-            const data = response.data as any;
+            const cacheKey = `dashboardStats_${claims.entityId}_${selectedYear}_${selectedMonth}_${selectedDay}_${selectedMunicipality}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            let data = null;
 
-            setStats({
-                ...stats,
-                production: data.production || stats.production,
-                professionals: data.professionals || stats.professionals,
-                municipalities: data.municipalities || stats.municipalities,
-                goals: data.goals || stats.goals,
-            });
+            if (cachedData) {
+                try {
+                    const parsed = JSON.parse(cachedData);
+                    const now = new Date().getTime();
+                    // 24 hours in milliseconds
+                    if (now - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                        data = parsed.data;
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse cached dashboard stats', e);
+                }
+            }
+
+            if (!data) {
+                const getStatsFn = httpsCallable(functions, 'getDashboardStats');
+                const payload: any = { year, month, day };
+                if (selectedMunicipality && selectedMunicipality !== 'all') {
+                    payload.municipalityId = selectedMunicipality;
+                }
+                const response = await getStatsFn(payload);
+                data = response.data as any;
+                
+                // Save to cache
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    timestamp: new Date().getTime(),
+                    data
+                }));
+            }
+
+            setStats(prevStats => ({
+                ...prevStats,
+                production: data.production || prevStats.production,
+                professionals: data.professionals || prevStats.professionals,
+                municipalities: data.municipalities || prevStats.municipalities,
+                goals: data.goals || prevStats.goals,
+            }));
         } catch (error) {
             console.error('Failed to load dashboard stats:', error);
         } finally {
@@ -95,6 +120,11 @@ export const useDashboardData = (selectedYear: string, selectedMonth: string, se
         if (!claims?.entityId) return;
         setSyncing(true);
         try {
+            // Bypass cache logic on manual sync by passing skipCache or just clearing it
+            const cacheKey = `dashboardStats_${claims.entityId}_${selectedYear}_${selectedMonth}_${selectedDay}_${selectedMunicipality}`;
+            localStorage.removeItem(cacheKey);
+
+            // triggerDashboardRefresh is used for legacy or specific cases, we can run it, then reload without cache
             const triggerRefreshFn = httpsCallable(functions, 'triggerDashboardRefresh');
             // Global refresh, year decoupled from backend
             await triggerRefreshFn({});

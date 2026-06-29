@@ -478,6 +478,8 @@ export const CBO_LIST = [
     group: 'Médicos',
     options: [
       { value: '225125', label: '225125 – Médico Clínico' },
+      { value: '225310', label: '225310 – Médico em Endoscopia' },
+      { value: '225203', label: '225203 – Médico em Cirurgia Vascular' },
       { value: '225124', label: '225124 – Médico Pediatra' },
       { value: '225250', label: '225250 – Médico Ginecologista e Obstetra' },
       { value: '225142', label: '225142 – Médico da Estratégia de Saúde da Família' },

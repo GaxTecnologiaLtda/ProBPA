@@ -113,6 +113,20 @@ export const updateAction = async (actionId: string, data: Partial<Action>, orig
         const entityActionRef = doc(db, 'entities', originalAction.entityId, 'actions', originalCompetence, 'actions', actionId);
         batch.update(entityActionRef, data);
 
+        // 2. Se a data mudou, atualizar a data de todas as produções desta ação
+        if (data.date && data.date !== originalAction.date) {
+            const newCompetence = data.date.substring(0, 7).replace('-', '');
+            const productionsQuery = query(collection(db, `entities/${originalAction.entityId}/actions/${originalCompetence}/actions/${actionId}/production`));
+            const productionsSnapshot = await getDocs(productionsQuery);
+            
+            productionsSnapshot.forEach((prodDoc) => {
+                batch.update(prodDoc.ref, { 
+                    attendanceDate: data.date,
+                    competence: newCompetence
+                });
+            });
+        }
+
         await batch.commit();
     } catch (error) {
         console.error("Error updating action:", error);
