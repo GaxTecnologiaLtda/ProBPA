@@ -3,9 +3,22 @@ import tkinter as tk
 from tkinter import messagebox
 import threading
 import uuid
+import sys
+import os
+import pystray
+from PIL import Image
+from pystray import MenuItem as item
 from config.settings import config_manager
 from core.updater import Updater
 from core.version import __version__
+from core.single_instance import SingleInstance
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 # Configuração de Aparência
 ctk.set_appearance_mode("Dark")
@@ -15,14 +28,30 @@ class ProBPAConnectorApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # --- SINGLE INSTANCE CHECK ---
+        self.single_instance = SingleInstance(on_show_request=self.show_window_from_tray)
+        if not self.single_instance.check():
+            print("Outra instância já está rodando. Notificando e fechando...")
+            self.single_instance.notify_existing()
+            sys.exit(0)
+
         self.updater = Updater()
         self.title(f"ProBPA Conector Ultra v{__version__}")
         
-        # Maximiza a tela por padrão
-        self.after(0, lambda: self.state('zoomed'))
+        self.tray_icon = None
+        self.start_minimized = "--minimized" in sys.argv
+
+        # Se não iniciou minimizado (pelo Windows Startup), maximiza a tela
+        if not self.start_minimized:
+            self.after(0, lambda: self.state('zoomed'))
+        else:
+            self.withdraw()
+            
+        # Sobrescreve o botão X (Fechar) para minimizar
+        self.protocol("WM_DELETE_WINDOW", self.hide_window)
         
         try:
-            self.iconbitmap("assets/icon.ico")
+            self.iconbitmap(resource_path("assets/icon.ico"))
         except:
             pass
 
@@ -74,8 +103,38 @@ class ProBPAConnectorApp(ctk.CTk):
         # Seleciona Início por padrão
         self.select_frame("home")
         
-        # Iniciar thread do updater
+        # Iniciar threads
         threading.Thread(target=self.check_for_updates, daemon=True).start()
+        threading.Thread(target=self.setup_tray, daemon=True).start()
+
+    def setup_tray(self):
+        try:
+            icon_path = resource_path("assets/icon.ico")
+            image = Image.open(icon_path)
+            menu = (
+                item('Abrir Painel Ultra', self.show_window_from_tray),
+                item('Encerrar', self.quit_app)
+            )
+            self.tray_icon = pystray.Icon("probpa_ultra", image, "Conector Ultra ProBPA", menu)
+            self.tray_icon.run()
+        except Exception as e:
+            print(f"Tray Error: {e}")
+
+    def show_window_from_tray(self, icon=None, item=None):
+        self.after(0, self.deiconify)
+        self.after(0, lambda: self.state('zoomed'))
+        self.after(0, self.lift)
+        self.after(0, self.focus_force)
+
+    def hide_window(self):
+        self.withdraw()
+
+    def quit_app(self, icon=None, item=None):
+        if self.tray_icon:
+            self.tray_icon.stop()
+        self.single_instance.cleanup()
+        self.quit()
+        sys.exit(0)
 
     def select_frame(self, name):
         # Destaca o botão selecionado na sidebar
