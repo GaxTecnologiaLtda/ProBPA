@@ -5,7 +5,7 @@ import os
 
 # Port for Single Instance Lock
 # Using a high port number to avoid conflicts
-LOCK_PORT = 65432
+LOCK_PORT = 65440
 LOCK_HOST = '127.0.0.1'
 
 class SingleInstance:
