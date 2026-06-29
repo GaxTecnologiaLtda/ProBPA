@@ -3,6 +3,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 # CustomTkinter needs some static files
 datas = collect_data_files('customtkinter')
+datas.append(('../assets/icon.ico', 'assets'))
 
 block_cipher = None
 
@@ -39,7 +40,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='NONE', # '../assets/icon.ico' if we had one
+    icon='assets/icon.ico',
 )
 coll = COLLECT(
     exe,

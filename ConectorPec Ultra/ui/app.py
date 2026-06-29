@@ -18,6 +18,11 @@ class ProBPAConnectorApp(ctk.CTk):
         self.title(f"ProBPA Conector Ultra v{__version__}")
         self.geometry("800x600")
         self.resizable(False, False)
+        
+        try:
+            self.iconbitmap("assets/icon.ico")
+        except:
+            pass
 
         # Configurando Grid Principal
         self.grid_rowconfigure(0, weight=1)
