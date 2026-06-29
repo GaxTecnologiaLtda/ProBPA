@@ -2,13 +2,14 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 import threading
+import uuid
 from config.settings import config_manager
 from core.updater import Updater
 from core.version import __version__
 
 # Configuração de Aparência
 ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+ctk.set_default_color_theme("blue") # Tom azul do ícone
 
 class ProBPAConnectorApp(ctk.CTk):
     def __init__(self):
@@ -16,147 +17,90 @@ class ProBPAConnectorApp(ctk.CTk):
 
         self.updater = Updater()
         self.title(f"ProBPA Conector Ultra v{__version__}")
-        self.geometry("800x600")
-        self.resizable(False, False)
+        
+        # Maximiza a tela por padrão
+        self.after(0, lambda: self.state('zoomed'))
         
         try:
             self.iconbitmap("assets/icon.ico")
         except:
             pass
 
-        # Configurando Grid Principal
+        # Configurando Grid Principal (2 colunas: Sidebar 0 e MainFrame 1)
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-        # TabView Principal
-        self.tab_view = ctk.CTkTabview(self)
-        self.tab_view.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
+        # Dados em memória
+        self.connections = config_manager.load_connections()
+        self.current_editing_id = None
 
-        self.tab_config = self.tab_view.add("Configuração BD")
-        self.tab_extracao = self.tab_view.add("Extração e Filtros")
-        self.tab_logs = self.tab_view.add("Sincronização e Logs")
+        # --- SIDEBAR ---
+        self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
+        self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
+        self.sidebar_frame.grid_rowconfigure(4, weight=1)
 
-        self._build_config_tab()
-        self._build_extracao_tab()
-        self._build_logs_tab()
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Conector Ultra", font=ctk.CTkFont(size=20, weight="bold"))
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 30))
+
+        self.btn_nav_home = ctk.CTkButton(self.sidebar_frame, corner_radius=0, height=40, border_spacing=10, text="Início",
+                                           fg_color="transparent", text_color=("gray10", "gray90"), hover_color=("gray70", "gray30"),
+                                           anchor="w", command=lambda: self.select_frame("home"))
+        self.btn_nav_home.grid(row=1, column=0, sticky="ew")
+
+        self.btn_nav_conns = ctk.CTkButton(self.sidebar_frame, corner_radius=0, height=40, border_spacing=10, text="Conexões",
+                                            fg_color="transparent", text_color=("gray10", "gray90"), hover_color=("gray70", "gray30"),
+                                            anchor="w", command=lambda: self.select_frame("conns"))
+        self.btn_nav_conns.grid(row=2, column=0, sticky="ew")
+
+        self.btn_nav_settings = ctk.CTkButton(self.sidebar_frame, corner_radius=0, height=40, border_spacing=10, text="Configurações",
+                                               fg_color="transparent", text_color=("gray10", "gray90"), hover_color=("gray70", "gray30"),
+                                               anchor="w", command=lambda: self.select_frame("settings"))
+        self.btn_nav_settings.grid(row=3, column=0, sticky="ew")
+
+
+        # --- MAIN FRAME ---
+        self.main_frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self.main_frame.grid(row=0, column=1, sticky="nsew")
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.main_frame.grid_columnconfigure(0, weight=1)
+
+        # Inicializando Telas (Frames Filhos)
+        self.frames = {}
+        self._build_home_frame()
+        self._build_conns_frame()
+        self._build_edit_conn_frame()
+        self._build_settings_frame()
+
+        # Seleciona Início por padrão
+        self.select_frame("home")
         
-        self.load_settings()
-        
-        # Check for updates in background
+        # Iniciar thread do updater
         threading.Thread(target=self.check_for_updates, daemon=True).start()
+
+    def select_frame(self, name):
+        # Destaca o botão selecionado na sidebar
+        self.btn_nav_home.configure(fg_color=("gray75", "gray25") if name == "home" else "transparent")
+        self.btn_nav_conns.configure(fg_color=("gray75", "gray25") if name in ["conns", "edit_conn"] else "transparent")
+        self.btn_nav_settings.configure(fg_color=("gray75", "gray25") if name == "settings" else "transparent")
+
+        # Mostra o frame correto
+        for frame_name, frame in self.frames.items():
+            if frame_name == name:
+                frame.grid(row=0, column=0, sticky="nsew")
+            else:
+                frame.grid_forget()
+
+        # Atualizações dinâmicas na mudança de tela
+        if name == "conns":
+            self._refresh_conns_list()
 
     def check_for_updates(self):
         self.log_message(f"Verificando atualizações (Versão atual: {__version__})...")
         available, info = self.updater.check_for_updates()
         if available:
             self.log_message(f"Nova atualização disponível: {info.get('version')}")
-            # Em uma implementação completa, você mostraria um popup aqui para o usuário decidir atualizar.
-            # messagebox.showinfo("Atualização", f"Nova versão {info.get('version')} disponível!")
         else:
-            self.log_message("Sistema atualizado.")
-
-    def _build_config_tab(self):
-        # Frame de credenciais do Banco
-        frame = ctk.CTkFrame(self.tab_config)
-        frame.pack(padx=20, pady=20, fill="both", expand=True)
-
-        ctk.CTkLabel(frame, text="Configurações do Banco de Dados (e-SUS PEC)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20, 10))
-
-        # Host e Porta
-        row1 = ctk.CTkFrame(frame, fg_color="transparent")
-        row1.pack(fill="x", padx=20, pady=5)
-        self.entry_host = ctk.CTkEntry(row1, placeholder_text="Host (ex: localhost)", width=200)
-        self.entry_host.pack(side="left", padx=(0, 10))
-        self.entry_port = ctk.CTkEntry(row1, placeholder_text="Porta (ex: 5432)", width=100)
-        self.entry_port.pack(side="left")
-
-        # Database Name
-        self.entry_db = ctk.CTkEntry(frame, placeholder_text="Nome do Banco (ex: esus)", width=310)
-        self.entry_db.pack(padx=20, pady=5, anchor="w")
-
-        # Usuário e Senha
-        row2 = ctk.CTkFrame(frame, fg_color="transparent")
-        row2.pack(fill="x", padx=20, pady=5)
-        self.entry_user = ctk.CTkEntry(row2, placeholder_text="Usuário (ex: postgres)", width=150)
-        self.entry_user.pack(side="left", padx=(0, 10))
-        self.entry_pwd = ctk.CTkEntry(row2, placeholder_text="Senha", show="*", width=150)
-        self.entry_pwd.pack(side="left")
-
-        # Configurações de API Gax
-        ctk.CTkLabel(frame, text="Credenciais da Nuvem (ProBPA API)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(30, 10))
-        self.entry_mun = ctk.CTkEntry(frame, placeholder_text="ID do Município (ex: aracaju_se)", width=310)
-        self.entry_mun.pack(padx=20, pady=5, anchor="w")
-        self.entry_token = ctk.CTkEntry(frame, placeholder_text="Token de Autenticação", show="*", width=310)
-        self.entry_token.pack(padx=20, pady=5, anchor="w")
-
-        btn_save = ctk.CTkButton(frame, text="Salvar Configurações", command=self.save_settings)
-        btn_save.pack(pady=30)
-
-    def _build_extracao_tab(self):
-        frame = ctk.CTkFrame(self.tab_extracao)
-        frame.pack(padx=20, pady=20, fill="both", expand=True)
-
-        ctk.CTkLabel(frame, text="Período de Extração de Dados", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(20, 10))
-
-        # Radio Buttons para Modo de Seleção
-        self.radio_var = tk.IntVar(value=1)
-        
-        row_radios = ctk.CTkFrame(frame, fg_color="transparent")
-        row_radios.pack(fill="x", padx=20, pady=10)
-        
-        ctk.CTkRadioButton(row_radios, text="Por Quadrimestre (Recomendado)", variable=self.radio_var, value=1, command=self._toggle_extracao_mode).pack(side="left", padx=(0, 20))
-        ctk.CTkRadioButton(row_radios, text="Período Personalizado", variable=self.radio_var, value=2, command=self._toggle_extracao_mode).pack(side="left")
-
-        # Frame Quadrimestre
-        self.frame_quad = ctk.CTkFrame(frame, fg_color="transparent")
-        self.frame_quad.pack(fill="x", padx=20, pady=10)
-        
-        self.combo_ano = ctk.CTkComboBox(self.frame_quad, values=["2024", "2025", "2026", "2027"], width=100)
-        self.combo_ano.pack(side="left", padx=(0, 10))
-        
-        self.combo_quad = ctk.CTkComboBox(self.frame_quad, values=["Q1 (Jan-Abr)", "Q2 (Mai-Ago)", "Q3 (Set-Dez)"], width=150)
-        self.combo_quad.pack(side="left")
-
-        # Frame Personalizado (Escondido inicialmente)
-        self.frame_custom = ctk.CTkFrame(frame, fg_color="transparent")
-        
-        ctk.CTkLabel(self.frame_custom, text="Data Início (YYYY-MM-DD):").pack(side="left")
-        self.entry_dt_ini = ctk.CTkEntry(self.frame_custom, width=120)
-        self.entry_dt_ini.pack(side="left", padx=(5, 15))
-        
-        ctk.CTkLabel(self.frame_custom, text="Data Fim (YYYY-MM-DD):").pack(side="left")
-        self.entry_dt_fim = ctk.CTkEntry(self.frame_custom, width=120)
-        self.entry_dt_fim.pack(side="left", padx=(5, 0))
-
-        # Agendamento
-        ctk.CTkLabel(frame, text="Agendamento Automático", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(30, 10))
-        row_sync = ctk.CTkFrame(frame, fg_color="transparent")
-        row_sync.pack(fill="x", padx=20, pady=5)
-        
-        ctk.CTkLabel(row_sync, text="Sincronizar a cada:").pack(side="left", padx=(0,10))
-        self.combo_sync = ctk.CTkComboBox(row_sync, values=["Desativado", "1 hora", "3 horas", "12 horas", "24 horas"], width=150)
-        self.combo_sync.pack(side="left")
-
-        # Start Button
-        btn_start = ctk.CTkButton(frame, text="Iniciar Sincronização Agora", fg_color="green", hover_color="darkgreen", command=self.start_sync)
-        btn_start.pack(pady=40)
-
-    def _build_logs_tab(self):
-        frame = ctk.CTkFrame(self.tab_logs)
-        frame.pack(padx=20, pady=20, fill="both", expand=True)
-
-        self.log_textbox = ctk.CTkTextbox(frame, width=700, height=400, state="disabled")
-        self.log_textbox.pack(pady=10)
-        
-        self.log_message("Sistema Inicializado. Aguardando comandos...")
-
-    def _toggle_extracao_mode(self):
-        if self.radio_var.get() == 1:
-            self.frame_custom.pack_forget()
-            self.frame_quad.pack(fill="x", padx=20, pady=10)
-        else:
-            self.frame_quad.pack_forget()
-            self.frame_custom.pack(fill="x", padx=20, pady=10)
+            self.log_message("Sistema atualizado. (Auto-Updater online)")
 
     def log_message(self, message):
         self.log_textbox.configure(state="normal")
@@ -164,49 +108,235 @@ class ProBPAConnectorApp(ctk.CTk):
         self.log_textbox.see("end")
         self.log_textbox.configure(state="disabled")
 
-    def load_settings(self):
-        config = config_manager.load_config()
-        if not config:
+    # ==========================================
+    # TELA 1: INÍCIO (Logs e Sinc Global)
+    # ==========================================
+    def _build_home_frame(self):
+        self.frames["home"] = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.frames["home"].grid_rowconfigure(1, weight=1)
+        self.frames["home"].grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self.frames["home"], fg_color="transparent")
+        header.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        
+        ctk.CTkLabel(header, text="Painel Global de Sincronização", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
+        
+        btn_sync_all = ctk.CTkButton(header, text="▶ Executar Todos", fg_color="green", hover_color="darkgreen", 
+                                     command=lambda: self.start_sync("all"))
+        btn_sync_all.pack(side="right")
+
+        self.log_textbox = ctk.CTkTextbox(self.frames["home"], state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
+        self.log_textbox.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+
+    # ==========================================
+    # TELA 2: LISTAGEM DE CONEXÕES
+    # ==========================================
+    def _build_conns_frame(self):
+        self.frames["conns"] = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.frames["conns"].grid_rowconfigure(1, weight=1)
+        self.frames["conns"].grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self.frames["conns"], fg_color="transparent")
+        header.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+
+        ctk.CTkLabel(header, text="Municípios Configurados", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
+
+        btn_add = ctk.CTkButton(header, text="+ Adicionar Município", command=self._open_new_conn_form)
+        btn_add.pack(side="right")
+
+        self.scrollable_conns = ctk.CTkScrollableFrame(self.frames["conns"], fg_color="transparent")
+        self.scrollable_conns.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+
+    def _refresh_conns_list(self):
+        # Limpa widgets atuais
+        for widget in self.scrollable_conns.winfo_children():
+            widget.destroy()
+
+        if not self.connections:
+            ctk.CTkLabel(self.scrollable_conns, text="Nenhum município cadastrado. Clique em Adicionar.").pack(pady=50)
             return
-            
-        self.entry_host.insert(0, config.get("db_host", ""))
-        self.entry_port.insert(0, config.get("db_port", "5432"))
-        self.entry_db.insert(0, config.get("db_name", "esus"))
-        self.entry_user.insert(0, config.get("db_user", "postgres"))
-        self.entry_pwd.insert(0, config.get("db_password", ""))
-        self.entry_mun.insert(0, config.get("municipio_id", ""))
-        self.entry_token.insert(0, config.get("api_token", ""))
 
-    def save_settings(self):
-        config = {
-            "db_host": self.entry_host.get(),
-            "db_port": self.entry_port.get(),
-            "db_name": self.entry_db.get(),
-            "db_user": self.entry_user.get(),
-            "db_password": self.entry_pwd.get(),
-            "municipio_id": self.entry_mun.get(),
-            "api_token": self.entry_token.get()
-        }
-        config_manager.save_config(config)
-        messagebox.showinfo("Sucesso", "Configurações salvas com sucesso!")
-        self.log_message("Configurações atualizadas.")
+        for conn in self.connections:
+            row = ctk.CTkFrame(self.scrollable_conns, fg_color=("gray85", "gray15"), corner_radius=8)
+            row.pack(fill="x", pady=5, padx=5)
 
-    def start_sync(self):
-        self.tab_view.set("Sincronização e Logs")
-        self.log_message("Iniciando processo de sincronização...")
+            mun_name = conn.get("municipio_id", "Sem ID")
+            db_name = conn.get("db_name", "?")
+
+            info_label = ctk.CTkLabel(row, text=f"📍 {mun_name} (BD: {db_name})", font=ctk.CTkFont(size=14, weight="bold"))
+            info_label.pack(side="left", padx=20, pady=15)
+
+            btn_sync = ctk.CTkButton(row, text="▶ Executar", width=80, fg_color="green", hover_color="darkgreen",
+                                     command=lambda c=conn: self.start_sync(c["id"]))
+            btn_sync.pack(side="right", padx=(10, 20), pady=15)
+
+            btn_edit = ctk.CTkButton(row, text="✏️ Editar", width=80, fg_color="transparent", border_width=1,
+                                     command=lambda c=conn: self._open_edit_conn_form(c))
+            btn_edit.pack(side="right", padx=10, pady=15)
+
+    # ==========================================
+    # TELA 3: FORMULÁRIO DE CONEXÃO
+    # ==========================================
+    def _build_edit_conn_frame(self):
+        self.frames["edit_conn"] = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         
-        if self.radio_var.get() == 1:
-            ano = self.combo_ano.get()
-            quad = self.combo_quad.get()
-            self.log_message(f"Modo: Quadrimestral - {quad} de {ano}")
+        # Precisamos de um header com botão de voltar
+        header = ctk.CTkFrame(self.frames["edit_conn"], fg_color="transparent")
+        header.pack(fill="x", padx=20, pady=20)
+        
+        ctk.CTkButton(header, text="⬅ Voltar", width=60, fg_color="transparent", border_width=1,
+                      command=lambda: self.select_frame("conns")).pack(side="left")
+        self.lbl_form_title = ctk.CTkLabel(header, text="Editar Município", font=ctk.CTkFont(size=24, weight="bold"))
+        self.lbl_form_title.pack(side="left", padx=20)
+
+        # Form content
+        form = ctk.CTkScrollableFrame(self.frames["edit_conn"], fg_color="transparent")
+        form.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+
+        # DB
+        ctk.CTkLabel(form, text="Banco de Dados (e-SUS PEC)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(10, 5), anchor="w")
+        self.e_host = ctk.CTkEntry(form, placeholder_text="Host", width=200); self.e_host.pack(pady=5, anchor="w")
+        self.e_port = ctk.CTkEntry(form, placeholder_text="Porta", width=200); self.e_port.pack(pady=5, anchor="w")
+        self.e_db = ctk.CTkEntry(form, placeholder_text="Database", width=200); self.e_db.pack(pady=5, anchor="w")
+        self.e_user = ctk.CTkEntry(form, placeholder_text="User", width=200); self.e_user.pack(pady=5, anchor="w")
+        self.e_pwd = ctk.CTkEntry(form, placeholder_text="Password", show="*", width=200); self.e_pwd.pack(pady=5, anchor="w")
+
+        # API
+        ctk.CTkLabel(form, text="Credenciais Nuvem (ProBPA)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 5), anchor="w")
+        self.e_mun = ctk.CTkEntry(form, placeholder_text="ID do Município", width=300); self.e_mun.pack(pady=5, anchor="w")
+        self.e_token = ctk.CTkEntry(form, placeholder_text="Token de Autenticação", show="*", width=300); self.e_token.pack(pady=5, anchor="w")
+
+        # Filtros Extração
+        ctk.CTkLabel(form, text="Filtros de Extração", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 5), anchor="w")
+        self.radio_var = tk.StringVar(value="quad")
+        ctk.CTkRadioButton(form, text="Por Quadrimestre", variable=self.radio_var, value="quad").pack(pady=5, anchor="w")
+        
+        quad_frame = ctk.CTkFrame(form, fg_color="transparent")
+        quad_frame.pack(fill="x", pady=5)
+        self.e_ano = ctk.CTkComboBox(quad_frame, values=["2024", "2025", "2026", "2027"], width=100); self.e_ano.pack(side="left", padx=(0,10))
+        self.e_quad = ctk.CTkComboBox(quad_frame, values=["Q1", "Q2", "Q3"], width=80); self.e_quad.pack(side="left")
+
+        ctk.CTkRadioButton(form, text="Período Personalizado", variable=self.radio_var, value="custom").pack(pady=(10,5), anchor="w")
+        custom_frame = ctk.CTkFrame(form, fg_color="transparent")
+        custom_frame.pack(fill="x", pady=5)
+        self.e_dtini = ctk.CTkEntry(custom_frame, placeholder_text="YYYY-MM-DD", width=120); self.e_dtini.pack(side="left", padx=(0,10))
+        self.e_dtfim = ctk.CTkEntry(custom_frame, placeholder_text="YYYY-MM-DD", width=120); self.e_dtfim.pack(side="left")
+
+        btn_save = ctk.CTkButton(form, text="Salvar Conexão", command=self._save_connection)
+        btn_save.pack(pady=30, anchor="w")
+
+    def _clear_form(self):
+        for entry in [self.e_host, self.e_port, self.e_db, self.e_user, self.e_pwd, self.e_mun, self.e_token, self.e_dtini, self.e_dtfim]:
+            entry.delete(0, 'end')
+
+    def _open_new_conn_form(self):
+        self.current_editing_id = None
+        self.lbl_form_title.configure(text="Nova Conexão")
+        self._clear_form()
+        
+        # Padrões
+        self.e_host.insert(0, "localhost")
+        self.e_port.insert(0, "5432")
+        self.e_db.insert(0, "esus")
+        self.e_user.insert(0, "postgres")
+        
+        self.select_frame("edit_conn")
+
+    def _open_edit_conn_form(self, conn_dict):
+        self.current_editing_id = conn_dict["id"]
+        self.lbl_form_title.configure(text=f"Editar {conn_dict.get('municipio_id')}")
+        self._clear_form()
+
+        self.e_host.insert(0, conn_dict.get("db_host", ""))
+        self.e_port.insert(0, conn_dict.get("db_port", ""))
+        self.e_db.insert(0, conn_dict.get("db_name", ""))
+        self.e_user.insert(0, conn_dict.get("db_user", ""))
+        self.e_pwd.insert(0, conn_dict.get("db_password", ""))
+        self.e_mun.insert(0, conn_dict.get("municipio_id", ""))
+        self.e_token.insert(0, conn_dict.get("api_token", ""))
+        
+        tipo = conn_dict.get("extracao_tipo", "quad")
+        self.radio_var.set(tipo)
+        if tipo == "quad":
+            self.e_ano.set(conn_dict.get("extracao_ano", "2024"))
+            self.e_quad.set(conn_dict.get("extracao_quad", "Q1"))
         else:
-            dt_ini = self.entry_dt_ini.get()
-            dt_fim = self.entry_dt_fim.get()
-            self.log_message(f"Modo: Personalizado - De {dt_ini} a {dt_fim}")
-            
-        self.log_message("Conectando ao banco de dados e-SUS PEC local...")
-        # TODO: Chamar rotina do engine_extractor.py em uma thread separada
+            self.e_dtini.insert(0, conn_dict.get("dt_ini", ""))
+            self.e_dtfim.insert(0, conn_dict.get("dt_fim", ""))
+
+        self.select_frame("edit_conn")
+
+    def _save_connection(self):
+        conn_data = {
+            "id": self.current_editing_id or str(uuid.uuid4()),
+            "db_host": self.e_host.get(),
+            "db_port": self.e_port.get(),
+            "db_name": self.e_db.get(),
+            "db_user": self.e_user.get(),
+            "db_password": self.e_pwd.get(),
+            "municipio_id": self.e_mun.get(),
+            "api_token": self.e_token.get(),
+            "extracao_tipo": self.radio_var.get(),
+            "extracao_ano": self.e_ano.get(),
+            "extracao_quad": self.e_quad.get(),
+            "dt_ini": self.e_dtini.get(),
+            "dt_fim": self.e_dtfim.get()
+        }
+
+        # Atualiza lista em memória
+        if self.current_editing_id:
+            for i, c in enumerate(self.connections):
+                if c["id"] == self.current_editing_id:
+                    self.connections[i] = conn_data
+                    break
+        else:
+            self.connections.append(conn_data)
+
+        # Salva no disco via Manager
+        config_manager.save_connections(self.connections)
+        messagebox.showinfo("Sucesso", "Município salvo com sucesso!")
+        self.select_frame("conns")
+
+    # ==========================================
+    # TELA 4: CONFIGURAÇÕES
+    # ==========================================
+    def _build_settings_frame(self):
+        self.frames["settings"] = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         
+        header = ctk.CTkFrame(self.frames["settings"], fg_color="transparent")
+        header.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        ctk.CTkLabel(header, text="Configurações do Sistema", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
+
+        ctk.CTkLabel(self.frames["settings"], text=f"Versão Instalada: v{__version__}", font=ctk.CTkFont(size=14)).grid(row=1, column=0, padx=20, pady=10, sticky="w")
+        
+        btn_update = ctk.CTkButton(self.frames["settings"], text="Verificar Atualizações Agora", 
+                                   command=self._manual_update_check)
+        btn_update.grid(row=2, column=0, padx=20, pady=20, sticky="w")
+
+    def _manual_update_check(self):
+        available, info = self.updater.check_for_updates()
+        if available:
+            messagebox.showinfo("Atualização", f"Nova versão {info.get('version')} disponível. O Updater será acionado.")
+        else:
+            messagebox.showinfo("Atualização", "O sistema já está na versão mais recente.")
+
+    # ==========================================
+    # EXECUÇÃO (Mocks provisórios para o Engine)
+    # ==========================================
+    def start_sync(self, target_id):
+        self.select_frame("home")
+        
+        if target_id == "all":
+            self.log_message(f"\n[SISTEMA] Iniciando extração de TODOS os {len(self.connections)} municípios configurados.")
+            for c in self.connections:
+                self.log_message(f" >> Na fila: {c.get('municipio_id')}")
+        else:
+            target = next((c for c in self.connections if c["id"] == target_id), None)
+            if target:
+                self.log_message(f"\n[SISTEMA] Iniciando extração EXCLUSIVA: {target.get('municipio_id')}")
+        
+        self.log_message("[MOTOR] Em breve o engine será acoplado aqui.")
+
 if __name__ == "__main__":
     app = ProBPAConnectorApp()
     app.mainloop()
