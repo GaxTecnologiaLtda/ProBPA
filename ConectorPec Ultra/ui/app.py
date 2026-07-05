@@ -175,6 +175,7 @@ class ProBPAConnectorApp(ctk.CTk):
             self._refresh_conns_list()
 
     def check_for_updates(self):
+        self.log_message("\nATUALIZAÇÕES\n----------------")
         self.log_message(f"Verificando atualizações (Versão atual: {__version__})...")
         available, info = self.updater.check_for_updates()
         if available:
@@ -194,6 +195,11 @@ class ProBPAConnectorApp(ctk.CTk):
                 pass
         self.after(0, append_log)
 
+    def clear_logs(self):
+        self.log_textbox.configure(state="normal")
+        self.log_textbox.delete("1.0", "end")
+        self.log_textbox.configure(state="disabled")
+
     # ==========================================
     # TELA 1: INÍCIO (Logs e Sinc Global)
     # ==========================================
@@ -209,7 +215,11 @@ class ProBPAConnectorApp(ctk.CTk):
         
         btn_sync_all = ctk.CTkButton(header, text="▶ Executar Todos", fg_color="green", hover_color="darkgreen", 
                                      command=lambda: self.start_sync("all"))
-        btn_sync_all.pack(side="right")
+        btn_sync_all.pack(side="right", padx=(10, 0))
+
+        btn_clear_logs = ctk.CTkButton(header, text="🧹 Limpar Logs", fg_color="transparent", border_width=1, hover_color=("gray70", "gray30"),
+                                       command=self.clear_logs)
+        btn_clear_logs.pack(side="right")
 
         # Barra de Progresso do Updater (Oculta por Padrão)
         self.download_progress = ctk.CTkProgressBar(self.frames["home"], height=10)
@@ -440,6 +450,7 @@ class ProBPAConnectorApp(ctk.CTk):
     # ==========================================
     def start_sync(self, target_id):
         self.select_frame("home")
+        self.log_message("\nEXTRAÇÕES\n----------------")
         
         if target_id == "all":
             print(f"\n[SISTEMA] Iniciando extração de TODOS os {len(self.connections)} municípios configurados.")
