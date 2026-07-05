@@ -70,8 +70,8 @@ class Updater:
             print(f"[Updater] Download complete: {temp_path}")
             print("[Updater] Launching installer and exiting...")
 
-            # Launch Setup.exe silently
-            subprocess.Popen([temp_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
+            # Launch Setup.exe silently, forcing close of any remaining instances
+            subprocess.Popen([temp_path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/FORCECLOSEAPPLICATIONS"])
             
             # Kill current app to allow overwrite
             os._exit(0)
