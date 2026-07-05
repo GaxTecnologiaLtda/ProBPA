@@ -12,6 +12,7 @@ from config.settings import config_manager
 from core.updater import Updater
 from core.version import __version__
 from core.single_instance import SingleInstance
+from core.engine import ExtractionEngine
 
 def resource_path(relative_path):
     try:
@@ -23,6 +24,17 @@ def resource_path(relative_path):
 # Configuração de Aparência
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue") # Tom azul do ícone
+
+class StdoutRedirector:
+    def __init__(self, ui_app):
+        self.ui_app = ui_app
+
+    def write(self, message):
+        if message.strip():
+            self.ui_app.log_message(message.strip())
+
+    def flush(self):
+        pass
 
 class ProBPAConnectorApp(ctk.CTk):
     def __init__(self):
@@ -103,6 +115,13 @@ class ProBPAConnectorApp(ctk.CTk):
         # Seleciona Início por padrão
         self.select_frame("home")
         
+        # Redireciona stdout para a tela de logs
+        sys.stdout = StdoutRedirector(self)
+
+        # Inicia a Engine de extração
+        self.engine = ExtractionEngine()
+        self.engine.start()
+
         # Iniciar threads
         threading.Thread(target=self.check_for_updates, daemon=True).start()
         threading.Thread(target=self.setup_tray, daemon=True).start()
@@ -133,6 +152,8 @@ class ProBPAConnectorApp(ctk.CTk):
         if self.tray_icon:
             self.tray_icon.stop()
         self.single_instance.cleanup()
+        if hasattr(self, 'engine'):
+            self.engine.stop()
         self.quit()
         sys.exit(0)
 
@@ -162,10 +183,16 @@ class ProBPAConnectorApp(ctk.CTk):
             self.log_message("Sistema atualizado. (Auto-Updater online)")
 
     def log_message(self, message):
-        self.log_textbox.configure(state="normal")
-        self.log_textbox.insert("end", message + "\n")
-        self.log_textbox.see("end")
-        self.log_textbox.configure(state="disabled")
+        # As threads secundárias precisam chamar a interface de forma segura via .after()
+        def append_log():
+            try:
+                self.log_textbox.configure(state="normal")
+                self.log_textbox.insert("end", message + "\n")
+                self.log_textbox.see("end")
+                self.log_textbox.configure(state="disabled")
+            except Exception:
+                pass
+        self.after(0, append_log)
 
     # ==========================================
     # TELA 1: INÍCIO (Logs e Sinc Global)
@@ -380,21 +407,20 @@ class ProBPAConnectorApp(ctk.CTk):
             messagebox.showinfo("Atualização", "O sistema já está na versão mais recente.")
 
     # ==========================================
-    # EXECUÇÃO (Mocks provisórios para o Engine)
+    # EXECUÇÃO DA EXTRAÇÃO
     # ==========================================
     def start_sync(self, target_id):
         self.select_frame("home")
         
         if target_id == "all":
-            self.log_message(f"\n[SISTEMA] Iniciando extração de TODOS os {len(self.connections)} municípios configurados.")
+            print(f"\n[SISTEMA] Iniciando extração de TODOS os {len(self.connections)} municípios configurados.")
             for c in self.connections:
-                self.log_message(f" >> Na fila: {c.get('municipio_id')}")
+                self.engine.trigger_manual_extraction(c["id"])
         else:
             target = next((c for c in self.connections if c["id"] == target_id), None)
             if target:
-                self.log_message(f"\n[SISTEMA] Iniciando extração EXCLUSIVA: {target.get('municipio_id')}")
-        
-        self.log_message("[MOTOR] Em breve o engine será acoplado aqui.")
+                print(f"\n[SISTEMA] Disparando extração para: {target.get('municipio_id')}")
+                self.engine.trigger_manual_extraction(target_id)
 
 if __name__ == "__main__":
     app = ProBPAConnectorApp()
