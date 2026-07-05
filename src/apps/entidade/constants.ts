@@ -484,7 +484,6 @@ export const CBO_LIST = [
       { value: '225250', label: '225250 – Médico Ginecologista e Obstetra' },
       { value: '225142', label: '225142 – Médico da Estratégia de Saúde da Família' },
       { value: '225130', label: '225130 – Médico de Família e Comunidade' },
-      { value: '225170', label: '225170 – Médico Generalista' },
       { value: '225120', label: '225120 – Médico Cardiologista' },
       { value: '225135', label: '225135 – Médico Dermatologista' },
       { value: '225133', label: '225133 – Médico Psiquiatra' },
@@ -647,7 +646,8 @@ export const CBO_LIST = [
       { value: '223305', label: '223305 – Médico Veterinário' },
       { value: '422205', label: '422205 – Telefonista' },
       { value: '422210', label: '422210 – Teleoperador' },
-      { value: '422220', label: '422220 – Operador de Rádio Chamada' }
+      { value: '422220', label: '422220 – Operador de Rádio Chamada' },
+      { value: '791115', label: '791115 – ARTESAO COM MATERIAL RECICLAVEL' }
     ]
   }
 ];

@@ -402,9 +402,22 @@ class ProBPAConnectorApp(ctk.CTk):
     def _manual_update_check(self):
         available, info = self.updater.check_for_updates()
         if available:
-            messagebox.showinfo("Atualização", f"Nova versão {info.get('version')} disponível. O Updater será acionado.")
+            resposta = messagebox.askyesno("Atualização Disponível", f"Nova versão {info.get('version')} disponível.\n\nDeseja baixar e instalar a atualização agora?")
+            if resposta:
+                self._iniciar_download_atualizacao(info.get('download_url'))
         else:
             messagebox.showinfo("Atualização", "O sistema já está na versão mais recente.")
+
+    def _iniciar_download_atualizacao(self, url):
+        self.log_message(f"[Updater] Iniciando download da atualização a partir de: {url} ...")
+        def worker():
+            try:
+                self.updater.download_and_install(url, progress_callback=lambda p: self.log_message(f"[Updater] Baixando... {int(p*100)}%"))
+            except Exception as e:
+                self.log_message(f"[Updater] Erro ao atualizar: {e}")
+        
+        messagebox.showinfo("Download Iniciado", "O download da atualização começou em segundo plano. Você pode acompanhar o progresso no Painel Global de Sincronização.")
+        threading.Thread(target=worker, daemon=True).start()
 
     # ==========================================
     # EXECUÇÃO DA EXTRAÇÃO
