@@ -7,6 +7,14 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [v3.5.8] - 2026-04-04
+### Added
+- **Resilience**: Introduzida a métrica independente `last_run_attempt` para gerenciar ciclos de agendamento de forma imune a falhas dos bancos locais. A extração incremental continua protegida utilizando `last_run_success`.
+
+## [v3.5.7] - 2026-04-04
+### Fixed
+- **Multi-Tenant Fix**: Resolvido vazamento de escopo (variável `has_error`) no motor de extração descentralizada. Uma falha de conexão (ex: Timeout) em um município não interrompe mais o ciclo de sucesso dos municípios subsequentes.
+
 ## [v3.4.1] - 2026-02-04
 ### Fixed
 - **CRITICAL HOTFIX**: Correção de crash (`AttributeError: log_history`) ao finalizar o ciclo de extração com sucesso.

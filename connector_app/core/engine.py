@@ -29,7 +29,6 @@ class PecConnectorEngine:
 
     def extract_and_send(self, force: bool = False) -> Generator[tuple, None, None]:
         self.aborted = False
-        has_error = False
         
         municipalities = self.config.get_municipalities()
         if not municipalities:
@@ -38,6 +37,7 @@ class PecConnectorEngine:
 
         for mun in municipalities:
             if self.aborted: return
+            has_error = False
             
             mun_name = mun.get('municipality_name', 'Desconhecido')
             mun_id = mun.get('municipality_id', '???')
@@ -47,11 +47,12 @@ class PecConnectorEngine:
             # --- CONTEXTUAL INCREMENTAL LOGIC FOR THIS MUNICIPALITY ---
             interval_setting = mun.get("scheduler_interval", "1 hora")
             last_run = mun.get("last_run_success")
+            last_attempt = mun.get("last_run_attempt") or last_run
             
             # Check if execution is due
-            if not force and last_run and interval_setting != "Manual":
+            if not force and last_attempt and interval_setting != "Manual":
                 try:
-                    last_run_dt = datetime.fromisoformat(last_run)
+                    last_attempt_dt = datetime.fromisoformat(last_attempt)
                     minutes = 60
                     if "minuto" in interval_setting: minutes = int(interval_setting.split()[0])
                     elif "hora" in interval_setting:
@@ -61,7 +62,7 @@ class PecConnectorEngine:
                         try: minutes = int(interval_setting)
                         except: pass
                     
-                    if (datetime.now() - last_run_dt).total_seconds() / 60 < minutes:
+                    if (datetime.now() - last_attempt_dt).total_seconds() / 60 < minutes:
                         yield ('INFO', f"Aguardando próximo ciclo agendado...", mun_id)
                         continue
                 except:
@@ -375,6 +376,7 @@ class PecConnectorEngine:
                 yield ('ERROR', f"Erro de extração em {mun_name}: {e}", mun_id)
                 if conn: conn.rollback()
             finally:
+                self.config.set_municipality_last_attempt(mun_id, datetime.now().isoformat())
                 if conn: conn.close()
                 if self.aborted:
                     yield ('WARNING', "Processo abortado pelo usuário durante a iteração.", mun_id)

@@ -56,18 +56,33 @@ service cloud.firestore {
       // PUBLIC REGISTRATION: Allow read of minimal entity info
       allow read: if true; 
 
-      // 🔐 ACTIONS (Subcollection)
-      match /actions/{actionId} {
+      // 🔐 ACTIONS PROFESSIONALS (Nested Subcollection Structure - professionalsActions)
+      match /professionalsActions/{profId} {
+        // Admin: Full Access
+        allow read, write: if isAdmin();
+        
         // Master: Full Access
         allow read, write: if isMasterOf(entityId);
         
         // Coordenação: Read/Write
-        // Requirement: "Preservar funcionalidade total em Ações e Programas"
         allow read, write: if isCoordinationOf(entityId);
         
-        // Subsede: Read Only (Everything or just linked? Usually all entity actions are visible if global, 
-        // but if we want to restrict to municipalityId... User didn't specify strict read restriction, just create restriction. 
-        // Let's allow read for all entity actions for now to be safe, or scope it if issues arise.)
+        // Subsede: Read Only
+        allow read: if isSubsedeOf(entityId);
+
+        // Professional: Read Only
+        allow read: if request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId;
+      }
+
+      // 🔐 ACTIONS (Nested Subcollection Structure - Competence Based)
+      match /actions/{competence}/actions/{actionId} {
+        // Master: Full Access
+        allow read, write: if isMasterOf(entityId);
+        
+        // Coordenação: Read/Write
+        allow read, write: if isCoordinationOf(entityId);
+        
+        // Subsede: Read Only
         allow read: if isSubsedeOf(entityId);
 
         // Professional: Read Only
@@ -75,16 +90,24 @@ service cloud.firestore {
 
         // Subcollection: PRODUCTION
         match /production/{prodId} {
-            // Who can register production? 
-            // Usually any professional or coordination/master.
             allow read, write: if isMasterOf(entityId)
                                || isCoordinationOf(entityId)
                                || isSubsedeOf(entityId)
-                               // Professional can register their own production or generally add?
-                               // Production form has "Patient" and "Procedure". Doesn't strictly link to "Professional" field in doc?
-                               // Let's allow Professionals to read/write.
                                || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
         }
+      }
+
+      // 🔐 COLLECTION GROUP: PRODUCTION (For Action Patient Fixes)
+      match /{path=**}/production/{prodId} {
+          allow read: if isAdmin()
+                      || isMasterOf(resource.data.entityId)
+                      || isCoordinationOf(resource.data.entityId)
+                      || isSubsedeOf(resource.data.entityId);
+                      
+          allow update: if isAdmin()
+                        || isMasterOf(resource.data.entityId)
+                        || isCoordinationOf(resource.data.entityId)
+                        || isSubsedeOf(resource.data.entityId);
       }
       
       // 🔐 NOTIFICATIONS (Subcollection)
@@ -106,6 +129,28 @@ service cloud.firestore {
 
           // Create: Public (Triggers)
           allow create: if true;
+      }
+      
+      // 🔐 PERSONS (Patients subcollection)
+      match /persons/{personId} {
+          allow read, write: if isMasterOf(entityId)
+                            || isCoordinationOf(entityId)
+                            || isSubsedeOf(entityId)
+                            || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
+      }
+
+      // 🔐 LOG ACTIONS (Auditoria direta da entidade)
+      match /logActions/{logId} {
+          allow read, write: if isAdmin();
+          allow create: if isMasterOf(entityId) 
+                        || isCoordinationOf(entityId) 
+                        || isSubsedeOf(entityId) 
+                        || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId) 
+                        || request.auth != null;
+          allow read: if isMasterOf(entityId) 
+                      || isCoordinationOf(entityId) 
+                      || (isSubsedeOf(entityId) && (resource.data.municipalityId == null || resource.data.municipalityId == request.auth.token.municipalityId))
+                      || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
       }
     }
 
@@ -157,33 +202,7 @@ service cloud.firestore {
       // PUBLIC REGISTRATION: Allow read to resolve names (risk: scraping)
       allow read: if true;
 
-      // 🔐 ACTIONS (Subcollection for Dual Write)
-      match /actions/{actionId} {
-        // Master: Allow if they manage the Entity linked to this Action
-        allow read, write: if isMasterOf(resource.data.entityId) 
-                           || isMasterOf(request.resource.data.entityId);
 
-        // Coordenação: Read, Write
-        allow read, write: if isCoordinationOf(resource.data.entityId)
-                           || isCoordinationOf(request.resource.data.entityId);
-        
-        // Subsede: Read restricted to this Municipality
-        allow read: if isSubsedeOf(resource.data.entityId) && municipalityId == request.auth.token.municipalityId;
-
-        // Professional: Read
-        allow read: if request.auth.token.role == "PROFESSIONAL" 
-                    && request.auth.token.entityId == resource.data.entityId;
-
-        // 🔐 PRODUCTION (Sub-subcollection)
-        match /production/{prodId} {
-             allow read, write: if isMasterOf(request.resource.data.entityId) 
-                                || isMasterOf(resource.data.entityId)
-                                || isCoordinationOf(resource.data.entityId)
-                                || isCoordinationOf(request.resource.data.entityId)
-                                || (isSubsedeOf(resource.data.entityId) && municipalityId == request.auth.token.municipalityId)
-                                || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == (resource.data.entityId || request.resource.data.entityId));
-        }
-      }
     }
 
     ///////////////////////////////////////////
@@ -278,12 +297,13 @@ service cloud.firestore {
              allow create: if isMasterOf(entityId)
                            || (request.auth.token.role == "PROFESSIONAL" 
                                && request.auth.token.professionalId == professionalId
-                               && request.auth.token.entityId == entityId);
+                               && request.auth.token.entityId == entityId)
+                           || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
              allow read, update, delete: if isMasterOf(entityId)
                                          || isCoordinationOf(entityId)
                                          || (request.auth.token.role == "PROFESSIONAL" 
                                              && request.auth.token.professionalId == professionalId)
-                                         // SUBSEDE (Read Only, Scoped)
+                                         // SUBSEDE (Read/Write, Scoped)
                                          || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
         }
 
@@ -297,6 +317,8 @@ service cloud.firestore {
              
              allow create, update, delete: if isAdmin() 
                                            || isMasterOf(entityId);
+             
+             allow update: if isCoordinationOf(entityId);
                                            
              // PUBLIC REGISTRATION: Allow create (Sync Context)
              allow create: if true;
@@ -319,6 +341,30 @@ service cloud.firestore {
                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId)
                         || (request.auth.token.role == "PROFESSIONAL" && request.auth.token.entityId == entityId);
             allow read: if true; // PUBLIC REGISTRATION
+        }
+
+        // 🔐 Registration Backups (Auditoria de Cadastros)
+        match /registration_backups/{backupId} {
+             // Admin/Master can list and read backups for restore
+             allow read, write, delete: if isAdmin() || isMasterOf(entityId);
+             
+             // System allows unauthenticated create from the public registration form
+             allow create: if true;
+        }
+
+        // 🔐 Preferences (Configurações UI/UX)
+        match /preferences/{prefId} {
+            // Todos leem
+            allow read: if isAdmin()
+                        || isMasterOf(entityId)
+                        || isCoordinationOf(entityId)
+                        || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
+            
+            // Só quem tem poder de gerência pode alterar ordem de tabela
+            allow write: if isAdmin()
+                         || isMasterOf(entityId)
+                         || (isCoordinationOf(entityId))
+                         || (isSubsedeOf(entityId) && municipalityId == request.auth.token.municipalityId);
         }
 
         // 🔐 Goals (Nova Estrutura Hierárquica)
@@ -492,7 +538,9 @@ service cloud.firestore {
        allow create: if true; // Validation logic should be in backend triggers ideally or limited here (e.g. active == true)
        
        allow create: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && request.resource.data.entityId == request.auth.token.entityId);
-       allow update: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId);
+       allow update: if isAdmin() 
+                     || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId)
+                     || (request.auth != null && request.auth.token.role == "COORDENAÇÃO" && resource.data.entityId == request.auth.token.entityId && request.resource.data.entityId == request.auth.token.entityId);
        allow delete: if isAdmin() || (request.auth != null && request.auth.token.role == "MASTER" && resource.data.entityId == request.auth.token.entityId);
     }
 
@@ -622,6 +670,13 @@ service cloud.firestore {
                   || (request.auth.token.role == "SUBSEDE" && resource.data.entityId == request.auth.token.entityId && resource.data.municipalityId == request.auth.token.municipalityId)
                   // Allow if user has entityId claim matching resource (broader check for safety)
                   || (request.auth.token.entityId == resource.data.entityId);
+    }
+
+    ///////////////////////////////////////////
+    // 🔐 12d. Collection Group: RESUMO_PRODUCAO (Aggregated Production)
+    ///////////////////////////////////////////
+    match /{path=**}/resumo_producao/{resumoId} {
+      allow read: if isAdmin();
     }
 
     ///////////////////////////////////////////
@@ -790,7 +845,7 @@ service cloud.firestore {
         // We can allow any authenticated user to create a log if they provide valid context.
         allow create: if request.auth != null && request.resource.data.entityId == request.auth.token.entityId;
     }
-    
+
     ///////////////////////////////////////////
     // 🔐 18. Coleção EXTRACTED_PRODUCTION (Dados do Conector)
     ///////////////////////////////////////////
@@ -820,6 +875,12 @@ service cloud.firestore {
       
       // Writes are strictly done via Cloud Functions (Admin SDK) bypassing these rules.
       allow write: if false;
+    }
+
+    match /externalApiIntegrationLogs/{logId} {
+      // Only Admins can read integration logs
+      allow read: if isAdmin();
+      allow write: if false; // Only Cloud Functions (Admin SDK)
     }
 
     match /{path=**} {

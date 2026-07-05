@@ -155,6 +155,20 @@ class ConfigManager:
         self.config_cache["municipalities"] = muns
         self._save_cache_to_disk()
 
+    def set_municipality_last_attempt(self, municipality_id: str, timestamp_iso: str):
+        if self.config_cache is None:
+            self.config_cache = self._load_config_internal()
+        if not self.config_cache: return
+        
+        muns = self.config_cache.get("municipalities", [])
+        for m in muns:
+            if m.get("municipality_id") == municipality_id:
+                m["last_run_attempt"] = timestamp_iso
+                break
+                
+        self.config_cache["municipalities"] = muns
+        self._save_cache_to_disk()
+
     def _save_cache_to_disk(self):
         json_str = json.dumps(self.config_cache)
         encrypted_data = self.cipher.encrypt(json_str.encode())

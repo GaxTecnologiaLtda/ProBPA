@@ -19,6 +19,8 @@ Utilizaremos uma Rede Virtual Privada (VPN) chamada **Tailscale**, que implement
    ```bash
    tailscale up --authkey=CHAVE_FORNECIDA_PELO_SUPORTE
    ```
+   > ⚠️ **Atenção**: Se o terminal disser que `'tailscale' não é reconhecido como um comando interno`, feche o terminal CMD e abra-o novamente como Administrador. Se o erro persistir, digite `cd "C:\Program Files\Tailscale"` e tente o comando `tailscale up` novamente.
+
 6. Aguarde processar. Se não houver erros, obtenha seu **IP Criptografado** com o comando:
    ```bash
    tailscale ip -4
@@ -61,18 +63,43 @@ Agora que as máquinas estão na mesma rede privada, precisamos avisar o Postgre
    - Salve e feche o arquivo.
 
 3. Na mesma pasta, localize o arquivo **`pg_hba.conf`**:
-   - Abra-o com o **Bloco de Notas**.
-   - Vá até a última linha do arquivo. Adicione a regra abaixo para permitir conexões da rede do Tailscale (`100.x.x.x`):
+   - Abra-o com o **Bloco de Notas** (ou preferencialmente **Notepad++**).
+   - Vá até a última linha do arquivo. Adicione as duas regras abaixo. Na segunda regra, substitua o `100.x.x.x` pelo IP do Tailscale **desta máquina** (que você anotou no Passo 1):
      ```conf
-     # Liberacao para a Rede Tailscale - ProBPA
-     host    all             all             100.0.0.0/8             md5
+     # Liberacao para o Servidor Central - ProBPA
+     host    all             all             100.81.221.58/32        md5
+     # Liberacao para o proprio Servidor Local (e-SUS) - IP do TailScale gerado no seu lado
+     host    all             all             100.x.x.x/32            md5
      ```
    - *Nota: Caso sua instalação exija `scram-sha-256` no lugar de `md5`, pode utilizar.*
    - Salve e feche o arquivo.
 
 ---
 
-## 🔄 Passo 3: Reiniciar o Serviço do Banco de Dados
+## 🔒 Passo 3: Criação de Usuário de Leitura (Recomendado)
+
+Para garantir a segurança dos dados, o ProBPA realiza apenas **leituras** (consultas de painéis). Se você não for fornecer a senha do usuário administrador (`postgres`), crie um usuário dedicado com permissões *read-only*.
+
+Abra seu gerenciador de banco (PgAdmin, DBeaver) ou psql e execute os comandos abaixo no banco do e-SUS (geralmente `esus`):
+
+```sql
+-- 1. Criação do usuário (Altere a senha)
+CREATE USER probpa_leitura WITH ENCRYPTED PASSWORD 'senha_segura_aqui';
+
+-- 2. Permissão de conexão ao banco
+GRANT CONNECT ON DATABASE esus TO probpa_leitura;
+
+-- 3. Permissão de uso do schema público (onde ficam as tabelas)
+GRANT USAGE ON SCHEMA public TO probpa_leitura;
+
+-- 4. Permissão exclusiva de SELECT em todas as tabelas atuais e futuras
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO probpa_leitura;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO probpa_leitura;
+```
+
+---
+
+## 🔄 Passo 4: Reiniciar o Serviço do Banco de Dados
 
 Para que as alterações dos arquivos de configuração entrem em vigor, é preciso reiniciar o serviço do PostgreSQL.
 
@@ -88,9 +115,16 @@ sudo systemctl restart postgresql
 sudo systemctl restart e-sus-pec-database
 ```
 
+> ⚠️ **Atenção: O Serviço Não Inicia Mais?**
+> Se ao tentar Reiniciar o serviço do PostgreSQL ele falhar ou "desligar" sozinho, isso significa que ocorreu um erro de digitação de sintaxe (espaçamento ou falta de máscara) no arquivo `pg_hba.conf`. 
+> 1. Volte ao arquivo `pg_hba.conf`.
+> 2. Verifique se a linha do IP possui a máscara de rede (exemplo: `100.0.0.0/8` ou `100.x.x.x/32`). O PostgreSQL rejeita IPs puros sem a barra (ex: `100.122.66.44` causará pane; o certo é `100.122.66.44/32`).
+> 3. Verifique se você usou a tecla `TAB` do teclado ou espaços simples para afastar as palavras. Letras coladas causam erro.
+> 4. Salve o arquivo e tente Iniciar/Reiniciar o serviço novamente.
+
 ---
 
-## ✅ Passo 4: Retorno ao Suporte ProBPA
+## ✅ Passo 5: Retorno ao Suporte ProBPA
 
 Pronto! A infraestrutura está configurada com segurança de ponta.
 Por favor, envie para o nosso suporte técnico as seguintes informações:
