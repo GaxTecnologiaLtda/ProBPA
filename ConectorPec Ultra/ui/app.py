@@ -199,7 +199,7 @@ class ProBPAConnectorApp(ctk.CTk):
     # ==========================================
     def _build_home_frame(self):
         self.frames["home"] = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.frames["home"].grid_rowconfigure(1, weight=1)
+        self.frames["home"].grid_rowconfigure(2, weight=1) # The textbox row
         self.frames["home"].grid_columnconfigure(0, weight=1)
 
         header = ctk.CTkFrame(self.frames["home"], fg_color="transparent")
@@ -211,8 +211,13 @@ class ProBPAConnectorApp(ctk.CTk):
                                      command=lambda: self.start_sync("all"))
         btn_sync_all.pack(side="right")
 
+        # Barra de Progresso do Updater (Oculta por Padrão)
+        self.download_progress = ctk.CTkProgressBar(self.frames["home"], height=10)
+        self.download_progress.set(0)
+        # Não damos grid() nela ainda, apenas quando for baixar
+
         self.log_textbox = ctk.CTkTextbox(self.frames["home"], state="disabled", font=ctk.CTkFont(family="Consolas", size=13))
-        self.log_textbox.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.log_textbox.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
 
     # ==========================================
     # TELA 2: LISTAGEM DE CONEXÕES
@@ -410,13 +415,24 @@ class ProBPAConnectorApp(ctk.CTk):
 
     def _iniciar_download_atualizacao(self, url):
         self.log_message(f"[Updater] Iniciando download da atualização a partir de: {url} ...")
+        
+        # Mostra a barra de progresso
+        self.download_progress.set(0)
+        self.download_progress.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="ew")
+
+        def _update_ui_progress(p):
+            self.download_progress.set(p)
+
         def worker():
             try:
-                self.updater.download_and_install(url, progress_callback=lambda p: self.log_message(f"[Updater] Baixando... {int(p*100)}%"))
+                # O callback passa o valor "p" (0.0 a 1.0)
+                self.updater.download_and_install(url, progress_callback=lambda p: self.after(0, _update_ui_progress, p))
             except Exception as e:
                 self.log_message(f"[Updater] Erro ao atualizar: {e}")
+                self.after(0, lambda: self.download_progress.grid_forget())
         
-        messagebox.showinfo("Download Iniciado", "O download da atualização começou em segundo plano. Você pode acompanhar o progresso no Painel Global de Sincronização.")
+        messagebox.showinfo("Download Iniciado", "O download da atualização começou. Acompanhe a barra de progresso no Painel de Início.")
+        self.select_frame("home")
         threading.Thread(target=worker, daemon=True).start()
 
     # ==========================================
