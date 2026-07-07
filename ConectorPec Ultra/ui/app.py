@@ -308,10 +308,15 @@ class ProBPAConnectorApp(ctk.CTk):
         self.e_token = ctk.CTkEntry(form, placeholder_text="Token de Autenticação", show="*", width=300); self.e_token.pack(pady=5, anchor="w")
 
         # Filtros Extração
-        ctk.CTkLabel(form, text="Filtros de Extração", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 5), anchor="w")
-        self.radio_var = tk.StringVar(value="quad")
-        ctk.CTkRadioButton(form, text="Por Quadrimestre", variable=self.radio_var, value="quad").pack(pady=5, anchor="w")
+        ctk.CTkLabel(form, text="Filtros de Extração (Carga Inicial)", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(20, 5), anchor="w")
+        self.radio_var = tk.StringVar(value="dias")
         
+        ctk.CTkRadioButton(form, text="Dias Retroativos", variable=self.radio_var, value="dias").pack(pady=5, anchor="w")
+        dias_frame = ctk.CTkFrame(form, fg_color="transparent")
+        dias_frame.pack(fill="x", pady=5)
+        self.e_dias = ctk.CTkEntry(dias_frame, placeholder_text="Ex: 30", width=100); self.e_dias.pack(side="left", padx=(0,10))
+
+        ctk.CTkRadioButton(form, text="Por Quadrimestre", variable=self.radio_var, value="quad").pack(pady=5, anchor="w")
         quad_frame = ctk.CTkFrame(form, fg_color="transparent")
         quad_frame.pack(fill="x", pady=5)
         self.e_ano = ctk.CTkComboBox(quad_frame, values=["2024", "2025", "2026", "2027"], width=100); self.e_ano.pack(side="left", padx=(0,10))
@@ -327,7 +332,7 @@ class ProBPAConnectorApp(ctk.CTk):
         btn_save.pack(pady=30, anchor="w")
 
     def _clear_form(self):
-        for entry in [self.e_host, self.e_port, self.e_db, self.e_user, self.e_pwd, self.e_mun, self.e_token, self.e_dtini, self.e_dtfim]:
+        for entry in [self.e_host, self.e_port, self.e_db, self.e_user, self.e_pwd, self.e_mun, self.e_token, self.e_dtini, self.e_dtfim, self.e_dias]:
             entry.delete(0, 'end')
 
     def _open_new_conn_form(self):
@@ -340,6 +345,7 @@ class ProBPAConnectorApp(ctk.CTk):
         self.e_port.insert(0, "5432")
         self.e_db.insert(0, "esus")
         self.e_user.insert(0, "postgres")
+        self.e_dias.insert(0, "30")
         
         self.select_frame("edit_conn")
 
@@ -356,14 +362,16 @@ class ProBPAConnectorApp(ctk.CTk):
         self.e_mun.insert(0, conn_dict.get("municipio_id", ""))
         self.e_token.insert(0, conn_dict.get("api_token", ""))
         
-        tipo = conn_dict.get("extracao_tipo", "quad")
+        tipo = conn_dict.get("extracao_tipo", "dias")
         self.radio_var.set(tipo)
         if tipo == "quad":
             self.e_ano.set(conn_dict.get("extracao_ano", "2024"))
             self.e_quad.set(conn_dict.get("extracao_quad", "Q1"))
-        else:
+        elif tipo == "custom":
             self.e_dtini.insert(0, conn_dict.get("dt_ini", ""))
             self.e_dtfim.insert(0, conn_dict.get("dt_fim", ""))
+        else:
+            self.e_dias.insert(0, conn_dict.get("extracao_dias", "30"))
 
         self.select_frame("edit_conn")
 
@@ -380,6 +388,7 @@ class ProBPAConnectorApp(ctk.CTk):
             "extracao_tipo": self.radio_var.get(),
             "extracao_ano": self.e_ano.get(),
             "extracao_quad": self.e_quad.get(),
+            "extracao_dias": self.e_dias.get(),
             "dt_ini": self.e_dtini.get(),
             "dt_fim": self.e_dtfim.get()
         }

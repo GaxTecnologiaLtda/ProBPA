@@ -96,5 +96,20 @@ class ConfigManager:
             print(f"Erro ao carregar configurações: {e}")
             return []
 
+    def set_municipality_last_run(self, connection_id, timestamp):
+        connections = self.load_connections()
+        for conn in connections:
+            if conn.get("id") == connection_id:
+                conn["last_run_success"] = timestamp
+                break
+        self.save_connections(connections)
+
+    def get_municipality_last_run(self, connection_id):
+        connections = self.load_connections()
+        for conn in connections:
+            if conn.get("id") == connection_id:
+                return conn.get("last_run_success")
+        return None
+
 # Singleton instance
 config_manager = ConfigManager()

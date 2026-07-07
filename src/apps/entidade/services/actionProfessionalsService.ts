@@ -20,7 +20,8 @@ export interface ActionProfessionalBase {
     name: string;
     cpf: string;
     cns?: string;
-    occupation: string; // CBO
+    occupation: string; // CBO principal
+    occupations?: string[]; // Array of CBOs (optional for backward compatibility)
     conselho?: string;
     email?: string;
     phone?: string;

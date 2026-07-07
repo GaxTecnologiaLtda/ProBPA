@@ -83,6 +83,7 @@ export { testLediConnection, scheduledLediSender, resendPendingLediRecords } fro
 
 // PEC Connector Ingestion
 export { ingestPecData } from "./pecIngestion";
+export { ingestPecUltraData } from "./pecUltraIngestion";
 
 // Dashboard Aggregation
 export { aggregateManualProduction } from "./aggregation/aggregateManualProduction";

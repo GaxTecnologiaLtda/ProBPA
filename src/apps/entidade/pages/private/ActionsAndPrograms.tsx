@@ -300,7 +300,7 @@ const ActionsAndPrograms: React.FC = () => {
 
     const [isCreatingProfessional, setIsCreatingProfessional] = useState(false);
     const [isSavingManualProf, setIsSavingManualProf] = useState(false);
-    const [baseProfForm, setBaseProfForm] = useState({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', email: '', phone: '', municipalityId: '' });
+    const [baseProfForm, setBaseProfForm] = useState({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', occupations: [] as string[], email: '', phone: '', municipalityId: '' });
 
     const [isProfessionalBaseModalOpen, setIsProfessionalBaseModalOpen] = useState(false);
 
@@ -501,7 +501,7 @@ const ActionsAndPrograms: React.FC = () => {
 
     // --- PROFESSIONALS & PROCEDURES ---
 
-    const handleAddProfessional = (profId: string) => {
+    const handleAddProfessional = (profId: string, selectedOccupation: string) => {
         if (!profId) return;
 
         let prof = professionals.find(p => p.id === profId);
@@ -516,14 +516,17 @@ const ActionsAndPrograms: React.FC = () => {
                     cns: actionProf.cns || '',
                     cpf: actionProf.cpf || '',
                     registerClass: actionProf.conselho || '',
-                    occupation: actionProf.occupation || 'Não informado',
+                    occupation: selectedOccupation,
                     municipalityId: actionProf.municipalityId || ''
                 } as any;
             }
+        } else {
+            // Override the occupation with the selected one
+            prof = { ...prof, occupation: selectedOccupation };
         }
 
         if (prof) {
-            const exists = actionForm.professionals?.find(p => p.id === prof.id);
+            const exists = actionForm.professionals?.find(p => p.id === prof.id && p.occupation === selectedOccupation);
             if (!exists) {
                 setActionForm(prev => ({
                     ...prev,
@@ -533,7 +536,7 @@ const ActionsAndPrograms: React.FC = () => {
                         cns: prof.cns,
                         cpf: prof.cpf || '',
                         conselho: prof.registerClass || '',
-                        occupation: prof.occupation || 'Não informado'
+                        occupation: selectedOccupation
                     }]
                 }));
             }
@@ -552,6 +555,9 @@ const ActionsAndPrograms: React.FC = () => {
 
         if (claims?.entityId) {
             try {
+                const finalOccupations = baseProfForm.occupations.length > 0 ? baseProfForm.occupations : (baseProfForm.occupation ? [baseProfForm.occupation] : []);
+                const primaryOccupation = finalOccupations[0] || 'Não informado';
+
                 const payload = {
                     municipalityId: baseProfForm.municipalityId || '',
                     entityId: claims.entityId,
@@ -559,7 +565,8 @@ const ActionsAndPrograms: React.FC = () => {
                     cpf: baseProfForm.cpf,
                     cns: baseProfForm.cns,
                     conselho: baseProfForm.conselho,
-                    occupation: baseProfForm.occupation,
+                    occupation: primaryOccupation,
+                    occupations: finalOccupations,
                     email: baseProfForm.email,
                     phone: baseProfForm.phone
                 };
@@ -577,7 +584,7 @@ const ActionsAndPrograms: React.FC = () => {
                     return [...prev, newProf];
                 });
 
-                setBaseProfForm({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', email: '', phone: '', municipalityId: '' });
+                setBaseProfForm({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', occupations: [], email: '', phone: '', municipalityId: '' });
                 setIsCreatingProfessional(false);
             } catch (e) {
                 console.error("Error saving action professional manually", e);
@@ -1024,6 +1031,7 @@ const ActionsAndPrograms: React.FC = () => {
             patientId: record.patientId,
             patient: record.patient,
             professionalId: record.professionalId,
+            occupation: record.occupation || '',
             procedures: grouped,
             attendanceDate: record.attendanceDate || selectedAction?.date || ''
         }));
@@ -1923,14 +1931,23 @@ const ActionsAndPrograms: React.FC = () => {
                                             return <div className="px-4 py-3 text-sm text-gray-500 text-center">Nenhum profissional encontrado.</div>;
                                         }
 
-                                        return filteredList.map(p => (
+                                        // Expand professionals with multiple occupations
+                                        const displayList: { prof: any, occ: string }[] = [];
+                                        filteredList.forEach(p => {
+                                            const occs = p.occupations && p.occupations.length > 0 ? p.occupations : (p.occupation ? [p.occupation] : ['Sem CBO']);
+                                            occs.forEach(o => {
+                                                displayList.push({ prof: p, occ: o });
+                                            });
+                                        });
+
+                                        return displayList.map((item, idx) => (
                                             <div
-                                                key={p.id}
-                                                onClick={() => p.id && handleAddProfessional(p.id)}
+                                                key={item.prof.id + '-' + idx}
+                                                onClick={() => item.prof.id && handleAddProfessional(item.prof.id, item.occ)}
                                                 className="px-4 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 cursor-pointer text-sm text-gray-700 dark:text-gray-200 border-b border-gray-50 dark:border-gray-700/50 last:border-0"
                                             >
-                                                <div className="font-medium">{p.name}</div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">{p.occupation || 'Sem CBO'} • CNS: {p.cns || 'N/A'}</div>
+                                                <div className="font-medium">{item.prof.name}</div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400">{item.occ} • CNS: {item.prof.cns || 'N/A'}</div>
                                             </div>
                                         ));
                                     })()}
@@ -2078,14 +2095,21 @@ const ActionsAndPrograms: React.FC = () => {
                         <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm relative">
                             <Select
                                 label="Profissional Responsável pelo Atendimento"
-                                value={productionForm.professionalId || ''}
-                                onChange={e => setProductionForm({ ...productionForm, professionalId: e.target.value })}
+                                value={productionForm.professionalId ? `${productionForm.professionalId}|${productionForm.occupation || ''}` : ''}
+                                onChange={e => {
+                                    if (!e.target.value) {
+                                        setProductionForm({ ...productionForm, professionalId: '', occupation: '' });
+                                        return;
+                                    }
+                                    const [profId, occ] = e.target.value.split('|');
+                                    setProductionForm({ ...productionForm, professionalId: profId, occupation: occ || '' });
+                                }}
                                 required
                                 className="dark:text-white dark:bg-gray-800"
                             >
                                 <option value="">Selecione o profissional...</option>
-                                {(selectedAction?.professionals || []).map(p => (
-                                    <option key={p.id} value={p.id}>{p.name} - {p.cbo_description}</option>
+                                {(selectedAction?.professionals || []).map((p, idx) => (
+                                    <option key={`${p.id}-${idx}`} value={`${p.id}|${p.occupation || ''}`}>{p.name} - {p.occupation || 'Sem CBO'}</option>
                                 ))}
                             </Select>
                         </div>
@@ -2490,10 +2514,10 @@ const ActionsAndPrograms: React.FC = () => {
                         <Button type="button" onClick={() => {
                             if (isCreatingProfessional) {
                                 setIsCreatingProfessional(false);
-                                setBaseProfForm({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', email: '', phone: '', municipalityId: '' });
+                                setBaseProfForm({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', occupations: [], email: '', phone: '', municipalityId: '' });
                             } else {
                                 setIsCreatingProfessional(true);
-                                setBaseProfForm({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', email: '', phone: '', municipalityId: '' });
+                                setBaseProfForm({ id: '', name: '', cns: '', cpf: '', conselho: '', occupation: '', occupations: [], email: '', phone: '', municipalityId: '' });
                             }
                         }} size="sm" variant={isCreatingProfessional ? 'outline' : 'secondary'}>
                             {isCreatingProfessional ? "Cancelar" : "+ Novo Profissional"}
@@ -2518,13 +2542,33 @@ const ActionsAndPrograms: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col sm:col-span-2">
                                     <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">CBO (OCUPAÇÃO)</label>
-                                    <input
-                                        list="cbo-list-actions"
-                                        value={baseProfForm.occupation}
-                                        onChange={e => setBaseProfForm({ ...baseProfForm, occupation: e.target.value })}
-                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
-                                        placeholder="Buscar..."
-                                    />
+                                    <div className="flex gap-2 mb-2 flex-wrap">
+                                        {baseProfForm.occupations?.map((occ, idx) => (
+                                            <span key={idx} className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                                                {occ}
+                                                <button type="button" onClick={() => {
+                                                    const newOccs = [...baseProfForm.occupations];
+                                                    newOccs.splice(idx, 1);
+                                                    setBaseProfForm({ ...baseProfForm, occupations: newOccs });
+                                                }} className="hover:text-emerald-900 dark:hover:text-emerald-100"><X className="w-3 h-3" /></button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            list="cbo-list-actions"
+                                            value={baseProfForm.occupation}
+                                            onChange={e => setBaseProfForm({ ...baseProfForm, occupation: e.target.value })}
+                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 text-gray-900 dark:text-white"
+                                            placeholder="Buscar e adicionar..."
+                                        />
+                                        <Button type="button" size="sm" onClick={() => {
+                                            if (baseProfForm.occupation && !baseProfForm.occupations.includes(baseProfForm.occupation)) {
+                                                const newOccs = [...baseProfForm.occupations, baseProfForm.occupation];
+                                                setBaseProfForm({ ...baseProfForm, occupations: newOccs, occupation: '' });
+                                            }
+                                        }}>Add</Button>
+                                    </div>
                                     <datalist id="cbo-list-actions">
                                         {CBO_LIST.map((group) => group.options.map(opt => <option key={opt.value} value={opt.label} />))}
                                     </datalist>
@@ -2640,6 +2684,7 @@ const ActionsAndPrograms: React.FC = () => {
                                                                         cns: prof.cns || '',
                                                                         conselho: prof.conselho || '',
                                                                         occupation: prof.occupation || '',
+                                                                        occupations: prof.occupations || (prof.occupation ? [prof.occupation] : []),
                                                                         email: prof.email || '',
                                                                         phone: prof.phone || '',
                                                                         municipalityId: prof.municipalityId || ''
