@@ -21,6 +21,7 @@ export interface ActionProfessional {
     cpf?: string;
     conselho?: string;
     occupation: string;
+    occupations?: string[];
 }
 
 export interface ActionProcedure {
@@ -53,6 +54,7 @@ export interface ActionProduction {
     entityId?: string;
     actionId: string;
     professionalId: string;
+    occupation?: string;
     patientId: string;
     patient: ProductionPatient;
     procedures: { code: string; name: string }[];
