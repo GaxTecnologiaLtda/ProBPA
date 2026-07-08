@@ -141,7 +141,8 @@ class MunicipalityExtractor:
                         }
                         
                         try:
-                            response = requests.post(self.api_url, json=payload, headers=headers, timeout=60)
+                            payload_str = json.dumps(payload, default=str)
+                            response = requests.post(self.api_url, data=payload_str, headers=headers, timeout=60)
                             if response.status_code not in [200, 201]:
                                 print(f"[EXTRACTOR] -> Erro na API ({response.status_code}): {response.text}")
                                 sucesso_total = False
