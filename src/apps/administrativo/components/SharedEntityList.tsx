@@ -41,7 +41,9 @@ import {
   UserCircle,
   UserPlus,
   XCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  Database,
+  Copy
 } from 'lucide-react';
 
 interface SharedEntityListProps {
@@ -94,10 +96,16 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
 
   // Create/Edit modal
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSavingEntity, setIsSavingEntity] = useState(false);
   const [editingEntity, setEditingEntity] = useState<AdminEntity | null>(null);
   const [formData, setFormData] = useState<EntityFormState>(
     INITIAL_FORM_STATE
   );
+
+  // Ultra Connector Modal
+  const [isUltraModalOpen, setIsUltraModalOpen] = useState(false);
+  const [selectedUltraEntity, setSelectedUltraEntity] = useState<AdminEntity | null>(null);
+
 
   // Tab Control Modal
   const [isTabModalOpen, setIsTabModalOpen] = useState(false);
@@ -257,6 +265,7 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
     }
 
     const location = `${formData.city} - ${formData.state}`.trim();
+    setIsSavingEntity(true);
 
     try {
       if (editingEntity) {
@@ -279,7 +288,7 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
         });
       } else {
         // CREATE
-        await createEntity({
+        const result = await createEntity({
           name: formData.name,
           cnpj: formData.cnpj,
           type,
@@ -297,6 +306,24 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
             ? { healthUnits: 0 }
             : { privateType: formData.entityType || "OSC" }),
         });
+
+        if (type === "PUBLIC" && result?.success) {
+           setSelectedUltraEntity({
+              id: result.id,
+              name: formData.name,
+              cnpj: formData.cnpj,
+              type: "PUBLIC",
+              location,
+              status: "ACTIVE",
+              createdAt: new Date().toISOString(),
+              responsible: formData.managerName,
+              email: formData.email,
+              dedicatedDatabaseId: result.databaseId,
+              connectorApiKey: result.apiKey,
+              connectorUltraEnabled: true
+           });
+           setIsUltraModalOpen(true);
+        }
       }
 
       setIsCreateModalOpen(false);
@@ -305,6 +332,8 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
     } catch (err) {
       console.error("Erro ao salvar entidade:", err);
       alert("Falha ao salvar entidade. Tente novamente.");
+    } finally {
+      setIsSavingEntity(false);
     }
   };
 
@@ -495,8 +524,8 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                     }`}
                 ></div>
 
-                <div className="flex justify-between items-start mb-4 pl-2">
-                  <div>
+                <div className="flex justify-between items-start mb-4 pl-2 gap-4">
+                  <div className="flex-1 min-w-0">
                     <h3
                       className="font-bold text-slate-900 dark:text-white text-lg leading-tight line-clamp-2"
                       title={entity.name}
@@ -508,7 +537,7 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                       {entity.cnpj}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                     <Tooltip
                       content={
                         entity.status === "ACTIVE"
@@ -536,6 +565,11 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                     >
                       {entity.status}
                     </Badge>
+                    {type === "PUBLIC" && entity.dedicatedDatabaseId && (
+                      <Tooltip content="Banco de Dados Dedicado (Conector Ultra) Provisionado">
+                        <Badge variant="success">DB Ultra OK</Badge>
+                      </Tooltip>
+                    )}
                   </div>
                 </div>
 
@@ -566,6 +600,21 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-2 pl-2">
+                  {type === "PUBLIC" && entity.connectorUltraEnabled && (
+                    <Tooltip content="Credenciais Conector Ultra">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!px-2 text-slate-400 hover:text-indigo-500"
+                        onClick={() => {
+                          setSelectedUltraEntity(entity);
+                          setIsUltraModalOpen(true);
+                        }}
+                      >
+                        <Database className="w-4 h-4" />
+                      </Button>
+                    </Tooltip>
+                  )}
                   {type === "PRIVATE" && (
                     <Tooltip content="Configurar Abas (Módulos Permitidos)">
                       <Button
@@ -893,10 +942,18 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
             <Button
               variant="outline"
               onClick={() => setIsCreateModalOpen(false)}
+              disabled={isSavingEntity}
             >
               Cancelar
             </Button>
-            <Button onClick={handleSave}>Salvar Registro</Button>
+            <Button 
+              onClick={handleSave} 
+              disabled={isSavingEntity}
+              icon={isSavingEntity ? RefreshCw : undefined}
+              className={isSavingEntity ? "animate-pulse" : ""}
+            >
+              {isSavingEntity ? (type === "PUBLIC" ? "Provisionando..." : "Salvando...") : "Salvar"}
+            </Button>
           </>
         }
       >
@@ -1087,6 +1144,77 @@ export const SharedEntityList: React.FC<SharedEntityListProps> = ({
                 específico, sem uso de mocks.
               </p>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ULTRA CONNECTOR CREDENTIALS MODAL */}
+      <Modal
+        isOpen={isUltraModalOpen}
+        onClose={() => setIsUltraModalOpen(false)}
+        title="Credenciais do Conector Ultra"
+        footer={<Button onClick={() => setIsUltraModalOpen(false)}>Concluir</Button>}
+      >
+        <div className="space-y-6">
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+            <h4 className="text-emerald-800 dark:text-emerald-400 font-medium mb-1 flex items-center">
+              <CheckCircle className="w-5 h-5 mr-2" /> Banco de Dados Provisionado
+            </h4>
+            <p className="text-sm text-emerald-600 dark:text-emerald-500">
+              O banco de dados exclusivo para este município foi criado e está pronto para receber as cargas do Conector Ultra.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                ID do Município (Database ID)
+              </label>
+              <div className="flex">
+                <Input
+                  value={selectedUltraEntity?.dedicatedDatabaseId || ""}
+                  readOnly
+                  className="rounded-r-none bg-slate-50 font-mono"
+                />
+                <Button
+                  variant="outline"
+                  className="rounded-l-none border-l-0 px-3"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedUltraEntity?.dedicatedDatabaseId || "");
+                    alert("Database ID copiado!");
+                  }}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Chave da API (API Key)
+              </label>
+              <div className="flex">
+                <Input
+                  value={selectedUltraEntity?.connectorApiKey || ""}
+                  readOnly
+                  className="rounded-r-none bg-slate-50 font-mono"
+                />
+                <Button
+                  variant="outline"
+                  className="rounded-l-none border-l-0 px-3"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedUltraEntity?.connectorApiKey || "");
+                    alert("API Key copiada!");
+                  }}
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <p className="text-xs text-slate-500 mt-4">
+              Copie estas credenciais e insira-as nas configurações do Conector ProBPA Ultra no momento da primeira inicialização no ambiente do município.
+            </p>
           </div>
         </div>
       </Modal>
