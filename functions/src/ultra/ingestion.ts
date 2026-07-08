@@ -37,7 +37,6 @@ export const ingestUltraData = functions
             const entityDoc = entityQuery.docs[0];
             const entityData = entityDoc.data();
             const dedicatedDatabaseId = entityData.dedicatedDatabaseId;
-            const entityId = entityDoc.id;
 
             if (!dedicatedDatabaseId) {
                 res.status(500).send("Internal Server Error: Entity does not have a dedicated database provisioned");
