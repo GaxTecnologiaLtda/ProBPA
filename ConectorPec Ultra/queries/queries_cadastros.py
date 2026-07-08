@@ -7,7 +7,7 @@ SELECT
     cid.nu_cpf AS cpf,
     cid.nu_cns AS cns,
     cid.dt_nascimento AS data_nascimento,
-    cid.co_dim_sexo AS sexo,
+    fat_cid.co_dim_sexo AS sexo,
     fat_cid.co_dim_equipe_vinc AS co_dim_equipe,
     fat_cid.co_dim_unidade_saude_vinc AS co_dim_unidade_saude,
     dim_eq.nu_ine AS ine,

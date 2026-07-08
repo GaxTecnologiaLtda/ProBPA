@@ -11,13 +11,12 @@ SELECT
     cbo.nu_cbo AS cbo,
     dim_proc.co_proced AS codigo_sigtap,
     dim_proc.ds_proced AS descricao_sigtap
-FROM tb_fat_proced_atend_proced fat_proc_detalhe
-JOIN tb_fat_proced_atend fat_proc ON fat_proc_detalhe.co_fat_proced_atend = fat_proc.co_seq_fat_proced_atend
-JOIN tb_dim_equipe eq ON fat_proc.co_dim_equipe = eq.co_seq_dim_equipe
-JOIN tb_dim_unidade_saude us ON fat_proc.co_dim_unidade_saude = us.co_seq_dim_unidade_saude
-JOIN tb_dim_profissional prof ON fat_proc.co_dim_profissional = prof.co_seq_dim_profissional
-JOIN tb_dim_cbo cbo ON fat_proc.co_dim_cbo = cbo.co_seq_dim_cbo
-JOIN tb_dim_procedimento dim_proc ON fat_proc_detalhe.co_dim_procedimento = dim_proc.co_seq_dim_procedimento
+FROM tb_fat_proced_atend_proced fat_proc
+LEFT JOIN tb_dim_equipe eq ON fat_proc.co_dim_equipe = eq.co_seq_dim_equipe
+LEFT JOIN tb_dim_unidade_saude us ON fat_proc.co_dim_unidade_saude = us.co_seq_dim_unidade_saude
+LEFT JOIN tb_dim_profissional prof ON fat_proc.co_dim_profissional = prof.co_seq_dim_profissional
+LEFT JOIN tb_dim_cbo cbo ON fat_proc.co_dim_cbo = cbo.co_seq_dim_cbo
+LEFT JOIN tb_dim_procedimento dim_proc ON fat_proc.co_dim_procedimento = dim_proc.co_seq_dim_procedimento
 WHERE fat_proc.co_dim_tempo >= %(data_inicio)s 
   AND fat_proc.co_dim_tempo <= %(data_fim)s
 """
