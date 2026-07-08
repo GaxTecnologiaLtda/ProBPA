@@ -19,10 +19,10 @@ SELECT
     fat.ds_filtro_ciaps AS ciaps_avaliados,
     fat.ds_filtro_cids AS cids_avaliados
 FROM tb_fat_atendimento_individual fat
-JOIN tb_dim_cbo cbo ON fat.co_dim_cbo = cbo.co_seq_dim_cbo
-JOIN tb_dim_profissional prof ON fat.co_dim_profissional = prof.co_seq_dim_profissional
-JOIN tb_dim_equipe eq ON fat.co_dim_equipe = eq.co_seq_dim_equipe
-JOIN tb_dim_unidade_saude us ON fat.co_dim_unidade_saude = us.co_seq_dim_unidade_saude
+JOIN tb_dim_cbo cbo ON fat.co_dim_cbo_1 = cbo.co_seq_dim_cbo
+JOIN tb_dim_profissional prof ON fat.co_dim_profissional_1 = prof.co_seq_dim_profissional
+JOIN tb_dim_equipe eq ON fat.co_dim_equipe_1 = eq.co_seq_dim_equipe
+JOIN tb_dim_unidade_saude us ON fat.co_dim_unidade_saude_1 = us.co_seq_dim_unidade_saude
 LEFT JOIN tb_dim_tipo_atendimento dim_tipo_atd ON fat.co_dim_tipo_atendimento = dim_tipo_atd.co_seq_dim_tipo_atendimento
 LEFT JOIN tb_dim_local_atendimento dim_local ON fat.co_dim_local_atendimento = dim_local.co_seq_dim_local_atendimento
 WHERE fat.co_dim_tempo >= %(data_inicio)s 

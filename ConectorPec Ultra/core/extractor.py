@@ -96,7 +96,7 @@ class MunicipalityExtractor:
             }
             
             headers = {
-                "Authorization": f"Bearer {self.api_token}",
+                "X-Api-Key": self.api_token,
                 "X-Municipality-Id": self.municipality_id,
                 "Content-Type": "application/json"
             }
@@ -131,10 +131,12 @@ class MunicipalityExtractor:
                     
                     # Envio em lotes (batch) para não estourar payload da API
                     BATCH_SIZE = 500
-                    for chunk in self._chunk_list(payload_data, BATCH_SIZE):
+                    total_batches = math.ceil(len(payload_data) / BATCH_SIZE)
+                    for idx, chunk in enumerate(self._chunk_list(payload_data, BATCH_SIZE), 1):
+                        print(f"[EXTRACTOR]    -> Enviando lote {idx}/{total_batches} ({len(chunk)} registros)...", flush=True)
                         payload = {
-                            "tipo_dado": nome_query,
-                            "registros": chunk,
+                            "collection": nome_query,
+                            "data": chunk,
                             "municipio_id": self.municipality_id
                         }
                         

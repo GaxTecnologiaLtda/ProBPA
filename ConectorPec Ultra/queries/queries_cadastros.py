@@ -8,20 +8,20 @@ SELECT
     cid.nu_cns AS cns,
     cid.dt_nascimento AS data_nascimento,
     cid.co_dim_sexo AS sexo,
-    fat_cid.co_dim_equipe AS co_dim_equipe,
-    fat_cid.co_dim_unidade_saude AS co_dim_unidade_saude,
+    fat_cid.co_dim_equipe_vinc AS co_dim_equipe,
+    fat_cid.co_dim_unidade_saude_vinc AS co_dim_unidade_saude,
     dim_eq.nu_ine AS ine,
     dim_us.nu_cnes AS cnes
 FROM tb_cidadao cid
-JOIN tb_fat_cidadao_pec fat_cid ON cid.co_seq_cidadao = fat_cid.co_fat_cidadao_pec
-LEFT JOIN tb_dim_equipe dim_eq ON fat_cid.co_dim_equipe = dim_eq.co_seq_dim_equipe
-LEFT JOIN tb_dim_unidade_saude dim_us ON fat_cid.co_dim_unidade_saude = dim_us.co_seq_dim_unidade_saude
+JOIN tb_fat_cidadao_pec fat_cid ON cid.co_seq_cidadao = fat_cid.co_cidadao
+LEFT JOIN tb_dim_equipe dim_eq ON fat_cid.co_dim_equipe_vinc = dim_eq.co_seq_dim_equipe
+LEFT JOIN tb_dim_unidade_saude dim_us ON fat_cid.co_dim_unidade_saude_vinc = dim_us.co_seq_dim_unidade_saude
 WHERE fat_cid.st_faleceu = 0
 """
 
 QUERY_CADASTRO_DOMICILIAR = """
 SELECT 
-    fat_dom.co_fat_cad_domiciliar AS id_cadastro_domiciliar,
+    fat_dom.co_seq_fat_cad_domiciliar AS id_cadastro_domiciliar,
     fat_dom.co_dim_tempo AS data_cadastro,
     eq.nu_ine AS ine,
     us.nu_cnes AS cnes,

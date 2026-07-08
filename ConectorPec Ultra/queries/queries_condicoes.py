@@ -11,7 +11,7 @@ SELECT
 FROM tb_fat_atd_ind_problemas prob
 LEFT JOIN tb_dim_ciap ciap ON prob.co_dim_ciap = ciap.co_seq_dim_ciap
 LEFT JOIN tb_dim_cid cid ON prob.co_dim_cid = cid.co_seq_dim_cid
-LEFT JOIN tb_dim_situacao_problema sit ON prob.co_dim_situacao_problema = sit.co_seq_dim_situacao_problema
+LEFT JOIN tb_dim_situacao_problema sit ON prob.co_dim_situacao_problema = sit.co_seq_dim_situacao
 WHERE prob.co_dim_tempo >= %(data_inicio)s 
   AND prob.co_dim_tempo <= %(data_fim)s
   -- Opcional: E aqui a aplicação pode cruzar isso para saber se a condição está ativa no quadrimestre
