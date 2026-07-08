@@ -15,24 +15,22 @@ export const ingestPecUltraData = functions
         // 2. Extract Data
         const body = req.body;
         const municipalityId = body.municipio_id || req.headers['x-municipality-id'] as string;
-        const authHeader = req.headers.authorization;
+        const apiKey = req.headers['x-api-key'] as string;
         
-        if (!authHeader || !authHeader.startsWith('Bearer ') || !municipalityId) {
+        if (!apiKey || !municipalityId) {
             res.status(401).send('Unauthorized: Missing credentials');
             return;
         }
 
-        // const apiKey = authHeader.split('Bearer ')[1];
-        
-        const tipoDado = body.tipo_dado;
-        const records = body.registros;
+        const tipoDado = body.collection || body.tipo_dado;
+        const records = body.data || body.registros;
 
         if (!records || !Array.isArray(records)) {
-            res.status(400).send('Bad Request: "registros" array is required');
+            res.status(400).send('Bad Request: "data" array is required');
             return;
         }
         if (!tipoDado) {
-            res.status(400).send('Bad Request: "tipo_dado" is required');
+            res.status(400).send('Bad Request: "collection" is required');
             return;
         }
 
