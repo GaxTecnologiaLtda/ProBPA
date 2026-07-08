@@ -10,6 +10,7 @@ export {
 } from './rbac';
 
 export { manageEntityUser, resetEntityUserPassword } from './userManagement';
+export { createPublicEntity } from './admin/entityManagement';
 
 
 // Função de seed
@@ -84,6 +85,7 @@ export { testLediConnection, scheduledLediSender, resendPendingLediRecords } fro
 // PEC Connector Ingestion
 export { ingestPecData } from "./pecIngestion";
 export { ingestPecUltraData } from "./pecUltraIngestion";
+export { ingestUltraData } from "./ultra/ingestion";
 
 // Dashboard Aggregation
 export { aggregateManualProduction } from "./aggregation/aggregateManualProduction";

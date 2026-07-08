@@ -5,7 +5,8 @@ import { Plus, Search, Link2, MapPin, Users, Building2, Hash, UserCircle, Phone,
 import { LicenseStatus, Municipality, EntityType, MunicipalityInput } from '../types';
 import { fetchAllMunicipalities, createMunicipality, updateMunicipality, deleteMunicipality, fetchLediStatusStats } from '../services/municipalitiesService';
 import { fetchEntitiesByType } from '../services/entitiesService';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import { DataPreviewTest } from './DataPreviewTest';
 
 // Initial empty form state
