@@ -883,6 +883,10 @@ service cloud.firestore {
       allow write: if false; // Only Cloud Functions (Admin SDK)
     }
 
+    match /ultra_ingestion_test/{document=**} {
+      allow read: if true;
+    }
+
     match /{path=**} {
       allow read, write: if false;
     }

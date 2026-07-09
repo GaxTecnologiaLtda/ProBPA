@@ -43,7 +43,8 @@ import {
   XCircle,
   LayoutDashboard,
   Database,
-  Copy
+  Copy,
+  RefreshCw
 } from 'lucide-react';
 
 interface SharedEntityListProps {
