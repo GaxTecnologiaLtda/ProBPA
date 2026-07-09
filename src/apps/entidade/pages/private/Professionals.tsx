@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Button, Modal, Input, Select } from '../../components/ui/Components';
-import { Plus, Search, User, Stethoscope, MapPin, Edit2, Trash2, Filter, Building2, ChevronDown, Briefcase, RefreshCw, Key, Mail, CheckCircle, Send, X, Upload, Link, Copy } from 'lucide-react';
+import { Plus, Search, User, Stethoscope, MapPin, Edit2, Trash2, Filter, Building2, ChevronDown, Briefcase, RefreshCw, Key, Mail, CheckCircle, Send, X, Upload, Link, Copy, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { ImportProfessionalsModal } from './components/ImportProfessionalsModal';
 import { SigtapBrowserModal } from './components/SigtapBrowserModal';
 import { Professional, Unit, Municipality, ProfessionalAssignment } from '../../types';
@@ -19,7 +21,8 @@ import {
 import { fetchUnitsByEntity } from '../../services/unitsService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
 import { httpsCallable } from 'firebase/functions';
-import { functions } from '../../firebase';
+import { functions, db } from '../../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const Professionals: React.FC = () => {
   const { claims } = useAuth();
@@ -98,6 +101,146 @@ const Professionals: React.FC = () => {
     }));
   };
 
+  const exportMunicipalityPDF = async (munGroup: HierarchicalData, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    setLoading(true);
+    let logoBase64 = '';
+    let entityName = claims?.entityName || '';
+    let entityCnpj = '';
+    let entityAddress = '';
+    let entityContact = '';
+
+    if (claims?.entityId) {
+      try {
+        const entityDocSnap = await getDoc(doc(db, 'entities', claims.entityId));
+        if (entityDocSnap.exists()) {
+          const entityData = entityDocSnap.data();
+          logoBase64 = entityData.logoBase64 || '';
+          entityName = entityData.name || entityName;
+          entityCnpj = entityData.cnpj || ''; // assumes entity might have cnpj
+
+          // Endereço e Contato
+          const addressParts = [];
+          if (entityData.address) addressParts.push(entityData.address);
+          if (entityData.addressNumber) addressParts.push(entityData.addressNumber);
+          if (entityData.neighborhood) addressParts.push(entityData.neighborhood);
+          if (entityData.city) addressParts.push(`${entityData.city} - ${entityData.uf}`);
+          entityAddress = addressParts.join(', ');
+
+          const contactParts = [];
+          if (entityData.phone) contactParts.push(`Tel: ${entityData.phone}`);
+          if (entityData.email) contactParts.push(`E-mail: ${entityData.email}`);
+          entityContact = contactParts.join(' | ');
+        }
+      } catch (e) {
+        console.error("Error fetching entity for PDF:", e);
+      }
+    }
+    setLoading(false);
+
+    const docPdf = new jsPDF();
+    const pageWidth = docPdf.internal.pageSize.width;
+    const pageHeight = docPdf.internal.pageSize.height;
+
+    // Header Drawer Function (to be called on each page)
+    const drawHeader = () => {
+      // Logo
+      if (logoBase64) {
+        try {
+          // Max dimensions 30x20
+          docPdf.addImage(logoBase64, 'PNG', 14, 10, 30, 20, undefined, 'FAST');
+        } catch (err) {
+          console.warn("Could not draw logo", err);
+        }
+      }
+
+      // Título Principal
+      docPdf.setFontSize(14);
+      docPdf.setFont("helvetica", "bold");
+      docPdf.text(`Relatório de Cadastros Ativos - Município de ${munGroup.municipalityName}`, logoBase64 ? 50 : 14, 20);
+
+      // Subtítulo
+      const currentDate = new Date().toLocaleDateString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+      docPdf.setFontSize(10);
+      docPdf.setFont("helvetica", "normal");
+      docPdf.text(`Gerado em: ${currentDate}`, logoBase64 ? 50 : 14, 26);
+    };
+
+    // Draw header on the first page
+    drawHeader();
+
+    let currentY = 40;
+
+    munGroup.units.forEach((unit) => {
+      const professionalsList = unit.professionals;
+      if (professionalsList.length === 0) return;
+
+      // Unidade Header
+      docPdf.setFontSize(12);
+      docPdf.setFont("helvetica", "bold");
+      docPdf.text(`Unidade: ${unit.unitName} (CNES: ${unit.cnes})`, 14, currentY);
+      currentY += 5;
+
+      // Tabela de Profissionais
+      const tableData = professionalsList.map(prof => {
+        const assignment = (prof.assignments || []).find(a => a.unitId === unit.unitId) || {
+          occupation: prof.occupation || 'N/A'
+        };
+        return [
+          prof.name,
+          assignment.occupation,
+          prof.cns || 'N/A',
+          prof.cpf || 'N/A'
+        ];
+      });
+
+      autoTable(docPdf, {
+        startY: currentY,
+        head: [['Nome', 'Cargo / CBO', 'CNS', 'CPF']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [16, 185, 129] }, // emerald-500
+        styles: { fontSize: 8 },
+        margin: { top: 35, right: 14, bottom: 20, left: 14 },
+        didDrawPage: (data) => {
+          // Draw header on new pages
+          if (data.pageNumber > 1) {
+            drawHeader();
+          }
+
+          // Draw Footer on all pages
+          docPdf.setFontSize(8);
+          docPdf.setTextColor(100, 100, 100);
+          docPdf.setFont('helvetica', 'italic');
+
+          const mainFooterText = entityName ? `${entityName}${entityCnpj ? ` - CNPJ: ${entityCnpj}` : ''}` : "Gerado Eletronicamente no Sistema de ProBPA";
+          docPdf.text(mainFooterText, pageWidth / 2, pageHeight - 15, { align: 'center' });
+
+          if (entityAddress || entityContact) {
+            const subFooterText = [entityAddress, entityContact].filter(Boolean).join(' • ');
+            docPdf.setFontSize(7);
+            docPdf.text(subFooterText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+          }
+        }
+      });
+
+      // Atualizar currentY para a próxima unidade
+      currentY = (docPdf as any).lastAutoTable.finalY + 10;
+
+      // Quebra de página se não couber a próxima unidade com alguns itens
+      if (currentY > 260) {
+        docPdf.addPage();
+        currentY = 40;
+      }
+    });
+
+    docPdf.save(`Profissionais_${munGroup.municipalityName.replace(/\s+/g, '_')}.pdf`);
+  };
+
   // --- Actions ---
 
   const toggleStatus = async (prof: Professional) => {
@@ -105,6 +248,25 @@ const Professionals: React.FC = () => {
       handleOpenModal(prof);
     } catch (error) {
       console.error("Erro ao alterar status:", error);
+    }
+  };
+
+  const handleToggleChecked = async (prof: Professional, checked: boolean) => {
+    // Optimistic UI Update
+    setHierarchicalData(prev => prev.map(group => ({
+      ...group,
+      units: group.units.map(u => ({
+        ...u,
+        professionals: u.professionals.map(p => p.id === prof.id ? { ...p, isChecked: checked } : p)
+      }))
+    })));
+
+    try {
+      await updateProfessional(prof.id, { isChecked: checked });
+    } catch (error) {
+      console.error("Erro ao alterar status checado:", error);
+      alert("Erro ao alterar status checado.");
+      loadData(); // Revert on error
     }
   };
 
@@ -412,7 +574,7 @@ const Professionals: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Corpo Clínico</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
@@ -420,7 +582,7 @@ const Professionals: React.FC = () => {
           </p>
         </div>
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               className="flex items-center gap-2"
@@ -469,11 +631,11 @@ const Professionals: React.FC = () => {
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center justify-center px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${showFilters ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+              className={`flex items-center justify-center px-4 py-2 rounded-lg border text-sm font-medium transition-colors w-full md:w-auto ${showFilters ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400' : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
             >
-              <Filter className="w-4 h-4 mr-2" /> Filtros
+              <Filter className="w-4 h-4 mr-2 flex-shrink-0" /> Filtros
               {(filters.startDate || filters.endDate || filters.unitId || filters.cbo) && (
-                <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
               )}
             </button>
           </div>
@@ -572,8 +734,17 @@ const Professionals: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge type="neutral" className="hidden md:inline-flex">
-                    {munGroup.units.reduce((acc, u) => acc + u.professionals.length, 0)} Profissionais
+                    {new Set(munGroup.units.flatMap(u => u.professionals.map(p => p.id))).size} Profissionais
                   </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="hidden md:flex items-center gap-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                    onClick={(e) => exportMunicipalityPDF(munGroup, e)}
+                    title="Exportar Profissionais do Município"
+                  >
+                    <Download className="w-4 h-4" /> Exportar
+                  </Button>
                   <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                     {isExpanded ? <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" /> : <ChevronDown className="w-5 h-5" />}
                   </button>
@@ -637,6 +808,21 @@ const Professionals: React.FC = () => {
                               return (
                                 <div key={prof.id} className="min-w-[260px] w-[260px] flex-shrink-0">
                                   <Card className="h-full hover:shadow-md transition-shadow border border-gray-100 dark:border-gray-700 flex flex-col relative group bg-gray-50/50 dark:bg-gray-800/50">
+                                    {/* Checado Checkbox */}
+                                    {claims?.role === 'MASTER' && (
+                                      <div className="absolute top-3 left-3 z-10">
+                                        <label className="flex items-center gap-1.5 cursor-pointer bg-white/80 dark:bg-gray-900/80 px-2 py-1 rounded-md shadow-sm border border-gray-200 dark:border-gray-600 hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                                          <input
+                                            type="checkbox"
+                                            checked={!!prof.isChecked}
+                                            onChange={(e) => handleToggleChecked(prof, e.target.checked)}
+                                            className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                                          />
+                                          <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300">Checado</span>
+                                        </label>
+                                      </div>
+                                    )}
+
                                     {/* Status Badge */}
                                     <div className="absolute top-3 right-3 z-10">
                                       <Badge type={assignment.active ? 'success' : 'neutral'} className="text-[10px]">
@@ -667,9 +853,22 @@ const Professionals: React.FC = () => {
                                       </span>
 
                                       <div className="w-full pt-3 border-t border-gray-200 dark:border-gray-700 mt-auto">
-                                        <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-2 flex items-center justify-center gap-1">
-                                          <Stethoscope className="w-3 h-3" /> {assignment.occupation}
-                                        </p>
+                                        <div className="flex flex-col gap-1.5 mb-2">
+                                          {Array.from(new Set(
+                                            prof.assignments && prof.assignments.length > 0
+                                              ? prof.assignments.map(a => a.occupation).filter(Boolean)
+                                              : [prof.occupation].filter(Boolean)
+                                          )).map((occ, idx) => (
+                                            <p key={idx} className="text-sm leading-tight text-emerald-600 dark:text-emerald-400 font-medium flex items-center justify-center gap-1 text-center" title={occ}>
+                                              <Stethoscope className="w-3 h-3 flex-shrink-0" /> <span className="line-clamp-2">{occ}</span>
+                                            </p>
+                                          ))}
+                                          {(!prof.assignments || prof.assignments.length === 0) && !prof.occupation && (
+                                            <p className="text-sm leading-tight text-emerald-600 dark:text-emerald-400 font-medium flex items-center justify-center gap-1 text-center">
+                                              <Stethoscope className="w-3 h-3 flex-shrink-0" /> <span>Não informado</span>
+                                            </p>
+                                          )}
+                                        </div>
 
                                         {/* Botões de Ação */}
                                         <div className="flex justify-center gap-2 mt-2">
@@ -991,32 +1190,70 @@ const Professionals: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Select
-                  label="Município"
-                  value={newAssignment.municipalityId || ''}
-                  onChange={e => setNewAssignment({ ...newAssignment, municipalityId: e.target.value, unitId: '' })}
-                  className="md:col-span-2"
-                >
-                  <option value="">Selecione o Município...</option>
-                  {municipalities.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </Select>
-
-                <Select
-                  label="Unidade de Saúde"
-                  value={newAssignment.unitId || ''}
-                  onChange={e => setNewAssignment({ ...newAssignment, unitId: e.target.value })}
-                  className="md:col-span-2"
-                  disabled={!newAssignment.municipalityId}
-                >
-                  <option value="">{newAssignment.municipalityId ? 'Selecione a Unidade...' : 'Selecione um município primeiro'}</option>
-                  {units
-                    .filter(u => !newAssignment.municipalityId || u.municipalityId === newAssignment.municipalityId)
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name} (CNES: {u.cnes})</option>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Município
+                  </label>
+                  <input
+                    list="municipality-list"
+                    value={
+                      municipalities.find(m => m.id === newAssignment.municipalityId)
+                        ? municipalities.find(m => m.id === newAssignment.municipalityId)?.name
+                        : (newAssignment.municipalityName || '')
+                    }
+                    onChange={e => {
+                      const val = e.target.value;
+                      const matched = municipalities.find(m => m.name === val);
+                      setNewAssignment({
+                        ...newAssignment,
+                        municipalityName: val,
+                        municipalityId: matched ? matched.id : '',
+                        unitId: '',
+                        unitName: ''
+                      });
+                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all"
+                    placeholder="Selecione o Município..."
+                  />
+                  <datalist id="municipality-list">
+                    {municipalities.map(m => (
+                      <option key={m.id} value={m.name} />
                     ))}
-                </Select>
+                  </datalist>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Unidade de Saúde
+                  </label>
+                  <input
+                    list="unit-list"
+                    value={
+                      units.find(u => u.id === newAssignment.unitId)
+                        ? `${units.find(u => u.id === newAssignment.unitId)?.name} (CNES: ${units.find(u => u.id === newAssignment.unitId)?.cnes})`
+                        : (newAssignment.unitName || '')
+                    }
+                    onChange={e => {
+                      const val = e.target.value;
+                      const matched = units.find(u => `${u.name} (CNES: ${u.cnes})` === val || u.name === val);
+                      setNewAssignment({
+                        ...newAssignment,
+                        unitName: val,
+                        unitId: matched ? matched.id : ''
+                      });
+                    }}
+                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all disabled:opacity-50"
+                    placeholder={newAssignment.municipalityId ? 'Selecione a Unidade...' : 'Selecione um município primeiro'}
+                    disabled={!newAssignment.municipalityId}
+                  />
+                  <datalist id="unit-list">
+                    {units
+                      .filter(u => !newAssignment.municipalityId || u.municipalityId === newAssignment.municipalityId)
+                      .map(u => (
+                        <option key={u.id} value={`${u.name} (CNES: ${u.cnes})`} />
+                      ))}
+                  </datalist>
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

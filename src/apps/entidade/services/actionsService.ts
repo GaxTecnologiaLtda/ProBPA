@@ -4,6 +4,8 @@ import {
     updateDoc,
     deleteDoc,
     doc,
+    setDoc,
+    getDoc,
     getDocs,
     query,
     where,
@@ -16,7 +18,10 @@ export interface ActionProfessional {
     id?: string;
     name: string;
     cns: string;
+    cpf?: string;
+    conselho?: string;
     occupation: string;
+    occupations?: string[];
 }
 
 export interface ActionProcedure {
@@ -48,21 +53,27 @@ export interface ActionProduction {
     id?: string;
     entityId?: string;
     actionId: string;
+    professionalId: string;
+    occupation?: string;
+    patientId: string;
     patient: ProductionPatient;
-    procedureCode: string;
+    procedures: { code: string; name: string }[];
     competence: string; // YYYYMM
+    attendanceDate?: string; // YYYY-MM-DD
     createdAt?: any;
+    updatedAt?: any;
+    isDeleted?: boolean;
 }
 
 // Helper to get collection ref based on context
-// We primarily read from the Entity's collection for the list view
-const getEntityActionsRef = (entityId: string) => collection(db, 'entities', entityId, 'actions');
+const getEntityActionsRef = (entityId: string, competence: string) =>
+    collection(db, 'entities', entityId, 'actions', competence, 'actions');
 
 // --- ACTIONS MANAGEMENT ---
 
-export const fetchActionsByEntity = async (entityId: string) => {
+export const fetchActionsByEntity = async (entityId: string, competence: string) => {
     try {
-        const q = query(getEntityActionsRef(entityId), orderBy('date', 'desc'));
+        const q = query(getEntityActionsRef(entityId, competence), orderBy('date', 'desc'));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Action));
     } catch (error) {
@@ -75,20 +86,17 @@ export const createAction = async (data: Action) => {
     try {
         const batch = writeBatch(db);
 
+        // Derive competence from date (YYYY-MM-DD -> YYYY-MM)
+        const competence = data.date.substring(0, 7);
+
         // 1. Create wrapper ref in Entity collection to get an ID
-        const entityActionRef = doc(getEntityActionsRef(data.entityId));
+        const entityActionRef = doc(getEntityActionsRef(data.entityId, competence));
         const actionId = entityActionRef.id;
 
         const payload = { ...data, createdAt: new Date() };
 
         // 2. Set data in Entity Collection
         batch.set(entityActionRef, payload);
-
-        // 3. Dual Write: If municipalityId is present (Registered Municipality)
-        if (data.municipalityId) {
-            const muniActionRef = doc(db, 'municipalities', data.municipalityId, 'actions', actionId);
-            batch.set(muniActionRef, payload);
-        }
 
         await batch.commit();
         return actionId;
@@ -101,39 +109,24 @@ export const createAction = async (data: Action) => {
 export const updateAction = async (actionId: string, data: Partial<Action>, originalAction: Action) => {
     try {
         const batch = writeBatch(db);
+        const originalCompetence = originalAction.date.substring(0, 7);
 
         // 1. Update Entity Collection
-        const entityActionRef = doc(db, 'entities', originalAction.entityId, 'actions', actionId);
+        const entityActionRef = doc(db, 'entities', originalAction.entityId, 'actions', originalCompetence, 'actions', actionId);
         batch.update(entityActionRef, data);
 
-        // 2. Handle Dual Write logic for Municipality
-
-        // Scenario A: Municipality didn't change, just update existing Linked Doc if it exists
-        if (originalAction.municipalityId && data.municipalityId === originalAction.municipalityId) {
-            const muniActionRef = doc(db, 'municipalities', originalAction.municipalityId, 'actions', actionId);
-            batch.update(muniActionRef, data);
-        }
-
-        // Scenario B: Municipality Changed (Old -> New)
-        // We need to DELETE from Old and CREATE in New
-        else if (originalAction.municipalityId && data.municipalityId && data.municipalityId !== originalAction.municipalityId) {
-            const oldMuniRef = doc(db, 'municipalities', originalAction.municipalityId, 'actions', actionId);
-            batch.delete(oldMuniRef);
-
-            const newMuniRef = doc(db, 'municipalities', data.municipalityId, 'actions', actionId);
-            batch.set(newMuniRef, { ...originalAction, ...data }); // Need full data for set
-        }
-
-        // Scenario C: Changed from Linked -> Unlinked
-        else if (originalAction.municipalityId && !data.municipalityId && data.municipalityId !== undefined) {
-            const oldMuniRef = doc(db, 'municipalities', originalAction.municipalityId, 'actions', actionId);
-            batch.delete(oldMuniRef);
-        }
-
-        // Scenario D: Changed from Unlinked -> Linked
-        else if (!originalAction.municipalityId && data.municipalityId) {
-            const newMuniRef = doc(db, 'municipalities', data.municipalityId, 'actions', actionId);
-            batch.set(newMuniRef, { ...originalAction, ...data });
+        // 2. Se a data mudou, atualizar a data de todas as produções desta ação
+        if (data.date && data.date !== originalAction.date) {
+            const newCompetence = data.date.substring(0, 7).replace('-', '');
+            const productionsQuery = query(collection(db, `entities/${originalAction.entityId}/actions/${originalCompetence}/actions/${actionId}/production`));
+            const productionsSnapshot = await getDocs(productionsQuery);
+            
+            productionsSnapshot.forEach((prodDoc) => {
+                batch.update(prodDoc.ref, { 
+                    attendanceDate: data.date,
+                    competence: newCompetence
+                });
+            });
         }
 
         await batch.commit();
@@ -143,19 +136,14 @@ export const updateAction = async (actionId: string, data: Partial<Action>, orig
     }
 };
 
-export const deleteAction = async (actionId: string, entityId: string, municipalityId?: string) => {
+export const deleteAction = async (actionId: string, entityId: string, date: string, municipalityId?: string) => {
     try {
         const batch = writeBatch(db);
+        const competence = date.substring(0, 7);
 
         // 1. Delete from Entity
-        const entityActionRef = doc(db, 'entities', entityId, 'actions', actionId);
+        const entityActionRef = doc(db, 'entities', entityId, 'actions', competence, 'actions', actionId);
         batch.delete(entityActionRef);
-
-        // 2. Delete from Municipality if linked
-        if (municipalityId) {
-            const muniActionRef = doc(db, 'municipalities', municipalityId, 'actions', actionId);
-            batch.delete(muniActionRef);
-        }
 
         await batch.commit();
     } catch (error) {
@@ -166,39 +154,98 @@ export const deleteAction = async (actionId: string, entityId: string, municipal
 
 // --- PRODUCTION REGISTRATION ---
 
-export const registerProduction = async (actionId: string, entityId: string, municipalityId: string | undefined, data: ActionProduction) => {
+export const registerProduction = async (actionId: string, entityId: string, competence: string, municipalityId: string | undefined, data: ActionProduction) => {
     try {
         const batch = writeBatch(db);
-        const payload = { ...data, entityId, createdAt: new Date() };
+        const actionRefPath = `entities/${entityId}/actions/${competence}/actions/${actionId}/production`;
 
-        // 1. Add to Entity Subcollection
-        // We generate a custom ID or let Firestore generate it. Let's start with a doc ref to get ID.
-        const entityProdRef = doc(collection(db, 'entities', entityId, 'actions', actionId, 'production'));
-        const prodId = entityProdRef.id;
-
-        batch.set(entityProdRef, payload);
-
-        // 2. Add to Municipality Subcollection if linked
-        if (municipalityId) {
-            const muniProdRef = doc(db, 'municipalities', municipalityId, 'actions', actionId, 'production', prodId);
-            batch.set(muniProdRef, payload);
+        if (!data.patientId) {
+            throw new Error("patientId is required to register production");
         }
 
+        const entityProdRef = doc(db, actionRefPath, data.patientId);
+
+        // Ensure createdAt is set for the orderBy query to work
+        const existingDoc = await getDoc(entityProdRef);
+        let finalProcedures = [...data.procedures];
+
+        if (existingDoc.exists()) {
+            const existingData = existingDoc.data() as ActionProduction;
+            if (existingData.isDeleted) {
+                // If it was deleted, DO NOT merge. Start fresh with the new procedures only!
+                finalProcedures = [...data.procedures];
+            } else if (existingData.procedures && Array.isArray(existingData.procedures)) {
+                // Merge old and new procedures
+                finalProcedures = [...existingData.procedures, ...data.procedures];
+            }
+        }
+
+        const payload = {
+            ...data,
+            procedures: finalProcedures, // Save the merged or fresh procedures
+            entityId,
+            competence,
+            isDeleted: false, // Ensure it is explicitly NOT deleted!
+            updatedAt: new Date(),
+            createdAt: existingDoc.exists() && existingDoc.data()?.createdAt ? existingDoc.data().createdAt : new Date()
+        };
+
+        batch.set(entityProdRef, payload, { merge: true });
+
         await batch.commit();
-        return prodId;
+        return data.patientId;
     } catch (error) {
         console.error("Error registering production:", error);
         throw error;
     }
 };
 
-export const fetchActionProduction = async (entityId: string, actionId: string) => {
+export const updateActionProduction = async (entityId: string, actionId: string, competence: string, patientId: string, data: Partial<ActionProduction>) => {
     try {
-        const q = query(collection(db, 'entities', entityId, 'actions', actionId, 'production'), orderBy('createdAt', 'desc'));
+        const docRef = doc(db, `entities/${entityId}/actions/${competence}/actions/${actionId}/production`, patientId);
+        await updateDoc(docRef, {
+            ...data,
+            updatedAt: new Date(),
+            isDeleted: false
+        });
+    } catch (error) {
+        console.error("Error updating production:", error);
+        throw error;
+    }
+};
+
+export const fetchActionProduction = async (entityId: string, actionId: string, competence: string) => {
+    try {
+        // We remove orderBy from the query to ensure we get ALL documents, 
+        // even those that might have been accidentally saved without a 'createdAt' field.
+        const q = query(collection(db, `entities/${entityId}/actions/${competence}/actions/${actionId}/production`));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActionProduction));
+
+        const results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ActionProduction));
+
+        // Sort in memory (newest first)
+        results.sort((a, b) => {
+            const timeA = a.createdAt?.seconds ? a.createdAt.seconds : (a.createdAt?.toMillis ? a.createdAt.toMillis() / 1000 : 0);
+            const timeB = b.createdAt?.seconds ? b.createdAt.seconds : (b.createdAt?.toMillis ? b.createdAt.toMillis() / 1000 : 0);
+            return timeB - timeA;
+        });
+
+        return results;
     } catch (error) {
         console.error("Error fetching production:", error);
+        throw error;
+    }
+};
+
+export const deleteActionProduction = async (entityId: string, actionId: string, competence: string, patientId: string) => {
+    try {
+        const docRef = doc(db, `entities/${entityId}/actions/${competence}/actions/${actionId}/production`, patientId);
+        await updateDoc(docRef, {
+            isDeleted: true,
+            updatedAt: new Date()
+        });
+    } catch (error) {
+        console.error("Error soft-deleting production:", error);
         throw error;
     }
 };

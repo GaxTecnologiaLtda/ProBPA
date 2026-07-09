@@ -16,11 +16,15 @@ class HistoryManager:
     def _ensure_file(self):
         if not self.history_file.exists():
             with open(self.history_file, "w") as f:
-                json.dump([], f)
+                json.dump({}, f)
 
-    def add_entry(self, status: str, message: str, records_count: int = 0):
+    def add_entry(self, municipality_id: str, status: str, message: str, records_count: int = 0):
         try:
-            entries = self.get_entries()
+            data = self._load_data()
+            if municipality_id not in data:
+                data[municipality_id] = []
+                
+            entries = data[municipality_id]
             
             new_entry = {
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -32,20 +36,29 @@ class HistoryManager:
             # Prepend (newest first)
             entries.insert(0, new_entry)
             
-            # Keep last 50
-            entries = entries[:50]
+            # Keep last 50 per municipality
+            data[municipality_id] = entries[:50]
             
             with open(self.history_file, "w") as f:
-                json.dump(entries, f, indent=2)
+                json.dump(data, f, indent=2)
                 
         except Exception as e:
             print(f"Failed to save history: {e}")
 
-    def get_entries(self):
+    def _load_data(self):
         if not self.history_file.exists():
-            return []
+            return {}
         try:
             with open(self.history_file, "r") as f:
-                return json.load(f)
+                # Handle old format (list) migration implicitly if needed?
+                data = json.load(f)
+                if isinstance(data, list):
+                    # Migration from single-tenant: assign all past history to a generic key and start fresh
+                    return {"migrated_legacy": data}
+                return data
         except:
-            return []
+            return {}
+
+    def get_entries(self, municipality_id: str):
+        data = self._load_data()
+        return data.get(municipality_id, [])

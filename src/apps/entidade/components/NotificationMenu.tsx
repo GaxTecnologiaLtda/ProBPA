@@ -35,7 +35,12 @@ const NotificationMenu: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const filteredNotifications = notifications.filter(n => {
+        if (claims?.role !== 'SUBSEDE') return true;
+        return n.data?.municipalityId === claims?.municipalityId;
+    });
+
+    const unreadCount = filteredNotifications.filter(n => !n.read).length;
 
     const handleMarkAsRead = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -81,7 +86,7 @@ const NotificationMenu: React.FC = () => {
             'Antigas': []
         };
 
-        notifications.forEach(notification => {
+        filteredNotifications.forEach(notification => {
             if (!notification.createdAt) return;
             const date = new Date(notification.createdAt.seconds * 1000); // Firestore timestamp
 
@@ -118,7 +123,7 @@ const NotificationMenu: React.FC = () => {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute right-0 mt-2 w-80 md:w-96 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 origin-top-right flex flex-col max-h-[calc(100vh-100px)]"
+                        className="fixed sm:absolute left-4 right-4 sm:left-auto sm:-right-2 top-[72px] sm:top-auto sm:mt-2 sm:w-80 md:w-96 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-50 origin-top sm:origin-top-right flex flex-col max-h-[calc(100vh-100px)]"
                     >
                         <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 shrink-0">
                             <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Notificações</h3>
@@ -133,7 +138,7 @@ const NotificationMenu: React.FC = () => {
                         </div>
 
                         <div className="overflow-y-auto flex-1 custom-scrollbar">
-                            {notifications.length === 0 ? (
+                            {filteredNotifications.length === 0 ? (
                                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                                     <Bell className="w-8 h-8 mx-auto mb-2 opacity-20" />
                                     <p className="text-sm">Nenhuma notificação recente.</p>

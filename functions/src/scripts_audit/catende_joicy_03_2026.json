@@ -1,0 +1,1963 @@
+[
+  {
+    "docId": "5859697-00db177c-8f52-467e-a9f9-e7f6c644f226",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-00db177c-8f52-467e-a9f9-e7f6c644f226",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "A98",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": null,
+      "cns": "700400902749650",
+      "birthDate": "2020-06-21"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-0b48f985-18c7-485e-914c-a87cbcdc6e3f",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-0b48f985-18c7-485e-914c-a87cbcdc6e3f",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "04509937440",
+      "name": null,
+      "cns": null,
+      "birthDate": "1975-01-01"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  },
+  {
+    "docId": "5859697-0c71bfa9-27ae-4c6a-a6a0-10ce83b66f23",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-0c71bfa9-27ae-4c6a-a6a0-10ce83b66f23",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "T90",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "02895026408",
+      "name": "MARIA JOSE VENANCIO DA SILVA LEITE",
+      "cns": "700309931094135",
+      "birthDate": "1977-04-06"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-0d9a44de-a0e8-4dfc-bcf7-f5d6b4722f97",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-0d9a44de-a0e8-4dfc-bcf7-f5d6b4722f97",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "EDNA PAULA DA SILVA GLORIA",
+      "cns": "700206935971325",
+      "birthDate": "1998-12-28"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "ABP003"
+    }
+  },
+  {
+    "docId": "5859697-10374009-5be1-4854-a9d8-f6a43bfe57a1",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-10374009-5be1-4854-a9d8-f6a43bfe57a1",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "08423066410",
+      "name": null,
+      "cns": null,
+      "birthDate": "1989-03-05"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-1d1edc6a-a983-430f-bb9e-ee249395e057",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-1d1edc6a-a983-430f-bb9e-ee249395e057",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747911,
+      "_nanoseconds": 439000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "79914322468",
+      "name": "APARECIDA MARIA DE LIMA DA SILVA",
+      "cns": null,
+      "birthDate": "1964-05-03"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-1f3a2b63-0e9d-4ff1-a1d4-682c2a863e21",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-1f3a2b63-0e9d-4ff1-a1d4-682c2a863e21",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "08201929454",
+      "name": "ELDA MARIA DA SILVA",
+      "cns": "700607443570766",
+      "birthDate": "1982-06-17"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-203ee73f-b313-4654-aaff-9e9474f67312",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-203ee73f-b313-4654-aaff-9e9474f67312",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "13722435420",
+      "name": "BEATRIZ LIRA FERNANDES",
+      "cns": "704102073228050",
+      "birthDate": "1999-11-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-2c123311-ca1b-496c-9038-871fc7cc316b",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-2c123311-ca1b-496c-9038-871fc7cc316b",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "61567195393",
+      "name": "MARIA VANEDE DA SILVA ARAUJO",
+      "cns": null,
+      "birthDate": "1985-12-02"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-3259ed8a-6bbe-4795-a47d-58d25f4c1c5b",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-3259ed8a-6bbe-4795-a47d-58d25f4c1c5b",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "JANAINA MARIA GOUVEIA DOS SANTOS",
+      "cns": "709607612013072",
+      "birthDate": "1994-02-03"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-362b1451-5b35-42e1-a796-0b32a130d143",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-362b1451-5b35-42e1-a796-0b32a130d143",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "K86",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "10176820469",
+      "name": "MARIA ROSINEIDE FERREIRA DE LIMA SANTOS",
+      "cns": "701301664227830",
+      "birthDate": "1977-09-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-364a1056-be16-40c1-b50a-afc2298be3ce",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-364a1056-be16-40c1-b50a-afc2298be3ce",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "90707257468",
+      "name": "MARIA VALERIA GONCALVES DE CARVALHO TOME",
+      "cns": "709806069667493",
+      "birthDate": "1971-10-04"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  },
+  {
+    "docId": "5859697-378f1f32-b4ae-4a45-a10f-cd4d6d2755b9",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-378f1f32-b4ae-4a45-a10f-cd4d6d2755b9",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": null,
+      "name": null,
+      "cns": "709600607675872",
+      "birthDate": "2011-11-23"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-3e9e593d-1654-4e1b-add1-1dec6c604796",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-3e9e593d-1654-4e1b-add1-1dec6c604796",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "15151273469",
+      "name": "GIRLENE MARIA DE MORAES SILVA",
+      "cns": "703600002548333",
+      "birthDate": "2000-03-23"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-41f007eb-3423-4b10-9a1c-80789d7a5d7e",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-41f007eb-3423-4b10-9a1c-80789d7a5d7e",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "ELIZABETE FRANCISCA DA SILVA",
+      "cns": "705803440219532",
+      "birthDate": "1956-01-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-424faae8-63d9-45b3-8c26-cab0eda28ce4",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-424faae8-63d9-45b3-8c26-cab0eda28ce4",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": null,
+      "name": "LUCAS GABRIEL LIMA DA SILVA",
+      "cns": "702106882280770",
+      "birthDate": "2019-10-02"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "A98"
+    }
+  },
+  {
+    "docId": "5859697-42609cdc-516e-4cf4-903f-38074547ca11",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-42609cdc-516e-4cf4-903f-38074547ca11",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "17829106460",
+      "name": "BRUNO BERBARDO BARRETO BARBOSA DA SILVA",
+      "cns": null,
+      "birthDate": "2021-08-05"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "A98"
+    }
+  },
+  {
+    "docId": "5859697-47c248a5-b3c5-4aac-854f-e30e8b5efd1c",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-47c248a5-b3c5-4aac-854f-e30e8b5efd1c",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "15431938460",
+      "name": "ISRAEL CARLOS LOURENÇO DA SILVA",
+      "cns": "700404474112343",
+      "birthDate": "2011-11-04"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-4bd0b5bb-7583-4a76-baec-37f113728cb9",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-4bd0b5bb-7583-4a76-baec-37f113728cb9",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "A98",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": null,
+      "cns": "704308594746592",
+      "birthDate": "2023-05-26"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-4f264254-ce89-422f-9395-9b1d5d508b1f",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-4f264254-ce89-422f-9395-9b1d5d508b1f",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747911,
+      "_nanoseconds": 439000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "39038351453",
+      "name": "SILVIO ALBURQUERQUE DA SILVA",
+      "cns": null,
+      "birthDate": "1953-10-05"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  },
+  {
+    "docId": "5859697-4fc553d3-7952-4899-887f-b7a37129d918",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-4fc553d3-7952-4899-887f-b7a37129d918",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "JANICLEIDE MARIA GOMES DA SILVA",
+      "cns": "708007824378624",
+      "birthDate": "1991-09-20"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-4fd7d03a-b4bb-4a17-bdac-4a0c49d73f61",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-4fd7d03a-b4bb-4a17-bdac-4a0c49d73f61",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "11303904462",
+      "name": "WELLITA MILENA SILVA DOS SANTOS",
+      "cns": "705009035571156",
+      "birthDate": "1998-05-07"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-568d7d6d-ba93-4d14-ad7a-de8bf536048f",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-568d7d6d-ba93-4d14-ad7a-de8bf536048f",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "81056702400",
+      "name": "ROSA SILVA DE OLIVEIRA",
+      "cns": "704505326294713",
+      "birthDate": "1972-12-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-57ea2f6f-6857-4400-aa97-a41662bf8794",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-57ea2f6f-6857-4400-aa97-a41662bf8794",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "05212132401",
+      "name": "CLAYBE EMANUELLE DE ARAUJO",
+      "cns": "706006822760648",
+      "birthDate": "1984-08-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "ABP003"
+    }
+  },
+  {
+    "docId": "5859697-5dd5ef4a-2df0-410b-a8d1-ed1e4442634e",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-5dd5ef4a-2df0-410b-a8d1-ed1e4442634e",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "16105983425",
+      "name": "ALANDERSON MERK GONÇALVES CRISPIN",
+      "cns": "898004517219625",
+      "birthDate": "2013-02-14"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-6ac0aabb-d3e9-4ace-9697-9566d8c8ec00",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-6ac0aabb-d3e9-4ace-9697-9566d8c8ec00",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "17078637410",
+      "name": "VALERIA VITORIA RODRIGUES FERREIRA DA SILVA",
+      "cns": null,
+      "birthDate": "2003-08-15"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-722ebf57-e4ae-4e04-91c6-79c29da2ee2c",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-722ebf57-e4ae-4e04-91c6-79c29da2ee2c",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747911,
+      "_nanoseconds": 439000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "NADIA FERREIRA DE LIMA",
+      "cns": "705004217672751",
+      "birthDate": "1969-07-19"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-733df2a5-0a5f-46a1-8f5d-fedd57486800",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-733df2a5-0a5f-46a1-8f5d-fedd57486800",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Indeterminado",
+      "cpf": "57299447487",
+      "name": "MARLENE PAULINO DA SILVA",
+      "cns": "703401290565517",
+      "birthDate": "1958-03-15"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  },
+  {
+    "docId": "5859697-73798a86-12db-45d6-92c3-22547287af70",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-73798a86-12db-45d6-92c3-22547287af70",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "A98",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": null,
+      "name": "JOÃO MIGUEL BEZERRA PARAIBANO",
+      "cns": "700008777871302",
+      "birthDate": "2018-10-02"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-75269a20-871b-4111-abc7-1edc5ec08fe4",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-75269a20-871b-4111-abc7-1edc5ec08fe4",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "WILLIENE JACIELE DA SILVA",
+      "cns": "707804610326617",
+      "birthDate": "1998-08-12"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-7b97b30c-04a9-48cc-b170-6b5c8ee20329",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-7b97b30c-04a9-48cc-b170-6b5c8ee20329",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "72044647451",
+      "name": "TATIANE VENTURA DA SILVA",
+      "cns": "706206061105365",
+      "birthDate": "2001-05-16"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-8048ab4d-34f9-4006-b374-5ee94e4ee86c",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-8048ab4d-34f9-4006-b374-5ee94e4ee86c",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "10976207435",
+      "name": "RUTE MARIA DA SILVA",
+      "cns": "702500360497531",
+      "birthDate": "1990-08-29"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  },
+  {
+    "docId": "5859697-8229d091-71cb-48ce-a89b-93b2911ebf9e",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-8229d091-71cb-48ce-a89b-93b2911ebf9e",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747911,
+      "_nanoseconds": 439000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "01293237485",
+      "name": "JOSE ANTONIO DA SILVA",
+      "cns": null,
+      "birthDate": "1974-03-04"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-844d383e-bd35-45b4-9a31-e00e1c8a8822",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-844d383e-bd35-45b4-9a31-e00e1c8a8822",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "10865006873",
+      "name": "ERONILDA MARIA DA SILVA",
+      "cns": "706800243471129",
+      "birthDate": "1968-07-24"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-8b49cb11-5df1-4c04-aae8-f8e28c6e8f2d",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-8b49cb11-5df1-4c04-aae8-f8e28c6e8f2d",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": null,
+      "name": "HILQUIAS GOMES PEREIRA DA SILVA",
+      "cns": "700806918591883",
+      "birthDate": "2014-09-10"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-8b8ad6b6-fefa-4e70-b341-00d61c3ca346",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-8b8ad6b6-fefa-4e70-b341-00d61c3ca346",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "10880784431",
+      "name": "ALINE TEIXEIRA DOS SANTOS",
+      "cns": "704204222061587",
+      "birthDate": "1989-07-14"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-99e34b7c-e337-4721-96bd-a7e0f80d9b4d",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-99e34b7c-e337-4721-96bd-a7e0f80d9b4d",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "05211551427",
+      "name": "ROSILDA MARIA DE SOUZA",
+      "cns": "708006862243624",
+      "birthDate": "1978-08-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-ad4f0498-8221-4619-8ef2-ccd4c92150e8",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-ad4f0498-8221-4619-8ef2-ccd4c92150e8",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "17554421492",
+      "name": "SAMUEL HENRIQUE DA SILVA",
+      "cns": null,
+      "birthDate": "2021-02-12"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-b1033d4b-99dd-4397-b9d4-dbda2e6da94c",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-b1033d4b-99dd-4397-b9d4-dbda2e6da94c",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "12944588419",
+      "name": "JESSICA MARIA SILVA GOMES",
+      "cns": "706903174997637",
+      "birthDate": "1997-11-18"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-bc91bc7b-0c7a-4f33-9a57-28e95d118cad",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-bc91bc7b-0c7a-4f33-9a57-28e95d118cad",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP015",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "44574383836",
+      "name": "WILMA MARIA DA SILVA",
+      "cns": "702405090368624",
+      "birthDate": "1992-12-27"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-c0cb68e6-f7a2-4882-8f0e-aceece891c0c",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-c0cb68e6-f7a2-4882-8f0e-aceece891c0c",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "HADASSA BARRETO BARBOSA DA SILVA",
+      "cns": "704801586113542",
+      "birthDate": "2018-12-10"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "A98"
+    }
+  },
+  {
+    "docId": "5859697-c2d57e53-ac83-43e9-a6ea-8ef198bd1117_NOCNS",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-c2d57e53-ac83-43e9-a6ea-8ef198bd1117_NOCNS",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "-",
+      "name": "- - Procedimento não encontrado",
+      "ciap": null,
+      "type": "COLLECTIVE_ACTIVITY",
+      "cid": null
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": null,
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": null
+    },
+    "ingestedAt": {
+      "_seconds": 1773747924,
+      "_nanoseconds": 34000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": null,
+      "cpf": null,
+      "name": null,
+      "cns": null,
+      "birthDate": null
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-c658b095-6484-48a7-a557-253ce5410ac9",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-c658b095-6484-48a7-a557-253ce5410ac9",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": null,
+      "name": "SAMUEL DA SILVA XAVIER",
+      "cns": "707603229344894",
+      "birthDate": "2021-02-07"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-c67a7ebf-270c-4f65-939e-634a88c753b1",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-c67a7ebf-270c-4f65-939e-634a88c753b1",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "A98",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "00220247439",
+      "name": "ELOA VALENTINA DOS ANJOS SILVA",
+      "cns": "708705131522394",
+      "birthDate": "2024-02-22"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-c9ea8ab4-fcfa-4ea2-9586-aa25dbb1fb4b",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-c9ea8ab4-fcfa-4ea2-9586-aa25dbb1fb4b",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "A98",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": null,
+      "name": "EVELLY HEMANUELI DA SILVA BEZERRA",
+      "cns": "703004844212477",
+      "birthDate": "2021-10-29"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-ca19933c-c813-4ec7-953d-00d02cdb398f",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-ca19933c-c813-4ec7-953d-00d02cdb398f",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": null,
+      "name": "EUDES FERNANDES DA SILVA",
+      "cns": "706001379363040",
+      "birthDate": "1995-10-26"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-dbc20660-520e-4dc4-b63c-0761240bd6bf",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-dbc20660-520e-4dc4-b63c-0761240bd6bf",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "14042228470",
+      "name": null,
+      "cns": null,
+      "birthDate": "2014-07-28"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-e394c6c3-3aef-45a8-b2c5-8028c37aac2d",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-e394c6c3-3aef-45a8-b2c5-8028c37aac2d",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "13421943494",
+      "name": "MARIA APARECIDA DA SILVA LIMA",
+      "cns": "708503371014377",
+      "birthDate": "2001-05-07"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-e47a0247-1466-4f6d-96dd-c466fba76f62",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-e47a0247-1466-4f6d-96dd-c466fba76f62",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "A98",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "17511808409",
+      "name": "DAVI FERREIRA SANTOS SILVA",
+      "cns": "708403764338969",
+      "birthDate": "2020-12-03"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-e81398ee-c362-407e-b754-24a083bf85cb",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-e81398ee-c362-407e-b754-24a083bf85cb",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP003",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747909,
+      "_nanoseconds": 129000000
+    },
+    "productionDate": "2026-03-16",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "08414248454",
+      "name": "JAQUELINE DA SILVA GOMES",
+      "cns": "708608065621281",
+      "birthDate": "1988-06-27"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-eb625e1f-ce69-4c3f-b5a4-d5b5633d09a4",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-eb625e1f-ce69-4c3f-b5a4-d5b5633d09a4",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773747911,
+      "_nanoseconds": 439000000
+    },
+    "productionDate": "2026-03-16",
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "patient": {
+      "cpf": null,
+      "sex": "Masculino",
+      "name": "IVANILDO LUCAS DA SILVA",
+      "cns": "703102879305460",
+      "birthDate": "1956-11-03"
+    },
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  },
+  {
+    "docId": "5859697-f3fc73fb-6c0f-41f6-9d92-11f4dedf872e",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-f3fc73fb-6c0f-41f6-9d92-11f4dedf872e",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "ciap": "ABP014",
+      "type": "CONSULTATION",
+      "cid": "-"
+    },
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143366,
+      "_nanoseconds": 39000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Feminino",
+      "cpf": "16765493409",
+      "name": null,
+      "cns": null,
+      "birthDate": "2014-08-25"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING"
+  },
+  {
+    "docId": "5859697-f6f6842c-9a75-4c6b-9179-80dd75c633a7",
+    "municipalityId": "2BGe8RORtiVY632OrU2m",
+    "externalId": "5859697-f6f6842c-9a75-4c6b-9179-80dd75c633a7",
+    "entityId": "UiWOuDVIdwoam3BTae8o",
+    "_year": "2026",
+    "professional": {
+      "cbo": "251605",
+      "name": "Joicy Meg Assis Vasconcelos",
+      "cns": "705001681762957"
+    },
+    "_month": "03",
+    "unit": {
+      "cnes": "5859697"
+    },
+    "ingestedAt": {
+      "_seconds": 1773143363,
+      "_nanoseconds": 925000000
+    },
+    "productionDate": "2026-03-09",
+    "patient": {
+      "sex": "Masculino",
+      "cpf": "69378550444",
+      "name": "FLAVIO ROGERIO BEZERRA",
+      "cns": "702406579877127",
+      "birthDate": "1970-03-31"
+    },
+    "_competence": "03-2026",
+    "status": "PENDING",
+    "procedure": {
+      "code": "CONSULTA",
+      "name": "ATENDIMENTO INDIVIDUAL",
+      "type": "CONSULTATION",
+      "cid": "-",
+      "ciap": "K86"
+    }
+  }
+]

@@ -1,0 +1,44 @@
+name: Build Conector Ultra (Windows)
+
+on:
+  push:
+    branches:
+      - test/auto-update
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar Dependências
+        run: |
+          cd "ConectorPec Ultra"
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+
+      - name: Compilar com PyInstaller
+        run: |
+          cd "ConectorPec Ultra"
+          pyinstaller packaging/windows.spec
+
+      - name: Compilar Instalador (Inno Setup)
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: 'ConectorPec Ultra/packaging/setup_script.iss'
+
+      - name: Upload Artefato (Instalador)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Conector_Ultra_Setup
+          path: 'ConectorPec Ultra/packaging/Output/Conector_Ultra_Setup.exe'

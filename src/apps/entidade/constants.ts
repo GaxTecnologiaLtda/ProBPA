@@ -467,16 +467,23 @@ export const CHART_COLORS_PRIVATE = {
   tertiary: '#6ee7b7',
 };
 
+export const CHART_COLORS_SUBSEDE = {
+  primary: '#ea580c',
+  secondary: '#f97316',
+  tertiary: '#fdba74',
+};
+
 export const CBO_LIST = [
   {
     group: 'Médicos',
     options: [
       { value: '225125', label: '225125 – Médico Clínico' },
+      { value: '225310', label: '225310 – Médico em Endoscopia' },
+      { value: '225203', label: '225203 – Médico em Cirurgia Vascular' },
       { value: '225124', label: '225124 – Médico Pediatra' },
       { value: '225250', label: '225250 – Médico Ginecologista e Obstetra' },
       { value: '225142', label: '225142 – Médico da Estratégia de Saúde da Família' },
       { value: '225130', label: '225130 – Médico de Família e Comunidade' },
-      { value: '225170', label: '225170 – Médico Generalista' },
       { value: '225120', label: '225120 – Médico Cardiologista' },
       { value: '225135', label: '225135 – Médico Dermatologista' },
       { value: '225133', label: '225133 – Médico Psiquiatra' },
@@ -614,6 +621,7 @@ export const CBO_LIST = [
       { value: '223430', label: '223430 – Farmacêutico em Saúde Pública' },
       { value: '223445', label: '223445 – Farmacêutico Hospitalar e Clínico' },
       { value: '324205', label: '324205 – Técnico em Patologia Clínica' },
+      { value: '221205', label: '221205 – Biomédico' },
       { value: '223710', label: '223710 – Nutricionista' }
     ]
   },
@@ -638,7 +646,8 @@ export const CBO_LIST = [
       { value: '223305', label: '223305 – Médico Veterinário' },
       { value: '422205', label: '422205 – Telefonista' },
       { value: '422210', label: '422210 – Teleoperador' },
-      { value: '422220', label: '422220 – Operador de Rádio Chamada' }
+      { value: '422220', label: '422220 – Operador de Rádio Chamada' },
+      { value: '791115', label: '791115 – ARTESAO COM MATERIAL RECICLAVEL' }
     ]
   }
 ];

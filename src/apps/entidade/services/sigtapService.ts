@@ -1,268 +1,326 @@
-import { db } from '../firebase';
-import {
-    collection,
-    getDocs,
-    query,
-    where,
-    orderBy,
-    limit,
-    doc,
-    getDoc,
-    collectionGroup,
-    DocumentData
-} from 'firebase/firestore';
+import { db, storage } from '../firebase';
+import { collection, doc, getDoc, getDocs, writeBatch, collectionGroup, query, where, limit, orderBy } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
+
+// Types (Adapted locally if needed, or imported if shared types exist)
+// Using 'any' for now or minimal interfaces to avoid complex type dependencies if 'types.ts' is administrative specific.
+// However, 'SigtapProcedureDetail' seems useful. Let's try to import from standard location or redefine.
+// Given strict separation request, I will redefine minimal types here or import from a shared location if one exists.
+// 'src/apps/entidade/types.ts' exists. 'src/apps/producao/types.ts' likely exists or should.
+// For now, I'll inline interfaces or use 'any' where safe, to speed up.
+// Actually, I should check if there are shared types.
+// The file I read (admin) imported from '../types'.
+// I will just copy the methods I need for the TREE explorer.
 
 // --- Types ---
-
-export interface SigtapProcedureRow {
-    id: string;
+export interface SigtapGroup {
     code: string;
     name: string;
-    procedureType: 'BPA' | 'APAC' | 'AIH' | string;
+    subgrupos: SigtapSubGroup[];
+}
 
-    registroCodes?: string[];
-    cidCodes?: string[];
-    serviceCodes?: string[];
-    modalityCodes?: string[];
-    groupCode?: string;
-    subgroupCode?: string;
-    formaOrganizacaoCode?: string;
+export interface SigtapSubGroup {
+    code: string;
+    name: string;
+    formas: SigtapForm[];
+}
 
+export interface SigtapForm {
+    code: string;
+    name: string;
+    procedimentos: any[];
+}
+
+export interface SigtapProcedureDetail {
+    code: string;
+    name: string;
+    // ... add more if needed
     [key: string]: any;
 }
 
-export interface SigtapHistoryDoc {
-    id: string;
-    competence: string;
-    status: 'success' | 'failed' | 'processing' | 'warning';
-    importedAt: string;
-    importedFiles?: string[];
+// --- Global Cache for Flat Procedures Search via HTTPS ---
+let _flatProceduresCache: any[] = [];
+let _flatProceduresCompetence: string = '';
+let _flatProceduresError: boolean = false;
+
+async function loadFlatProceduresCache(compId: string) {
+    if (_flatProceduresCompetence === compId && _flatProceduresCache.length > 0) return;
+    if (_flatProceduresCompetence === compId && _flatProceduresError) return;
+
+    try {
+        const fileRef = ref(storage, `sigtap_cache/${compId}.json`);
+        const url = await getDownloadURL(fileRef);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const data = await response.json();
+        _flatProceduresCache = data;
+        _flatProceduresCompetence = compId;
+        _flatProceduresError = false;
+        console.log(`[sigtapService] Flat Cache (JSON) loaded with ${data.length} procedures for ${compId}`);
+    } catch (e) {
+        console.warn(`[sigtapService] Cache estático não localizado ou indisponível pro competência ${compId}:`, e);
+        _flatProceduresError = true;
+        _flatProceduresCompetence = compId;
+        _flatProceduresCache = [];
+    }
 }
 
-// --- Lookup Service Logic ---
-
-let cachedCompetence: string | null = null;
-
-export const getCurrentCompetence = async (): Promise<string> => {
-    if (cachedCompetence) return cachedCompetence;
-
-    try {
-        const historyRef = collection(db, 'sigtap_import_history');
-        const q = query(
-            historyRef,
-            where('status', 'in', ['success', 'warning']),
-            orderBy('importedAt', 'desc'),
-            limit(1)
-        );
-
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) {
-            const localComp = localStorage.getItem('probpa_sigtap_competence');
-            if (localComp) {
-                cachedCompetence = localComp;
-                return localComp;
+export const sigtapService = {
+    // Helper
+    _sanitizeCompetence(competence: string): string {
+        if (!competence) return '';
+        // If MM/YYYY, convert to YYYYMM
+        if (competence.includes('/')) {
+            const parts = competence.split('/');
+            if (parts.length === 2) {
+                return `${parts[1]}${parts[0]}`;
             }
-            throw new Error("Nenhuma competência SIGTAP importada encontrada.");
         }
+        return competence;
+    },
 
-        const data = snapshot.docs[0].data() as SigtapHistoryDoc;
-        cachedCompetence = data.competence;
-        localStorage.setItem('probpa_sigtap_competence', data.competence);
-        return data.competence;
-    } catch (error) {
-        console.error("Erro ao buscar competência atual:", error);
-        const localComp = localStorage.getItem('probpa_sigtap_competence');
-        if (localComp) {
-            cachedCompetence = localComp;
-            return localComp;
-        }
-        throw error;
-    }
-};
-
-export const getAvailableCompetences = async (): Promise<{ competence: string; label: string }[]> => {
-    try {
-        const historyRef = collection(db, 'sigtap_import_history');
-        const q = query(
-            historyRef,
-            where('status', 'in', ['success', 'warning']),
-            orderBy('importedAt', 'desc')
-        );
-
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => {
-            const data = doc.data() as SigtapHistoryDoc;
-            const year = data.competence.slice(0, 4);
-            const month = data.competence.slice(4, 6);
-            const date = new Date(parseInt(year), parseInt(month) - 1);
-            const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-            const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
-
-            return {
-                competence: data.competence,
-                label: formattedLabel
-            };
+    async getAvailableCompetences(): Promise<{ competence: string, label: string }[]> {
+        const ref = collection(db, 'sigtap');
+        const snap = await getDocs(ref);
+        return snap.docs.map(d => {
+            const c = d.id;
+            const label = c.length === 6 ? `${c.substring(4, 6)}/${c.substring(0, 4)}` : c;
+            return { competence: c, label };
         });
-    } catch (error) {
-        console.error("Erro ao buscar competências:", error);
-        return [];
-    }
-};
+    },
 
-export const searchProcedures = async (term: string, limitCount = 20, competence?: string, groupCode?: string, onDebug?: (msg: string) => void): Promise<SigtapProcedureRow[]> => {
-    onDebug?.(`Iniciando busca ROBUSTA por: "${term}" (limit: ${limitCount})`);
-    if (!term || term.length < 3) {
-        onDebug?.("Termo muito curto. Retornando vazio.");
-        return [];
-    }
+    // --- TREE GETTERS ---
 
-    try {
-        const targetCompetence = competence || await getCurrentCompetence();
-        onDebug?.(`Competência alvo: ${targetCompetence}`);
+    async getGroups(competence: string): Promise<SigtapGroup[]> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = collection(db, `sigtap/${compId}/grupos`);
+        const snapshot = await getDocs(ref);
+        return snapshot.docs.map(d => ({ code: d.id, name: d.data().name, subgrupos: [] }));
+    },
 
+    async getSubGroups(competence: string, groupCode: string): Promise<SigtapSubGroup[]> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = collection(db, `sigtap/${compId}/grupos/${groupCode}/subgrupos`);
+        const snapshot = await getDocs(ref);
+        return snapshot.docs.map(d => ({ code: d.id, name: d.data().name, formas: [] }));
+    },
+
+    async getForms(competence: string, groupCode: string, subGroupCode: string): Promise<any[]> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = collection(db, `sigtap/${compId}/grupos/${groupCode}/subgrupos/${subGroupCode}/formas`);
+        const snapshot = await getDocs(ref);
+        return snapshot.docs.map(d => ({ code: d.id, name: d.data().name, procedimentos: [] }));
+    },
+
+    async getProcedures(competence: string, groupCode: string, subGroupCode: string, formCode: string): Promise<SigtapProcedureDetail[]> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = collection(db, `sigtap/${compId}/grupos/${groupCode}/subgrupos/${subGroupCode}/formas/${formCode}/procedimentos`);
+        const snapshot = await getDocs(ref);
+        return snapshot.docs.map(d => d.data() as SigtapProcedureDetail);
+    },
+
+    // --- SEARCH & VALIDATION ---
+
+    _formatCbo(cbo: string): string {
+        if (!cbo) return '';
+        // "2251-25 - Médico" -> "225125"
+        // remove all non-digits
+        // If "2251-25" -> "225125"
+        const digits = cbo.replace(/\D/g, '');
+        // Usually CBO is 6 chars.
+        return digits.slice(0, 6);
+    },
+
+    checkCboCompatibility(procedure: any, userCbo: string): { compatible: boolean; message?: string } {
+        if (!userCbo) return { compatible: true }; // No CBO to check (maybe admin or not required)
+
+        const procOcupacoes = procedure.ocupacoes as any[];
+        // If procedure has no occupations linked, usually it means restricted? Or open?
+        // In SIGTAP, empty usually means NO restriction (or everyone).
+        // BUT for BPA-I, usually specifically linked.
+        // Let's assume if empty, it's compatible (or we can't block).
+        if (!procOcupacoes || procOcupacoes.length === 0) return { compatible: true };
+
+        const normalizedUserCbo = this._formatCbo(userCbo);
+
+        // Check if normalizedUserCbo is in the list
+        const match = procOcupacoes.find((o: any) => o.code === normalizedUserCbo);
+
+        if (match) return { compatible: true };
+
+        return {
+            compatible: false,
+            message: `CBO do profissional (${userCbo}) não é compatível com este procedimento.`
+        };
+    },
+
+    async searchProcedures(term: string, competence: string): Promise<any[]> {
+        const compId = this._sanitizeCompetence(competence);
+
+        // 1. Search by Code (Deterministic Path Optimization)
+        // Code format: 0301010072 (10 digits)
         const cleanTerm = term.replace(/\D/g, '');
-
-        // 1. Search by Code (Deterministic Optimization)
         if (cleanTerm.length === 10) {
-            onDebug?.(`Detectado código específico: ${cleanTerm}`);
-            // Reconstruct logic: Group: chars 0-2, SubGroup: 2-4, Form: 4-6
+            // Reconstruct logic: 
+            // Group: chars 0-2 (03)
+            // SubGroup: chars 2-4 (01)
+            // Form: chars 4-6 (01)
             const g = cleanTerm.substring(0, 2);
             const s = cleanTerm.substring(2, 4);
             const f = cleanTerm.substring(4, 6);
 
-            const ref = doc(db, `sigtap/${targetCompetence}/grupos/${g}/subgrupos/${s}/formas/${f}/procedimentos/${cleanTerm}`);
+            // Fetch directly
+            const ref = doc(db, `sigtap/${compId}/grupos/${g}/subgrupos/${s}/formas/${f}/procedimentos/${cleanTerm}`);
             const snap = await getDoc(ref);
-
             if (snap.exists()) {
-                onDebug?.("Documento encontrado por ID direto.");
+                // We need to enrich with Group/Sub/Form names if needed by UI
+                // For now, return what we have. UI might need parent info.
+                // We can fetch parents in parallel if strict.
                 const data = snap.data();
                 return [{
-                    id: snap.id,
-                    code: data.code,
-                    name: data.name,
-                    procedureType: 'BPA', // Default fallback
                     ...data,
+                    // Add context helpers if they exist in doc or we can infer
                     groupCode: g,
-                    subgroupCode: s,
-                    formaOrganizacaoCode: f
-                } as SigtapProcedureRow];
+                    subGroupCode: s,
+                    formCode: f
+                }];
             }
-            onDebug?.("Documento não encontrado por ID direto.");
+            return [];
         }
 
-        // 2. Search by Name (CollectionGroup Strategy)
-        // Used by Producao app successfully. Scans 'procedimentos' collection group.
-
+        // 2. Search by Name (Multi-Case) or Partial Code (via CollectionGroup)
+        console.log(`[sigtapService] Searching: "${term}" in competence: "${compId}"`);
         const proceduresRef = collectionGroup(db, 'procedimentos');
 
-        const runQuery = async (variant: string) => {
-            onDebug?.(`Tentando variante: "${variant}"`);
+        // Helper for queries
+        const runQuery = async (variant: string, field: 'name' | 'code' = 'name') => {
+            console.log(`[sigtapService] Trying ${field} variant: "${variant}"`);
             const q = query(
                 proceduresRef,
-                where('name', '>=', variant),
-                where('name', '<=', variant + '\uf8ff'),
+                where(field, '>=', variant),
+                where(field, '<=', variant + '\uf8ff'),
                 limit(50)
             );
             return await getDocs(q);
         };
 
-        // A) Try UPPERCASE
-        let snapshot = await runQuery(term.toUpperCase());
-
-        // B) Try Title Case
-        if (snapshot.empty) {
-            const titleCase = term.charAt(0).toUpperCase() + term.slice(1).toLowerCase();
-            if (titleCase !== term.toUpperCase()) {
-                snapshot = await runQuery(titleCase);
+        try {
+            let snapshot;
+            const cleanTerm = term.replace(/[^a-zA-Z0-9]/g, '');
+            const isNumericSearch = term.trim() === cleanTerm && cleanTerm.length > 0 && /^\d+$/.test(cleanTerm);
+            
+            // Try downloading and using the lightweight flat JSON cache first for ALL searches (super fast and supports partial matching!)
+            await loadFlatProceduresCache(compId);
+            
+            if (!_flatProceduresError && _flatProceduresCache.length > 0) {
+                const termUpper = term.toUpperCase();
+                const normalizedTerm = termUpper.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const searchWords = normalizedTerm.split(' ').filter(w => w.trim().length > 0);
+                
+                const results = _flatProceduresCache
+                    .filter(p => {
+                        if (!p.code || !p.name) return false;
+                        
+                        if (isNumericSearch) {
+                            const strCode = p.code.toString();
+                            return strCode.startsWith(cleanTerm) || strCode.includes(cleanTerm) || strCode.endsWith(cleanTerm);
+                        } else {
+                            // Partial Name Auto-search (Accent Insensitive):
+                            const normalizedName = p.name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                            for (const word of searchWords) {
+                                if (!normalizedName.includes(word)) return false;
+                            }
+                            return true;
+                        }
+                    })
+                    // Map to expected UI keys
+                    .map(p => ({
+                        ...p,
+                        groupCode: p.grupoCode || p.groupCode,
+                        subGroupCode: p.subgroupCode,
+                        formCode: p.formaCode || p.formaOrganizacaoCode
+                    }))
+                    .slice(0, 150); // Increased limit so the scroll shows everything relevant!
+                
+                return results;
             }
-        }
 
-        // C) Try Lowercase
-        if (snapshot.empty) {
-            const lowerCase = term.toLowerCase();
-            if (lowerCase !== term.toUpperCase()) {
-                snapshot = await runQuery(lowerCase);
-            }
-        }
+            // --- FALLBACK (Firestore) ---
+            if (isNumericSearch) {
+                snapshot = await runQuery(cleanTerm, 'code');
+            } else {
+                // A) Try UPPERCASE (Standard)
+                snapshot = await runQuery(term.toUpperCase(), 'name');
 
-        onDebug?.(`Snapshot bruto: ${snapshot.size} docs encontrados (global)`);
-
-        // Filter by Competence Path
-        const results = snapshot.docs
-            .filter(d => {
-                const match = d.ref.path.includes(`/${targetCompetence}/`);
-                if (!match) {
-                    // onDebug?.(`Ignorado doc de outra competência: ${d.ref.path.split('/')[1]}`);
+                // B) Try Title Case
+                if (snapshot.empty) {
+                    const titleCase = term.charAt(0).toUpperCase() + term.slice(1).toLowerCase();
+                    if (titleCase !== term.toUpperCase()) {
+                        snapshot = await runQuery(titleCase, 'name');
+                    }
                 }
-                return match;
-            })
-            .map(d => {
-                const data = d.data();
-                const pathSegments = d.ref.path.split('/');
-                // Path: sigtap/{comp}/grupos/{g}/subgrupos/{s}/formas/{f}/procedimentos/{proc}
-                const gIndex = pathSegments.indexOf('grupos');
 
-                return {
-                    id: d.id,
-                    code: data.code,
-                    name: data.name,
-                    procedureType: 'BPA', // Default
-                    registroCodes: data.registroCodes || [],
-                    cidCodes: data.cidCodes || [],
-                    groupCode: gIndex > -1 ? pathSegments[gIndex + 1] : '',
-                    subgroupCode: gIndex > -1 ? pathSegments[gIndex + 3] : '',
-                    formaOrganizacaoCode: gIndex > -1 ? pathSegments[gIndex + 5] : '',
-                    ...data
-                } as SigtapProcedureRow;
-            });
+                // C) Try Lowercase
+                if (snapshot.empty) {
+                    const lowerCase = term.toLowerCase();
+                    if (lowerCase !== term.toUpperCase() && lowerCase !== (term.charAt(0).toUpperCase() + term.slice(1).toLowerCase())) {
+                        snapshot = await runQuery(lowerCase, 'name');
+                    }
+                }
+            }
 
-        onDebug?.(`Resultados após filtro de competência: ${results.length}`);
+            console.log(`[sigtapService] Raw snapshot size: ${snapshot?.size}`);
 
-        // Deduplicate
-        const uniqueMap = new Map<string, SigtapProcedureRow>();
-        results.forEach(item => {
-            if (!uniqueMap.has(item.code)) uniqueMap.set(item.code, item);
-        });
+            // Filter by Competence in Memory
+            const rawDocs = snapshot?.docs || [];
+            const results = rawDocs
+                .filter(d => d.ref.path.includes(`/${compId}/`))
+                .map(d => {
+                    const data = d.data();
+                    const pathSegments = d.ref.path.split('/');
+                    return {
+                        ...data,
+                        groupCode: pathSegments[pathSegments.indexOf('grupos') + 1],
+                        subGroupCode: pathSegments[pathSegments.indexOf('subgrupos') + 1],
+                        formCode: pathSegments[pathSegments.indexOf('formas') + 1]
+                    };
+                });
 
-        return Array.from(uniqueMap.values()).slice(0, limitCount);
+            console.log(`[sigtapService] Filtered results: ${results.length}`);
+            return results.slice(0, 150);
+        } catch (e: any) {
+            console.error("SEARCH ERROR (CRITICAL):", e);
+            const errString = JSON.stringify(e, Object.getOwnPropertyNames(e));
+            alert(`ERRO NA BUSCA: ${e.message}\n\nVerifique o console para resolver.`);
 
-    } catch (err: any) {
-        console.warn(`Erro na busca:`, err);
-        onDebug?.(`CRITICAL ERROR: ${err.message}`);
-
-        // Check for Missing Index
-        if (err.message && err.message.includes('index')) {
-            onDebug?.("MISSING INDEX: Requires CollectionGroup Index on 'procedimentos' field 'name'.");
+            // Detect Missing Index Error
+            if (e.message && (e.message.includes('index') || e.code === 'failed-precondition')) {
+                console.error(">>> LINK PARA CRIAR ÍNDICE (CLIQUE ABAIXO) <<<");
+                // We can't easily generate the exact link without the query hash, but we can point to console.
+            }
+            return [];
         }
-
-        return [];
-    }
-};
-
-// --- Tree Service Logic ---
-
-export const sigtapService = {
-    getGroups: async (competence: string) => {
-        const colRef = collection(db, `sigtap/${competence}/grupos`);
-        const snapshot = await getDocs(query(colRef, orderBy('code')));
-        return snapshot.docs.map(d => d.data());
     },
 
-    getSubGroups: async (competence: string, groupCode: string) => {
-        const colRef = collection(db, `sigtap/${competence}/grupos/${groupCode}/subgrupos`);
-        const snapshot = await getDocs(query(colRef, orderBy('code')));
-        return snapshot.docs.map(d => d.data());
+    async getGroup(competence: string, code: string): Promise<any> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = doc(db, `sigtap/${compId}/grupos/${code}`);
+        const snap = await getDoc(ref);
+        return snap.exists() ? { code: snap.id, name: snap.data().name } : null;
     },
 
-    getForms: async (competence: string, groupCode: string, subGroupCode: string) => {
-        const colRef = collection(db, `sigtap/${competence}/grupos/${groupCode}/subgrupos/${subGroupCode}/formas`);
-        const snapshot = await getDocs(query(colRef, orderBy('code')));
-        return snapshot.docs.map(d => d.data());
+    async getSubGroup(competence: string, groupCode: string, code: string): Promise<any> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = doc(db, `sigtap/${compId}/grupos/${groupCode}/subgrupos/${code}`);
+        const snap = await getDoc(ref);
+        return snap.exists() ? { code: snap.id, name: snap.data().name } : null;
     },
 
-    getProcedures: async (competence: string, groupCode: string, subGroupCode: string, formCode: string) => {
-        const colRef = collection(db, `sigtap/${competence}/grupos/${groupCode}/subgrupos/${subGroupCode}/formas/${formCode}/procedimentos`);
-        const snapshot = await getDocs(query(colRef, orderBy('code')));
-        return snapshot.docs.map(d => d.data());
+    async getForm(competence: string, groupCode: string, subGroupCode: string, code: string): Promise<any> {
+        const compId = this._sanitizeCompetence(competence);
+        const ref = doc(db, `sigtap/${compId}/grupos/${groupCode}/subgrupos/${subGroupCode}/formas/${code}`);
+        const snap = await getDoc(ref);
+        return snap.exists() ? { code: snap.id, name: snap.data().name } : null;
     }
 };

@@ -3,7 +3,8 @@ import { Card, Button, Input, Select, Badge, Modal } from '../components/Common'
 import { Search, RefreshCw, AlertCircle, CheckCircle, Clock, Eye, Code, FileText, Activity, Send } from 'lucide-react';
 import { fetchAllMunicipalities } from '../services/municipalitiesService';
 import { getFirestore, collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 
 
 // Batch Interface
@@ -68,7 +69,6 @@ const LediBatches: React.FC = () => {
 
         setLoading(true);
         try {
-            const functions = getFunctions();
             // Note: Function name in backend is 'resendPendingLediRecords'
             const triggerSend = httpsCallable(functions, 'resendPendingLediRecords');
 

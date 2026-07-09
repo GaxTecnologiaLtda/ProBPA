@@ -10,6 +10,7 @@ export {
 } from './rbac';
 
 export { manageEntityUser, resetEntityUserPassword } from './userManagement';
+export { createPublicEntity } from './admin/entityManagement';
 
 
 // Função de seed
@@ -29,7 +30,15 @@ export * from "./rbac";
 export { onMunicipalityChange } from "./licenseTriggers";
 export { professionalSetClaims } from "./professionalSetClaims";
 export { professionalDelete } from "./professionalDelete";
+
+
+// --- Relatórios de Produção por Profissional ---
+export { getProfessionalProductionStats } from "./api/getProfessionalProductionStats";
+export { getProfessionalProductionDetailed } from "./api/getProfessionalProductionDetailed";
+export { getProfessionalProductionGrouped } from "./api/getProfessionalProductionGrouped";
+export { getZeroProductionProfessionals } from "./api/getZeroProductionProfessionals";
 export { professionalOnUpdate } from "./professionalOnUpdate";
+export { getCBOMunicipalStats } from "./api/getCBOMunicipalStats";
 export {
     sendPasswordResetToken,
     verifyPasswordResetToken,
@@ -75,3 +84,31 @@ export { testLediConnection, scheduledLediSender, resendPendingLediRecords } fro
 
 // PEC Connector Ingestion
 export { ingestPecData } from "./pecIngestion";
+export { ingestPecUltraData } from "./pecUltraIngestion";
+export { ingestUltraData } from "./ultra/ingestion";
+
+// Dashboard Aggregation
+export { aggregateManualProduction } from "./aggregation/aggregateManualProduction";
+export { debugManualAggregation } from "./aggregation/debugManualAggregation";
+export { aggregateConnectorProduction, scheduledConnectorAggregation } from "./aggregation/aggregateConnectorProduction";
+
+// Dashboard API (Phase 3)
+export { getDashboardStats } from "./api/getDashboardStats";
+export { getGoalsProgress } from "./api/getGoalsProgress";
+export { triggerDashboardRefresh } from "./api/triggerDashboardRefresh";
+export { getDashboardSubsedeStats } from "./api/getDashboardSubsedeStats";
+export { triggerDashboardSubsedeRefresh } from "./api/triggerDashboardSubsedeRefresh";
+export { getMunicipalitiesStats } from "./api/getMunicipalitiesStats";
+export { getUnitComparativeStats } from "./api/getUnitComparativeStats";
+export { getGoalsFulfillmentStats } from "./api/getGoalsFulfillmentStats";
+export { generateSigtapCache } from "./api/generateSigtapCache";
+
+// Patients API
+export { getMunicipalityPatients, updatePatientRecord, deletePatientRecord, importPatientsBatch } from "./api/patientsApi";
+
+// Production API Data Entry & Fetching (Criptografada / Segura)
+export { saveGlobalProduction } from "./api/saveGlobalProduction";
+export { getGlobalProductionHistory } from "./api/getGlobalProductionHistory";
+
+// External Integration API (Non-PEC)
+export { ingestExternalProduction } from "./api/externalProductionApi";

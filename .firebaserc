@@ -16,6 +16,9 @@
         ],
         "website": [
           "website-probpa"
+        ],
+        "hospitalar": [
+          "probpa-hospitalar"
         ]
       }
     }

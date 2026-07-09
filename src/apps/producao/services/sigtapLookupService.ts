@@ -1,4 +1,5 @@
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
+import { ref, getDownloadURL } from 'firebase/storage';
 import ciapData from './ciap_cid_mapping.json';
 import {
     collection,
@@ -119,12 +120,80 @@ export const getAvailableCompetences = async (): Promise<{ competence: string; l
         return [];
     }
 };
+// --- Global Cache for Flat Procedures Search via HTTPS (Lookup Service) ---
+let _flatProceduresCacheLookup: any[] = [];
+let _flatProceduresCompetenceLookup: string = '';
+let _flatProceduresErrorLookup: boolean = false;
+
+async function loadFlatProceduresCacheLookup(compId: string) {
+    if (_flatProceduresCompetenceLookup === compId && _flatProceduresCacheLookup.length > 0) return;
+    if (_flatProceduresCompetenceLookup === compId && _flatProceduresErrorLookup) return;
+
+    try {
+        const fileRef = ref(storage, `sigtap_cache/${compId}.json`);
+        const url = await getDownloadURL(fileRef);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const data = await response.json();
+        _flatProceduresCacheLookup = data;
+        _flatProceduresCompetenceLookup = compId;
+        _flatProceduresErrorLookup = false;
+        console.log(`[sigtapLookup] Cache (JSON) loaded with ${data.length} procedures for ${compId}`);
+    } catch (e) {
+        console.warn(`[sigtapLookup] Cache estático ausente para competência ${compId}:`, e);
+        _flatProceduresErrorLookup = true;
+        _flatProceduresCompetenceLookup = compId;
+        _flatProceduresCacheLookup = [];
+    }
+}
 
 export const searchProcedures = async (term: string, limitCount = 20, competence?: string, groupCode?: string): Promise<SigtapProcedureRow[]> => {
     if (!term || term.length < 3) return [];
 
     try {
         const targetCompetence = competence || await getCurrentCompetence();
+        
+        const cleanTerm = term.replace(/[^a-zA-Z0-9]/g, '');
+        const isNumericSearch = term.trim() === cleanTerm && cleanTerm.length > 0 && /^\d+$/.test(cleanTerm);
+
+        await loadFlatProceduresCacheLookup(targetCompetence);
+        
+        if (!_flatProceduresErrorLookup && _flatProceduresCacheLookup.length > 0) {
+            const termUpper = term.toUpperCase();
+            const normalizedTerm = termUpper.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const searchWords = normalizedTerm.split(' ').filter(w => w.trim().length > 0);
+
+            let results = _flatProceduresCacheLookup.filter(p => {
+                if (!p.code || !p.name) return false;
+                
+                if (isNumericSearch) {
+                    const strCode = p.code.toString();
+                    return strCode.startsWith(cleanTerm) || strCode.includes(cleanTerm) || strCode.endsWith(cleanTerm);
+                } else {
+                    const normalizedName = p.name.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    for (const word of searchWords) {
+                        if (!normalizedName.includes(word)) return false;
+                    }
+                    return true;
+                }
+            });
+            
+            if (groupCode) {
+                results = results.filter(r => r.groupCode === groupCode || r.grupoCode === groupCode);
+            }
+            
+            const maxLimit = limitCount === 20 ? 150 : limitCount; // Increase default limit
+            
+            return results.map(p => ({
+                ...p,
+                groupCode: p.grupoCode || p.groupCode,
+                subGroupCode: p.subgroupCode,
+                formCode: p.formaCode || p.formaOrganizacaoCode,
+                procedureType: 'BPA' // Default or fallback, mostly irrelevant for pure UI list
+            })).slice(0, maxLimit);
+        }
+
         const collectionsToSearch = [
             { name: 'bpa_procedures', type: 'BPA' as const },
             { name: 'apac_procedures', type: 'APAC' as const },
@@ -137,12 +206,8 @@ export const searchProcedures = async (term: string, limitCount = 20, competence
         const promises = collectionsToSearch.map(async (col) => {
             const colRef = collection(db, `sigtap/${targetCompetence}/${col.name}`);
             let q;
-            // Note: Cloud Firestore does not support multiple inequality filters on different fields easily without composite indexes.
-            // So we will filter by groupCode locally after fetching, OR use equality if possible.
-            // Since we search by term (inequality), we can't easily add where('groupCode', '==', x) unless we have specific index.
-            // To ensure safety without requiring new indexes immediately, I will fetch by term and filter in memory.
 
-            if (/^\d+$/.test(term)) {
+            if (isNumericSearch) {
                 // Search by code
                 q = query(
                     colRef,
@@ -162,7 +227,8 @@ export const searchProcedures = async (term: string, limitCount = 20, competence
             }
 
             const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => {
+            const rawDocs = snapshot?.docs || [];
+            return rawDocs.map(doc => {
                 const data = doc.data() as any;
                 return {
                     id: doc.id,
@@ -234,8 +300,36 @@ export const getCompatibleCids = async (procedure: SigtapProcedureRow): Promise<
             });
         }
 
-        // Sort by code ASC
-        return cidDetails.sort((a, b) => a.code.localeCompare(b.code));
+        // Enrich with CIAP equivalents
+        const enrichedList = [...cidDetails];
+        cidDetails.forEach(cidObj => {
+            const cidClean = cidObj.code.replace(/\./g, '');
+            const matches = (ciapData as any[]).filter(c => {
+                if (!c.cid) return false;
+                const ciapCidClean = c.cid.replace(/\./g, '');
+                // Match prefix (e.g. R52 matches R529 or vice versa)
+                return cidClean.startsWith(ciapCidClean) || ciapCidClean.startsWith(cidClean);
+            });
+
+            matches.forEach(m => {
+                if (!enrichedList.find(e => e.code === m.ciap)) {
+                    // Prepend [CIAP] so it's clear in the dropdown
+                    enrichedList.push({
+                        code: m.ciap,
+                        name: `[CIAP] ${m.ciap_desc} -> Equivalente ao ${cidObj.code}`
+                    });
+                }
+            });
+        });
+
+        // Sort: CIDs first (A-Z), then CIAPs (A-Z)
+        return enrichedList.sort((a, b) => {
+            const aIsCiap = a.name.startsWith('[CIAP]');
+            const bIsCiap = b.name.startsWith('[CIAP]');
+            if (aIsCiap && !bIsCiap) return 1;
+            if (!aIsCiap && bIsCiap) return -1;
+            return a.code.localeCompare(b.code);
+        });
     } catch (error) {
         console.error("Erro ao buscar CIDs:", error);
         return [];

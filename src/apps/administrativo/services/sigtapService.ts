@@ -128,6 +128,20 @@ export const sigtapService = {
             importedFiles: []
         });
 
+        // 8. Generate Flat JSON Cache for Fast Frontend Lookups
+        try {
+            console.log(`[SigtapService] Acionando geração de cache estático (JSON) para ${competence} na nuvem...`);
+            // Calling the new deployed Cloud Function to bake the lightweight JSON map
+            const cacheResponse = await fetch(`https://southamerica-east1-probpa-025.cloudfunctions.net/generateSigtapCache?competence=${competence}`);
+            if (cacheResponse.ok) {
+                console.log(`[SigtapService] Cache gerado no Firebase Storage com sucesso!`);
+            } else {
+                console.warn(`[SigtapService] Aviso: Geração de cache retornou status ${cacheResponse.status}`);
+            }
+        } catch (e) {
+            console.error(`[SigtapService] Falha ao solicitar a geração do cache JSON:`, e);
+        }
+
         console.log(`[SigtapService] Importação ${competence} concluída.`);
     },
 

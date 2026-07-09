@@ -64,14 +64,13 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 throw new functions.https.HttpsError("permission-denied", "Coordenação só pode gerenciar usuários 'Coordenador Local' (SUBSEDE).");
             }
         }
-        // For delete/toggle, we effectively trust the ID passed belongs to a valid user, 
-        // but ideally we should verify the target user's role before action.
-        // We do this check below after fetching the user if needed.
+    } else if (token.role === "MASTER" && ['create'].includes(action)) {
+        // MASTER can create any valid role
     }
 
     try {
         if (action === 'create') {
-            const { email, name, cpf, phone, role, organizationId, organizationName } = userData;
+            const { email, name, cpf, phone, role, organizationId, organizationName, entityType } = userData;
 
             if (!email || !name || !role) { // Minimum required
                 throw new functions.https.HttpsError("invalid-argument", "Dados obrigatórios (email, nome, cargo) ausentes.");
@@ -92,6 +91,7 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 role: isCoordinationRole ? "COORDENAÇÃO" : ((role === "Coordenador Local" || role === "SUBSEDE") ? "SUBSEDE" : (role === "Administrador Geral" ? "ADMIN" : "USER")),
                 coordenation: isCoordinationRole ? true : undefined,
                 entityId: callerEntityId,
+                entityType: entityType || 'PRIVATE',
                 // Add specific organization ID if it's a SubSede/Municipality level user
                 municipalityId: organizationId !== 'matriz' ? organizationId : null
             };
@@ -109,16 +109,51 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 organizationName, // Denormalized for easier display
                 status: 'active',
                 entityId: callerEntityId,
+                entityType: entityType || 'PRIVATE',
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 createdBy: context.auth?.uid
             };
 
             await db.collection("users").doc(userRecord.uid).set(newUserDoc);
 
+            // Mirror to municipality subcollection if applicable
+            if (role === "SUBSEDE" || role === "Coordenador Local") {
+                if (organizationId && organizationId !== 'matriz') {
+                    // Assuming PRIVATE entities for SUBSEDE management based on scope
+                    const subSedePath = `municipalities/PRIVATE/${callerEntityId}/${organizationId}/users_subsede/${userRecord.uid}`;
+                    await db.doc(subSedePath).set(newUserDoc);
+                }
+            } else if (role === "COORDENAÇÃO") {
+                if (token.role !== "MASTER") {
+                    throw new functions.https.HttpsError("permission-denied", "Apenas usuários MASTER podem criar acessos de COORDENAÇÃO.");
+                }
+
+                const orgId = organizationId && organizationId !== 'matriz' ? organizationId : 'matriz';
+                const coordPath = `municipalities/PRIVATE/${callerEntityId}/${orgId}/users_coordenacao/${userRecord.uid}`;
+                await db.doc(coordPath).set(newUserDoc);
+
+                // Log the creation
+                try {
+                    const logData = {
+                        action: 'CREATE',
+                        target: 'USER',
+                        description: `Acesso COORDENAÇÃO criado: ${name} (${email})`,
+                        user: {
+                            uid: context.auth?.uid || 'system',
+                            email: context.auth?.token.email || '',
+                            name: context.auth?.token.name || context.auth?.token.email || 'MASTER'
+                        },
+                        entityId: callerEntityId,
+                        timestamp: admin.firestore.FieldValue.serverTimestamp()
+                    };
+                    await db.collection(`municipalities/PRIVATE/${callerEntityId}/global/logs`).add(logData);
+                } catch (e) { console.error('Failed to log coord creation', e); }
+            }
+
             return { success: true, uid: userRecord.uid, password }; // Return password for initial sharing
 
         } else if (action === 'update') {
-            const { uid, name, cpf, phone, role, organizationId, organizationName } = userData;
+            const { uid, name, cpf, phone, role, organizationId, organizationName, entityType } = userData;
 
             // Verify target user logic (security check)
             const targetUserDoc = await db.collection("users").doc(uid).get();
@@ -142,24 +177,42 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 await auth.updateUser(uid, updateAuthData);
             }
 
-            // Update Claims if role/org changed
-            if (role || organizationId) {
+            // Update Claims if role/org/entityType changed
+            if (role || organizationId || entityType) {
                 const currentClaims = (await auth.getUser(uid)).customClaims || {};
                 const isCoordinationRole = role === "COORDENAÇÃO";
                 const newClaims = {
                     ...currentClaims,
                     role: isCoordinationRole ? "COORDENAÇÃO" : ((role === "Coordenador Local" || role === "SUBSEDE") ? "SUBSEDE" : (role === "Administrador Geral" ? "ADMIN" : "USER")),
                     coordenation: isCoordinationRole ? true : null, // Set to null to remove if demoted
+                    entityType: entityType || currentClaims.entityType || 'PRIVATE',
                     municipalityId: organizationId !== 'matriz' ? organizationId : null
                 };
                 await auth.setCustomUserClaims(uid, newClaims);
             }
 
             // Update Firestore
-            await db.collection("users").doc(uid).update({
+            const updateData: any = {
                 name, cpf, phone, role, organizationId, organizationName,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+            };
+            if (entityType) updateData.entityType = entityType;
+
+            await db.collection("users").doc(uid).update(updateData);
+
+            // Mirror update to municipality subcollection if applicable
+            const effectiveRole = role || targetData?.role;
+            const effectiveOrg = organizationId || targetData?.organizationId;
+
+            if ((effectiveRole === "SUBSEDE" || effectiveRole === "Coordenador Local") && effectiveOrg && effectiveOrg !== 'matriz') {
+                const subSedePath = `municipalities/PRIVATE/${callerEntityId}/${effectiveOrg}/users_subsede/${uid}`;
+                // Set with merge in case it doesn't exist yet but user is updated to SUBSEDE
+                await db.doc(subSedePath).set(updateData, { merge: true });
+            } else if (effectiveRole === "COORDENAÇÃO") {
+                const orgId = effectiveOrg && effectiveOrg !== 'matriz' ? effectiveOrg : 'matriz';
+                const coordPath = `municipalities/PRIVATE/${callerEntityId}/${orgId}/users_coordenacao/${uid}`;
+                await db.doc(coordPath).set(updateData, { merge: true });
+            }
 
             return { success: true };
 
@@ -174,8 +227,29 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
                 throw new functions.https.HttpsError("permission-denied", "Permissão insuficiente.");
             }
 
-            await auth.deleteUser(uid);
+            try {
+                await auth.deleteUser(uid);
+            } catch (error: any) {
+                if (error.code !== 'auth/user-not-found') {
+                    throw error;
+                }
+                console.warn(`Usuário ${uid} não encontrado no Auth. Prosseguindo com deleção no Firestore...`);
+            }
+
             await db.collection("users").doc(uid).delete();
+
+            // Delete mirror if it existed
+            const role = targetUserDoc.data()?.role;
+            const orgId = targetUserDoc.data()?.organizationId;
+            if ((role === "SUBSEDE" || role === "Coordenador Local") && orgId && orgId !== 'matriz') {
+                const subSedePath = `municipalities/PRIVATE/${callerEntityId}/${orgId}/users_subsede/${uid}`;
+                await db.doc(subSedePath).delete();
+            } else if (role === "COORDENAÇÃO") {
+                const destOrg = orgId && orgId !== 'matriz' ? orgId : 'matriz';
+                const coordPath = `municipalities/PRIVATE/${callerEntityId}/${destOrg}/users_coordenacao/${uid}`;
+                await db.doc(coordPath).delete();
+            }
+
             return { success: true };
 
         } else if (action === 'toggleStatus') {
@@ -192,6 +266,19 @@ export const manageEntityUser = functions.region("southamerica-east1").https.onC
             const disabled = status === 'suspended';
             await auth.updateUser(uid, { disabled });
             await db.collection("users").doc(uid).update({ status });
+
+            // Mirror status update
+            const role = targetUserDoc.data()?.role;
+            const orgId = targetUserDoc.data()?.organizationId;
+            if ((role === "SUBSEDE" || role === "Coordenador Local") && orgId && orgId !== 'matriz') {
+                const subSedePath = `municipalities/PRIVATE/${callerEntityId}/${orgId}/users_subsede/${uid}`;
+                await db.doc(subSedePath).update({ status });
+            } else if (role === "COORDENAÇÃO") {
+                const destOrg = orgId && orgId !== 'matriz' ? orgId : 'matriz';
+                const coordPath = `municipalities/PRIVATE/${callerEntityId}/${destOrg}/users_coordenacao/${uid}`;
+                await db.doc(coordPath).update({ status });
+            }
+
             return { success: true };
         }
 

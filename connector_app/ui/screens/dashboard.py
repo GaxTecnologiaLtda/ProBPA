@@ -32,8 +32,9 @@ class DashboardScreen(ctk.CTkFrame):
         self.lbl_title = ctk.CTkLabel(self.header_frame, text=f"Conector ProBPA v{__version__}", font=("Roboto", 20, "bold"))
         self.lbl_title.pack(side="left")
         
-        mun_name = self.config_manager.get("municipality_name", "Desconhecido")
-        self.lbl_mun = ctk.CTkLabel(self.header_frame, text=f"{mun_name} ({self.config_manager.get('municipality_id')})", font=("Roboto", 16), text_color="gray")
+        muns = self.config_manager.get_municipalities()
+        count = len(muns)
+        self.lbl_mun = ctk.CTkLabel(self.header_frame, text=f"Modo Centralizado: {count} Municípios Integrados", font=("Roboto", 16), text_color="gray")
         self.lbl_mun.pack(side="left", padx=10)
 
         # Tabs
@@ -57,32 +58,48 @@ class DashboardScreen(ctk.CTkFrame):
 
     def _setup_status_tab(self):
         self.tab_status.grid_columnconfigure(0, weight=1)
+        self.tab_status.grid_rowconfigure(2, weight=1)
         
         # Big Status Badge
         self.lbl_big_status = ctk.CTkLabel(self.tab_status, text="AGUARDANDO", font=("Roboto", 32, "bold"), text_color="gray")
-        self.lbl_big_status.pack(pady=40)
+        self.lbl_big_status.pack(pady=20)
 
         self.lbl_timer = ctk.CTkLabel(self.tab_status, text="Próxima execução em: --:--")
-        self.lbl_timer.pack(pady=10)
+        self.lbl_timer.pack(pady=5)
 
         self.btn_run_now = ctk.CTkButton(self.tab_status, text="EXECUTAR AGORA", command=self.start_extraction_thread, width=200, height=50, fg_color="#2962FF")
-        self.btn_run_now.pack(pady=10)
+        self.btn_run_now.pack(pady=5)
 
-        # Stop Button (New in v3.4.0)
+        # Stop Button
         self.btn_stop = ctk.CTkButton(self.tab_status, text="PARAR", command=self.stop_extraction, width=200, height=40, fg_color="#C62828", state="disabled")
         self.btn_stop.pack(pady=5)
         
-        # Live Log Box
-        self.log_box = ctk.CTkTextbox(self.tab_status, height=200, state="disabled")
-        self.log_box.pack(fill="both", expand=True, padx=10, pady=10)
+        # --- DYNAMIC MUNICIPALITY LOG TABS ---
+        self.mun_log_tabs = ctk.CTkTabview(self.tab_status)
+        self.mun_log_tabs.pack(fill="both", expand=True, padx=10, pady=10)
+        self.log_boxes = {} # Store log boxes by mun_id
         
-        # Config Log Tags (Accessing underlying tkinter widget)
+        # Add a "Geral" tab for system messages
+        tab_geral = self.mun_log_tabs.add("Geral")
+        self.log_boxes["GERAL"] = self._create_log_box(tab_geral)
+        
+        muns = self.config_manager.get_municipalities()
+        for mun in muns:
+            mun_name = mun.get('municipality_name', 'Desconhecido')
+            mun_id = mun.get('municipality_id', '???')
+            tab = self.mun_log_tabs.add(mun_name)
+            self.log_boxes[mun_id] = self._create_log_box(tab)
+
+    def _create_log_box(self, parent):
+        log_box = ctk.CTkTextbox(parent, state="disabled")
+        log_box.pack(fill="both", expand=True, padx=5, pady=5)
         try:
-            self.log_box._textbox.tag_config("highlight", foreground="yellow")
-            self.log_box._textbox.tag_config("error", foreground="#FF5252")
-            self.log_box._textbox.tag_config("update", foreground="#00E5FF") # Cyan for updates
+            log_box._textbox.tag_config("highlight", foreground="yellow")
+            log_box._textbox.tag_config("error", foreground="#FF5252")
+            log_box._textbox.tag_config("update", foreground="#00E5FF")
         except:
             pass
+        return log_box
 
     def _setup_history_tab(self):
         self.tab_history.grid_columnconfigure(0, weight=1)
@@ -91,8 +108,23 @@ class DashboardScreen(ctk.CTkFrame):
         btn_refresh = ctk.CTkButton(self.tab_history, text="Atualizar Lista", command=self.refresh_history, height=30)
         btn_refresh.grid(row=0, column=0, pady=10, sticky="e", padx=10)
 
-        self.history_text = ctk.CTkTextbox(self.tab_history, state="disabled")
-        self.history_text.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        # --- DYNAMIC MUNICIPALITY HISTORY TABS ---
+        self.mun_hist_tabs = ctk.CTkTabview(self.tab_history)
+        self.mun_hist_tabs.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        self.history_boxes = {} # Store history text boxes by mun_id
+        
+        muns = self.config_manager.get_municipalities()
+        if not muns:
+            # Fallback
+            tab = self.mun_hist_tabs.add("Sem Municípios")
+            self.history_boxes["GERAL"] = self._create_log_box(tab)
+        else:
+            for mun in muns:
+                mun_name = mun.get('municipality_name', 'Desconhecido')
+                mun_id = mun.get('municipality_id', '???')
+                tab = self.mun_hist_tabs.add(mun_name)
+                self.history_boxes[mun_id] = self._create_log_box(tab)
+
         self.refresh_history()
 
     def _setup_config_tab(self):
@@ -112,7 +144,7 @@ class DashboardScreen(ctk.CTkFrame):
         self.btn_check_update = ctk.CTkButton(frm_maint, text="Verificar Atualizações", command=self.check_for_updates, fg_color="#00897B", height=40)
         self.btn_check_update.pack(pady=10, padx=20, fill="x")
 
-        self.btn_change_db = ctk.CTkButton(frm_maint, text="Reconfigurar Banco de Dados", command=lambda: self.request_admin_action("edit_db"), fg_color="#546E7A")
+        self.btn_change_db = ctk.CTkButton(frm_maint, text="Gerenciar Municípios (Centralizado)", command=lambda: self.request_admin_action("manage_muns"), fg_color="#546E7A")
         self.btn_change_db.pack(pady=10, padx=20, fill="x")
 
         # Danger Zone
@@ -127,66 +159,83 @@ class DashboardScreen(ctk.CTkFrame):
 
     # --- LOGIC ---
     
-    def log(self, message, level="info"):
-        self.log_box.configure(state="normal")
+    def log(self, message, level="info", mun_id=None):
+        target_box = self.log_boxes.get(mun_id, self.log_boxes.get("GERAL"))
+        if not target_box:
+            return # Should not happen if UI is built
+            
+        target_box.configure(state="normal")
         ts = datetime.now().strftime("%H:%M:%S")
         full_msg = f"[{ts}] {message}\n"
         
         if level == "highlight":
-            self.log_box.insert("end", full_msg, "highlight")
+            target_box.insert("end", full_msg, "highlight")
         elif level == "error":
-            self.log_box.insert("end", full_msg, "error")
+            target_box.insert("end", full_msg, "error")
         elif level == "update":
-            self.log_box.insert("end", full_msg, "update")
+            target_box.insert("end", full_msg, "update")
         else:
-            self.log_box.insert("end", full_msg)
+            target_box.insert("end", full_msg)
             
-        self.log_box.see("end")
-        self.log_box.configure(state="disabled")
+        target_box.see("end")
+        target_box.configure(state="disabled")
 
     def scheduler_loop(self):
         while not self.stop_event.is_set():
             try:
-                interval_str = self.config_manager.get("scheduler_interval", "15")
-                
-                # Handle extended intervals
-                if interval_str == "12 hours":
-                    interval_min = 720
-                elif interval_str == "24 hours":
-                    interval_min = 1440
-                elif interval_str == "Manual Only" or not interval_str.isdigit():
-                    self.lbl_timer.configure(text="Agendamento: Manual")
-                    time.sleep(10)
-                    continue
-                else:
-                    interval_min = int(interval_str)
-
+                muns = self.config_manager.get_municipalities()
                 now = datetime.now()
-
-                if self.last_run_time:
-                    delta = now - self.last_run_time
-                    minutes_since = delta.total_seconds() / 60
-                    remaining = interval_min - minutes_since
+                min_remaining = float('inf')
+                all_manual = True
+                
+                for mun in muns:
+                    interval_str = mun.get("scheduler_interval", "1 hora")
+                    if interval_str == "Manual": continue
+                    all_manual = False
                     
-                    if remaining <= 0 and not self.is_running:
-                        self.start_extraction_thread()
-                    elif remaining > 0:
-                        self.lbl_timer.configure(text=f"Próxima execução em: {int(remaining)} min")
+                    minutes = 60
+                    if "minuto" in interval_str: minutes = int(interval_str.split()[0])
+                    elif "hora" in interval_str:
+                        val = interval_str.split()[0]
+                        minutes = int(val) * 60 if val.isdigit() else 60
+                    else:
+                        try: minutes = int(interval_str)
+                        except: pass
+
+                    last_run_attempt = mun.get("last_run_attempt") or mun.get("last_run_success")
+                    if not last_run_attempt:
+                        remaining = 0
+                    else:
+                        try:
+                            last_run_dt = datetime.fromisoformat(last_run_attempt)
+                            elapsed = (now - last_run_dt).total_seconds() / 60
+                            remaining = minutes - elapsed
+                        except:
+                            remaining = 0
+                            
+                    if remaining < min_remaining:
+                        min_remaining = remaining
+                        
+                if not muns:
+                    self.lbl_timer.configure(text="Nenhum município configurado")
+                elif all_manual:
+                    self.lbl_timer.configure(text="Agendamento: Manual")
+                elif min_remaining <= 0:
+                    self.lbl_timer.configure(text="Iniciando ciclo agendado...")
+                    if not self.is_running:
+                        self.start_extraction_thread(force=False)
                 else:
-                    # First run? Maybe wait or run immediately? Let's run immediately on startup if configured
-                    if not self.is_running: 
-                         # Delay slightly to let UI render
-                         time.sleep(5)
-                         self.start_extraction_thread()
+                    self.lbl_timer.configure(text=f"Próxima execução em: {int(min_remaining)} min")
 
             except Exception as e:
                 print(f"Scheduler Error: {e}")
             
             time.sleep(60) # Check every minute
 
-    def start_extraction_thread(self):
+    def start_extraction_thread(self, force=True):
         if self.is_running: return
         self.is_running = True
+        self.force_extraction = force
         self.btn_run_now.configure(state="disabled")
         self.btn_stop.configure(state="normal") # Enable STOP
         self.lbl_big_status.configure(text="EXECUTANDO...", text_color="yellow")
@@ -201,25 +250,39 @@ class DashboardScreen(ctk.CTkFrame):
 
     def run_process(self):
         records_processed = 0
+        muns_records = {}
         final_status = "ERROR"
         
         try:
-            self.log(">>> Iniciando Ciclo de Extração <<<")
+            self.log(">>> Iniciando Ciclo de Extração <<<", "info", "GERAL")
             success = True
             
-            for status_type, message in self.engine.extract_and_send():
-                self.after(0, self.log, f"[{status_type}] {message}")
-                if "Found" in message and "records" in message:
-                     # Attempt to parse simple count logic if needed, or Engine yields it
-                     pass
+            for status_type, message, mun_id in self.engine.extract_and_send(force=self.force_extraction):
+                self.after(0, self.log, f"[{status_type}] {message}", "info", mun_id)
+                
+                # Count extractions from messages like "-> Found 2 procedures."
+                if "Found" in message and mun_id:
+                    try:
+                        count = int(message.split("Found ")[1].split(" ")[0])
+                        records_processed += count
+                        muns_records[mun_id] = muns_records.get(mun_id, 0) + count
+                    except: pass
+                    
                 if status_type == 'ERROR': # Error or Abort
                     success = False
+                
+                # Intercept finishing states for each municipality
+                if "=== Extração Finalizada com Sucesso" in message and mun_id:
+                     rc = muns_records.get(mun_id, 0)
+                     self.history_manager.add_entry(mun_id, "SUCESSO", f"Extração OK ({rc} regs)", rc)
+                elif "Erro de extração em" in message and mun_id:
+                     self.history_manager.add_entry(mun_id, "ERRO", "Falha na Extração", 0)
             
             if self.engine.aborted:
                  success = False
                  final_status = "ABORTED"
                  self.after(0, lambda: self.lbl_big_status.configure(text="CANCELADO", text_color="orange"))
-                 self.after(0, self.log, "Processo abortado pelo usuário.", "error")
+                 self.after(0, self.log, "Processo abortado pelo usuário.", "error", "GERAL")
             else:
                 final_status = "SUCCESS" if success else "ERROR"
                 if success:
@@ -232,31 +295,39 @@ class DashboardScreen(ctk.CTkFrame):
                         self.notify_callback("Conector ProBPA", "Erro durante a extração. Verifique o app.")
 
         except Exception as e:
-            self.after(0, self.log, f"CRITICAL: {e}")
+            self.after(0, self.log, f"CRITICAL: {e}", "error", "GERAL")
             self.after(0, lambda: self.lbl_big_status.configure(text="FALHA CRÍTICA", text_color="red"))
         finally:
             self.is_running = False
             self.last_run_time = datetime.now()
-            self.history_manager.add_entry(final_status, "Ciclo finalizado", records_processed)
+            self.history_manager.add_entry("GERAL", final_status, "Ciclo finalizado", records_processed)
             self.after(0, lambda: self.btn_run_now.configure(state="normal"))
             self.after(0, lambda: self.btn_stop.configure(state="disabled", text="PARAR")) # Reset STOP button
             self.after(0, self.refresh_history)
 
     def refresh_history(self):
-        entries = self.history_manager.get_entries()
-        self.history_text.configure(state="normal")
-        self.history_text.delete("1.0", "end")
+        muns = self.config_manager.get_municipalities()
+        if not muns: return
         
-        header = f"{'DATA':<20} | {'STATUS':<10} | {'MSG'}\n"
-        self.history_text.insert("end", header)
-        self.history_text.insert("end", "-"*60 + "\n")
-        
-        for e in entries:
-            # Simple text table
-            line = f"{e['timestamp']:<20} | {e['status']:<10} | {e['message']}\n"
-            self.history_text.insert("end", line)
+        for mun in muns:
+            mun_id = mun.get('municipality_id')
+            target_box = self.history_boxes.get(mun_id)
+            if not target_box: continue
             
-        self.history_text.configure(state="disabled")
+            entries = self.history_manager.get_entries(mun_id)
+            target_box.configure(state="normal")
+            target_box.delete("1.0", "end")
+            
+            header = f"{'DATA':<20} | {'STATUS':<10} | {'MSG'}\n"
+            target_box.insert("end", header)
+            target_box.insert("end", "-"*60 + "\n")
+            
+            for e in entries:
+                # Simple text table
+                line = f"{e['timestamp']:<20} | {e['status']:<10} | {e['message']}\n"
+                target_box.insert("end", line)
+                
+            target_box.configure(state="disabled")
 
     def _ask_password(self):
         """Secure password prompt."""
@@ -292,20 +363,26 @@ class DashboardScreen(ctk.CTkFrame):
         
         if not pwd: return
 
-        real_pass = self.config_manager.get("admin_password")
+        real_pass = self.config_manager.get_global("admin_password")
         
         if pwd == real_pass:
             if action_type == "reset":
                 self.config_manager.clear_config()
                 self.on_reset()
-            elif action_type == "edit_db":
-                # Ideal would be to open a settings dialog.
-                # For MVP v3.1, let's just say "Reset to edit" or maybe simple popup
-                # Actually, simplest is to Reset logic to allow full reconfig on Activation Screen
-                self.config_manager.clear_config()
-                self.on_reset() 
+            elif action_type == "manage_muns":
+                from ui.screens.municipality_manager import MunicipalityManager
+                MunicipalityManager(self, self.config_manager, on_close=self._update_header_count).grab_set()
         else:
             self.log("Tentativa de acesso não autorizado nas configs.")
+
+    def _update_header_count(self):
+        muns = self.config_manager.get_municipalities()
+        count = len(muns)
+        self.lbl_mun.configure(text=f"Modo Centralizado: {count} Municípios Integrados")
+        # Ideal: trigger a full UI reload to update the tabs if muns were changed.
+        # But for now, restart the app will apply it, or we could destroy and recreate tabs.
+        # Implementing basic message for user.
+        self.log("As Configurações de Municípios foram atualizadas. Reinicie o App para ver as novas abas.", "highlight", "GERAL")
 
     # --- UPDATE LOGIC ---
     def check_for_updates(self):

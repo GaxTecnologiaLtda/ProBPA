@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getDoc, doc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db, functions } from '../../firebase'; // Added functions
+import { httpsCallable } from 'firebase/functions'; // Added httpsCallable
 import { goalService, calculateGoalStatus } from '../../services/goalService';
 import { fetchProfessionalsByEntity } from '../../services/professionalsService';
 import { fetchMunicipalitiesByEntity } from '../../services/municipalitiesService';
@@ -11,9 +12,10 @@ import { useAuth } from '../../context/AuthContext';
 export interface DashboardStats {
     production: {
         total: number;
+        totalNonPactuated?: number;
         trend: number; // percentage
         trendUp: boolean;
-        chartData: { month: string; procedures: number }[];
+        chartData: { month: string; procedures: number; nonPactuated?: number }[];
         topProcedures: { name: string; value: number }[];
     };
     professionals: {
@@ -24,7 +26,7 @@ export interface DashboardStats {
     municipalities: {
         value: number;
         trendUp: boolean;
-        topList: { name: string; value: number }[];
+        topList: { name: string; value: number; nonPactuated?: number }[];
     };
     goals: {
         value: string; // percentage string "87%"
@@ -32,13 +34,15 @@ export interface DashboardStats {
         trendUp: boolean;
     };
     loading: boolean;
+    syncing: boolean;
+    syncData: () => Promise<void>;
     rawRecords?: any[];
 }
 
-export const useDashboardData = () => {
+export const useDashboardData = (selectedYear: string, selectedMonth: string, selectedDay: string, selectedMunicipality: string) => {
     const { claims } = useAuth();
     const [stats, setStats] = useState<DashboardStats>({
-        production: { total: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
+        production: { total: 0, totalNonPactuated: 0, trend: 0, trendUp: true, chartData: [], topProcedures: [] },
         professionals: { value: 0, trend: 0, trendUp: true },
         municipalities: { value: 0, trendUp: true, topList: [] },
         goals: { value: '0%', trend: 0, trendUp: true },
@@ -46,166 +50,97 @@ export const useDashboardData = () => {
         rawRecords: []
     });
 
-    useEffect(() => {
+    const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
+
+    const load = async () => {
         if (!claims?.entityId) return;
+        setLoading(true);
+        try {
+            let year = selectedYear;
+            let month: string | undefined = undefined;
+            let day: string | undefined = undefined;
 
-        const load = async () => {
-            try {
-                const currentYear = new Date().getFullYear().toString();
-
-                // 1. Fetch Municipalities & Professionals First (Needed for Context)
-                const [professionals, municipalities, goals] = await Promise.all([
-                    fetchProfessionalsByEntity(claims.entityId),
-                    fetchMunicipalitiesByEntity(claims.entityId),
-                    goalService.getGoalsForEntityPrivate(claims)
-                ]);
-
-                // 2. Fetch Production (Robust Cache with Promise Deduplication)
-                // First, determine Entity Type (Public/Private) reliably
-                const entityDocRef = doc(db, 'entities', claims.entityId);
-                const entityDocSnap = await getDoc(entityDocRef);
-                let entityType = 'PUBLIC';
-                if (entityDocSnap.exists()) {
-                    const eData = entityDocSnap.data();
-                    if (eData.type === 'Privada' || eData.type === 'PRIVATE') entityType = 'PRIVATE';
-                }
-
-                // We use goalService for manual data, and connectorService for connector data to ensure separation and accuracy
-                const [goalServiceStats, connectorStats] = await Promise.all([
-                    statsCache.getOrFetch(claims.entityId, currentYear, async () => {
-                        return await goalService.getEntityProductionStats(
-                            claims.entityId,
-                            currentYear,
-                            undefined,
-                            municipalities, // Pass list for extraction querying (used for manual check context)
-                            professionals   // Pass list for filtering extracted records
-                        );
-                    }),
-                    connectorService.fetchAggregateConnectorData(
-                        claims.entityId,
-                        currentYear,
-                        municipalities,
-                        professionals,
-                        entityType // Explicitly pass the resolved type
-                    )
-                ]);
-
-                // Filter goalServiceStats to keep ONLY 'manual' (or non-connector) to avoid double counting
-                // effectively treating goalService as the source for Manual data
-                const manualStats = goalServiceStats.filter((r: any) => r.source !== 'connector');
-
-                const productionStats = [...manualStats, ...connectorStats];
-
-                // 2. Process Production (Raw Records -> Aggregated Stats)
-                const aggregatedByMonth: Record<string, number> = {};
-                let totalQuantity = 0;
-
-                productionStats.forEach(record => {
-                    const month = record.competenceMonth; // YYYY-MM
-                    const qty = Number(record.quantity) || 1;
-
-                    if (month) {
-                        aggregatedByMonth[month] = (aggregatedByMonth[month] || 0) + qty;
-                    }
-                    totalQuantity += qty;
-                });
-
-                // Convert to Chart Data (sorted by month)
-                // We should ensure all months of the year are present? Or just data points.
-                // For a nice chart, let's sort keys.
-                const sortedMonths = Object.keys(aggregatedByMonth).sort();
-                const chartData = sortedMonths.map(m => ({
-                    month: m, // YYYY-MM or formatted
-                    procedures: aggregatedByMonth[m]
-                }));
-
-                // Aggregate Top Procedures
-                const procAggregation: Record<string, number> = {};
-                productionStats.forEach(p => {
-                    const name = p.procedureName || `Código: ${p.procedureCode}`;
-                    const qty = Number(p.quantity) || 0;
-                    procAggregation[name] = (procAggregation[name] || 0) + qty;
-                });
-
-                const topProcedures = Object.entries(procAggregation)
-                    .map(([name, value]) => ({ name, value }))
-                    .sort((a, b) => b.value - a.value)
-                    .slice(0, 10);
-
-                const totalProductionYear = totalQuantity;
-
-                // 3. Process Professionals
-                const totalProfs = professionals.length;
-
-                // 4. Process Municipalities
-                const totalMun = municipalities.length;
-
-                // Aggregate production by Municipality
-                const productionByMun: Record<string, number> = {};
-                productionStats.forEach(p => {
-                    // Try to find municipality ID
-                    const munId = p.municipalityId;
-                    if (munId) {
-                        const qty = Number(p.quantity) || 1;
-                        productionByMun[munId] = (productionByMun[munId] || 0) + qty;
-                    }
-                });
-
-                // Convert to Top List with Names
-                const topList = Object.entries(productionByMun)
-                    .map(([id, value]) => {
-                        const munParam = municipalities.find(m => m.id === id);
-                        return {
-                            name: munParam?.name || 'Desconhecido',
-                            value
-                        };
-                    })
-                    .sort((a, b) => b.value - a.value)
-                    .slice(0, 5); // Top 5
-                // 5. Process Goals
-                // Calculate average completion %
-                const globalTarget = goals.reduce((acc, g) => acc + (g.annualTargetQuantity || (g.targetQuantity * 12)), 0);
-                const globalAchievementPercent = globalTarget > 0 ? (totalProductionYear / globalTarget) * 100 : 0;
-
-                // Mock trend logic
-                const trendProd = 12; // Placeholder
-
-                setStats({
-                    production: {
-                        total: totalProductionYear,
-                        trend: trendProd,
-                        trendUp: true,
-                        chartData,
-                        topProcedures
-                    },
-                    professionals: {
-                        value: totalProfs,
-                        trend: 5,
-                        trendUp: true
-                    },
-                    municipalities: {
-                        value: totalMun,
-                        trendUp: true,
-                        topList: topList
-                    },
-                    goals: {
-                        value: `${Math.min(Math.round(globalAchievementPercent), 100)}%`,
-                        trend: 2,
-                        trendUp: true
-                    },
-                    loading: false,
-                    rawRecords: productionStats // Expose raw for drill-down
-                });
-
-            } catch (error) {
-                console.error("Dashboard Load Error", error);
-                setStats(s => ({ ...s, loading: false }));
+            if (selectedMonth !== 'all') {
+                month = `${year}-${selectedMonth.padStart(2, '0')}`;
             }
-        };
 
+            if (selectedDay !== 'all') {
+                day = selectedDay.padStart(2, '0');
+            }
+
+            const cacheKey = `dashboardStats_${claims.entityId}_${selectedYear}_${selectedMonth}_${selectedDay}_${selectedMunicipality}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            let data = null;
+
+            if (cachedData) {
+                try {
+                    const parsed = JSON.parse(cachedData);
+                    const now = new Date().getTime();
+                    // 24 hours in milliseconds
+                    if (now - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                        data = parsed.data;
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse cached dashboard stats', e);
+                }
+            }
+
+            if (!data) {
+                const getStatsFn = httpsCallable(functions, 'getDashboardStats');
+                const payload: any = { year, month, day };
+                if (selectedMunicipality && selectedMunicipality !== 'all') {
+                    payload.municipalityId = selectedMunicipality;
+                }
+                const response = await getStatsFn(payload);
+                data = response.data as any;
+                
+                // Save to cache
+                localStorage.setItem(cacheKey, JSON.stringify({
+                    timestamp: new Date().getTime(),
+                    data
+                }));
+            }
+
+            setStats(prevStats => ({
+                ...prevStats,
+                production: data.production || prevStats.production,
+                professionals: data.professionals || prevStats.professionals,
+                municipalities: data.municipalities || prevStats.municipalities,
+                goals: data.goals || prevStats.goals,
+            }));
+        } catch (error) {
+            console.error('Failed to load dashboard stats:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const syncData = async () => {
+        if (!claims?.entityId) return;
+        setSyncing(true);
+        try {
+            // Bypass cache logic on manual sync by passing skipCache or just clearing it
+            const cacheKey = `dashboardStats_${claims.entityId}_${selectedYear}_${selectedMonth}_${selectedDay}_${selectedMunicipality}`;
+            localStorage.removeItem(cacheKey);
+
+            // triggerDashboardRefresh is used for legacy or specific cases, we can run it, then reload without cache
+            const triggerRefreshFn = httpsCallable(functions, 'triggerDashboardRefresh');
+            // Global refresh, year decoupled from backend
+            await triggerRefreshFn({});
+            // After successful sync, reload the dashboard stats
+            await load();
+        } catch (error) {
+            console.error('Manual sync failed:', error);
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    useEffect(() => {
         load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedYear, selectedMonth, selectedDay, selectedMunicipality, claims?.entityId]);
 
-    }, [claims?.entityId]);
-
-    return stats;
+    return { ...stats, loading, syncing, syncData };
 };

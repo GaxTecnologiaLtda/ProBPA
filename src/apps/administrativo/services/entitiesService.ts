@@ -10,8 +10,8 @@ import {
     addDoc,
     deleteDoc,
 } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { db } from "../firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../firebase";
 
 export type EntityType = "PUBLIC" | "PRIVATE";
 export type LicenseStatus = "ACTIVE" | "SUSPENDED" | "EXPIRED" | "INACTIVE";
@@ -36,6 +36,10 @@ export interface AdminEntity {
     address?: string;
     managerRole?: string;
     entityKind?: string; // tipo detalhado: prefeitura, OSC, instituto etc.
+    allowedTabs?: string[];
+    dedicatedDatabaseId?: string;
+    connectorApiKey?: string;
+    connectorUltraEnabled?: boolean;
 }
 
 export type NewEntityInput = {
@@ -55,6 +59,7 @@ export type NewEntityInput = {
     address?: string;
     managerRole?: string;
     entityKind?: string;
+    allowedTabs?: string[];
 };
 
 function mapFirestoreTypeToEntityType(type: string): EntityType {
@@ -121,6 +126,10 @@ export async function fetchEntitiesByType(type: EntityType): Promise<AdminEntity
             address: data.address,
             managerRole: data.managerRole,
             entityKind: data.entityKind,
+            allowedTabs: data.allowedTabs,
+            dedicatedDatabaseId: data.dedicatedDatabaseId,
+            connectorApiKey: data.connectorApiKey,
+            connectorUltraEnabled: data.connectorUltraEnabled,
         } satisfies AdminEntity;
     });
 }
@@ -150,6 +159,10 @@ export async function fetchAllEntities(): Promise<AdminEntity[]> {
             address: data.address,
             managerRole: data.managerRole,
             entityKind: data.entityKind,
+            allowedTabs: data.allowedTabs,
+            dedicatedDatabaseId: data.dedicatedDatabaseId,
+            connectorApiKey: data.connectorApiKey,
+            connectorUltraEnabled: data.connectorUltraEnabled,
         } satisfies AdminEntity;
     });
 }
@@ -169,16 +182,23 @@ export async function toggleEntityStatus(
     });
 }
 
-export async function createEntity(input: NewEntityInput): Promise<void> {
-    const colRef = collection(db, "entities");
-    const createdAt = input.createdAt ?? new Date().toISOString();
+export async function createEntity(input: NewEntityInput): Promise<any> {
+    if (input.type === "PUBLIC") {
+        const createFn = httpsCallable(functions, "createPublicEntity");
+        const result = await createFn(input);
+        return result.data;
+    } else {
+        const colRef = collection(db, "entities");
+        const createdAt = input.createdAt ?? new Date().toISOString();
 
-    await addDoc(colRef, {
-        ...input,
-        createdAt,
-        status: mapEnumToStatusText(input.status),
-        type: input.type === "PUBLIC" ? "Pública" : "Privada",
-    });
+        const docRef = await addDoc(colRef, {
+            ...input,
+            createdAt,
+            status: mapEnumToStatusText(input.status),
+            type: "Privada",
+        });
+        return { id: docRef.id };
+    }
 }
 
 export async function updateEntity(
@@ -205,7 +225,6 @@ export async function deleteEntity(id: string): Promise<void> {
 }
 
 export async function grantMasterAccess(entityId: string, type: EntityType, email: string, name: string, phoneNumber: string) {
-    const functions = getFunctions();
     const grantFn = httpsCallable(functions, "grantEntityMasterAccess");
     return await grantFn({ entityId, type, email, name, phoneNumber });
 }
@@ -217,19 +236,16 @@ export async function getMasters(entityId: string) {
 }
 
 export async function toggleMasterAccess(uid: string, disabled: boolean) {
-    const functions = getFunctions();
     const toggleFn = httpsCallable(functions, "toggleMasterAccessStatus");
     return await toggleFn({ uid, disabled });
 }
 
 export async function resetMasterPassword(uid: string) {
-    const functions = getFunctions();
     const resetFn = httpsCallable(functions, "resetMasterUserPassword");
     return await resetFn({ uid });
 }
 
 export async function deleteMasterUser(uid: string, entityId: string) {
-    const functions = getFunctions();
     const deleteFn = httpsCallable(functions, "deleteMasterUser");
     return await deleteFn({ uid, entityId });
 }

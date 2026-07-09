@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { collectionGroup, query, where, getDocs, collection } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs, collection, limit } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -21,14 +21,80 @@ export interface BpaCReportRow {
 // Helpers
 const normalize = (str: string) => String(str || '').trim().toLowerCase();
 const onlyNumbers = (text: string) => String(text).replace(/\D/g, '');
+const removeAccents = (str: string) => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+export const formatCpfOrCns = (value: string | undefined): string => {
+    if (!value) return '';
+    const cleaned = value.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+        return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    }
+    if (cleaned.length === 15) {
+        return cleaned.replace(/(\d{3})(\d{4})(\d{4})(\d{4})/, "$1 $2 $3 $4");
+    }
+    return value;
+};
+
+export const getFormattedCpfOrCns = (r: any): string => {
+    // 1. Extract only digits from all possible fields
+    const rawCns = String(r.patientCns || r.patient?.cns || '').replace(/\D/g, '');
+    const rawCpf = String(r.patientCpf || r.patient?.cpf || '').replace(/\D/g, '');
+    
+    // 2. Prioritize CNS (15 digits)
+    if (rawCns.length === 15) return formatCpfOrCns(rawCns);
+    
+    // 3. Fallback to CPF (11 digits)
+    if (rawCpf.length === 11) return formatCpfOrCns(rawCpf);
+    
+    // 4. If neither matches standard length, try any available digits or return fallback
+    const fallback = rawCns || rawCpf || '';
+    return fallback.length > 0 ? formatCpfOrCns(fallback) : '-';
+};
+
+export const SIGTAP_DICTIONARY: Record<string, { code: string, name: string }> = {
+    'ABPG028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
+    '028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
+    'ABPG027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
+    '027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
+    'ABPG033': { code: '0301100039', name: 'AFERIÇÃO DE PRESSÃO ARTERIAL' },
+    '033': { code: '0301100039', name: 'AFERIÇÃO DE PRESSÃO ARTERIAL' },
+    'ABPG038': { code: '0101040075', name: 'MEDIÇÃO DE ALTURA' },
+    '038': { code: '0101040075', name: 'MEDIÇÃO DE ALTURA' },
+    'ABPG039': { code: '0101040083', name: 'MEDIÇÃO DE PESO' },
+    '039': { code: '0101040083', name: 'MEDIÇÃO DE PESO' },
+    'ABPG041': { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA (SC)' },
+    '041': { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA (SC)' },
+    'ABPG024': { code: '0214010058', name: 'TESTE RÁPIDO PARA DETECÇÃO DE ANTICORPOS ANTI-HIV PARAPOPULAÇÃO GERAL (EXCETO GESTANTE, PARCEIRO OU PARCERIA)' },
+    '024': { code: '0214010058', name: 'TESTE RÁPIDO PARA DETECÇÃO DE ANTICORPOS ANTI-HIV PARAPOPULAÇÃO GERAL (EXCETO GESTANTE, PARCEIRO OU PARCERIA)' },
+    'ABPO015': { code: '0101020104', name: 'ORIENTAÇÃO DE HIGIENE BUCAL' },
+    '015': { code: '0101020104', name: 'ORIENTAÇÃO DE HIGIENE BUCAL' },
+    'ABPO005': { code: '0101020074', name: 'APLICAÇÃO TÓPICA DE FLÚOR (INDIVIDUAL POR SESSÃO)' },
+    '005': { code: '0101020074', name: 'APLICAÇÃO TÓPICA DE FLÚOR (INDIVIDUAL POR SESSÃO)' },
+    'ABPO019': { code: '0307030059', name: 'RASPAGEM ALISAMENTO E POLIMENTO SUPRAGENGIVAIS (POR SEXTANTE)' },
+    '019': { code: '0307030059', name: 'RASPAGEM ALISAMENTO E POLIMENTO SUPRAGENGIVAIS (POR SEXTANTE)' },
+    'ABPO016': { code: '0307030040', name: 'PROFILAXIA / REMOÇÃO DA PLACA BACTERIANA' },
+    '016': { code: '0307030040', name: 'PROFILAXIA / REMOÇÃO DA PLACA BACTERIANA' },
+    'ODONTO': { code: '0301010048', name: 'CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)' },
+};
 
 export const normalizeVaccine = (name: string, type: string) => {
-    const nameUpper = String(name || '').toUpperCase();
-    const isVaccine = type === 'VACCINATION' || nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA');
+    const rawNameUpper = String(name || '').toUpperCase();
+    const nameUpper = rawNameUpper.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove accents
+    const isVaccine = type === 'VACCINATION' ||
+        nameUpper.includes('VACINA') ||
+        nameUpper.includes('IMUNIZA') ||
+        nameUpper.includes('TRIPLICE') ||
+        nameUpper.includes('BCG') ||
+        nameUpper.includes('HEPATITE') ||
+        nameUpper.includes('DIFTERIA') ||
+        nameUpper.includes('TETANO') ||
+        nameUpper.includes('ROTAVIRUS') ||
+        nameUpper.includes('POLIOMIELITE') ||
+        nameUpper.includes('MENINGO');
 
     if (isVaccine) {
         // 1. VIA ORAL (03.01.10.021-7)
-        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA')) {
+        if (nameUpper.includes('ORAL') || nameUpper.includes('VOP') || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA') || nameUpper.includes('POLIOMIELITE')) {
             return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
         }
 
@@ -48,8 +114,6 @@ export const normalizeVaccine = (name: string, type: string) => {
         }
 
         // 4. VIA INTRAMUSCULAR (03.01.10.020-9) - Broadest Category
-        // Most adult vaccines (Covid, Flu, Hep, DTP, Penta, etc.) are IM.
-        // Also catching 'IM' explicitly.
         if (nameUpper.includes('INTRAMUSCULAR') || nameUpper.includes('IM') ||
             nameUpper.includes('HEPATITE') ||
             nameUpper.includes('PENTA') || nameUpper.includes('DTP') || nameUpper.includes('HIB') ||
@@ -170,7 +234,9 @@ const drawProfessionalPage = async (
     aggregatedRecords.sort((a, b) => {
         if (a.source !== b.source) return a.source === 'manual' ? -1 : 1;
         if (a.patientName !== b.patientName) return (a.patientName || '').localeCompare(b.patientName || '');
-        return (a.attendanceDate || '').localeCompare(b.attendanceDate || '');
+        const normA = (a.attendanceDate || '').includes('/') ? (a.attendanceDate || '').split('/').reverse().join('') : (a.attendanceDate || '');
+        const normB = (b.attendanceDate || '').includes('/') ? (b.attendanceDate || '').split('/').reverse().join('') : (b.attendanceDate || '');
+        return normA.localeCompare(normB);
     });
 
     const tableBody: any[] = [];
@@ -199,7 +265,7 @@ const drawProfessionalPage = async (
 
         // Patient Header
         if (r.patientName !== currentPatient) {
-            const patientInfo = `${r.patientName || 'NÃO IDENTIFICADO'} (CNS: ${r.patientCns || '-'}, Idade: ${r.patientAge || r.age || '-'})`;
+            const patientInfo = `${r.patientName || 'NÃO IDENTIFICADO'} (CNS/CPF: ${getFormattedCpfOrCns(r)}, Idade: ${r.patientAge || r.age || '-'})`;
             tableBody.push([
                 {
                     content: patientInfo,
@@ -293,69 +359,210 @@ const drawProfessionalPage = async (
     }
 };
 
-const resolveSigtapCode = (rec: any): { code: string, name: string } => {
-    // Robust check for code/name location
+export const resolveSigtapCode = (rec: any): { code: string, name: string } | null => {
     const proc = rec.procedure || {};
-    let code = proc.code ? String(proc.code).replace(/\D/g, '') : (rec.procedureCode ? String(rec.procedureCode).replace(/\D/g, '') : (rec.code ? String(rec.code).replace(/\D/g, '') : ''));
+    let rawCode = proc.code ? String(proc.code) : (rec.procedureCode ? String(rec.procedureCode) : (rec.code ? String(rec.code) : ''));
+    let code = rawCode.replace(/\D/g, ''); // Extract only digits
+    if (!code && rawCode) code = rawCode.toUpperCase(); // Fallback if it's strictly alphabetical like ODONTO
+
     let name = proc.name || rec.procedureName || rec.name || 'Procedimento Sem Nome';
     const type = proc.type || rec.type || '';
     const profCbo = rec.professional?.cbo || rec.cbo || '';
 
-    // If we already have a valid SIGTAP code (10 digits starting with 0), keep it.
-    // BUT: If code is small (e.g. "25", "46") it's likely an internal ID -> FORCE check.
-    const isSmallCode = code.length <= 5;
     const nameUpper = name.toUpperCase();
 
-    // Force Vaccine Check for small codes if name looks like vaccine
+    // REGRA DE IGNORAR
+    if (code === 'CONSULTA' && nameUpper.includes('ATENDIMENTO INDIVIDUAL')) {
+        return null;
+    }
+
+    // 1. SUBSTITUIÇÃO DIRETA PELO DICIONÁRIO E-SUS -> SIGTAP
+    if (SIGTAP_DICTIONARY[code]) {
+        return SIGTAP_DICTIONARY[code];
+    }
+
+    const isSmallCode = code.length <= 5;
+
+    // 2. NORMALIZAÇÃO DE VACINAS COM CÓDIGOS PEQUENOS
     if (isSmallCode && (nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA'))) {
         const vacNorm = normalizeVaccine(name, type);
         if (vacNorm) return vacNorm;
     }
 
-    // Allow 2 digits (Vaccine) or other lengths if they seem valid, but if it's "CONSULTA" or "ODONTO", we map.
-    // Strict Normalization: Check for forbidden codes even if valid-looking
-    // if (code.length === 10 && code.startsWith('0')) return { code, name };
-
-    // --- MAPPING LOGIC ---
-
-    // 1. VACCINATION - Use shared helper
-    // RE-ENABLED: User requires consistency and correct codes for all records in the report.
     const vaccineNormalization = normalizeVaccine(name, type);
-    if (vaccineNormalization) {
-        return vaccineNormalization;
-    }
+    if (vaccineNormalization) return vaccineNormalization;
 
-    // 2. CONSULTATION / ATTENDANCE / ODONTOLOGY
+    // 3. NORMALIZAÇÃO DE ATENDIMENTOS/CONSULTAS
     const isConsultation =
         type === 'CONSULTATION' ||
         code === 'CONSULTA' ||
         type === 'ODONTOLOGY' ||
         type === 'ODONTO_PROCEDURE' ||
-        ['0301010072', '0301010048', '0301010021'].includes(code); // Explicitly target "bad" codes
+        nameUpper.includes('ATENDIMENTO ODONTOLOGICO') ||
+        ['0301010072', '0301010048', '0301010021'].includes(code);
 
     if (isConsultation) {
-        // RULE 1: Medical CBO (Doctors) -> Must be 0301010064 (Primary Care)
+        // Médicos
         if (profCbo.startsWith('225')) {
             return { code: '0301010064', name: 'CONSULTA MÉDICA EM ATENÇÃO PRIMÁRIA' };
         }
 
-        // RULE 2: Non-Medical Higher Level (Nurse, Physio, Odonto, etc.) -> Map to 0301010030
-
-        // Exception: If it's a specific procedure with a VALID code that is NOT one of the "bad" ones, keep it.
+        // Outros Profissionais de Nível Superior (Odonto, Enfermeiros, etc)
         const blacklist = ['0301010072', '0301010048', '0301010021'];
         if (code.length === 10 && code.startsWith('0') && !blacklist.includes(code)) {
             return { code, name };
         }
-
-        // Fallback or Blacklisted -> Map to 0301010030
         return { code: '0301010030', name: 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)' };
     }
 
-
-    // 3. Fallback check for other valid codes not caught above
+    // 4. PRESERVA CÓDIGOS SIGTAP VÁLIDOS (10 DÍGITOS COMEÇANDO COM 0)
     if (code.length === 10 && code.startsWith('0')) return { code, name };
 
+    // 5. CAI AQUI SE FUGIR DE TUDO E NÃO TIVER NO DICIONÁRIO
     return { code: code || 'S/N', name };
+};
+
+/**
+ * Helper to recover missing patient documents from the municipality's patient subcollection
+ * during report generation. This handles cases where manual productions were launched
+ * against duplicate/incomplete patient records.
+ */
+const enrichMissingManualDocuments = async (records: any[], entityId: string, municipalitiesList: any[]) => {
+    // 1. Identify records missing CNS/CPF
+    const missingDocs = records.filter(r => {
+        const doc = getFormattedCpfOrCns(r);
+        return doc === '-';
+    });
+
+    if (missingDocs.length === 0) return records;
+
+    // 2. Group by Municipality and then by Name
+    const munGroups = new Map<string, Set<string>>();
+    missingDocs.forEach(r => {
+        const mId = r.municipalityId;
+        const pName = r.patientName || r.patient?.name;
+        if (mId && pName) {
+            if (!munGroups.has(mId)) munGroups.set(mId, new Set());
+            // Robustness: Trim, Remove Accents and uppercase it for matching
+            munGroups.get(mId)!.add(removeAccents(pName).trim().toUpperCase());
+        }
+    });
+
+    console.log(`[Report Enrichment] Groups missing docs: ${munGroups.size}. Entities to check...`);
+
+    // 3. For each municipality, lookup patients
+    const patientCache = new Map<string, { cns?: string, cpf?: string }>();
+
+    for (const [munId, names] of munGroups.entries()) {
+        const munInfo = municipalitiesList?.find(m => m.id === munId);
+        
+        // Resolve Path Context (Fallback to provided entityId if munInfo is incomplete)
+        let type = munInfo?.entityType || munInfo?._pathContext?.entityType;
+        
+        // RECOVERY: If we don't know the type, try to infer or check both. 
+        // For Gameleira (and this entity), we know it's PRIVATE based on your DB path.
+        if (!type) {
+            // If the entityId matches the one we know is PRIVATE from your logs
+            if (entityId === 'wfgKMoGlzgf5OKzCK3PJ' || munInfo?._pathContext?.entityId === 'wfgKMoGlzgf5OKzCK3PJ') {
+                type = 'PRIVATE';
+            } else {
+                type = 'PUBLIC'; // Default fallback
+            }
+        }
+
+        if (type === 'public_entities') type = 'PUBLIC';
+        if (type === 'private_entities') type = 'PRIVATE';
+        type = (type.toUpperCase() === 'PRIVATE' || type === 'Privada' || type === 'private') ? 'PRIVATE' : 'PUBLIC';
+        
+        const mEntId = munInfo?._pathContext?.entityId || entityId;
+
+        if (!mEntId) {
+            console.warn(`[Report Enrichment] Skipping mun ${munId} - No entityId found.`);
+            continue;
+        }
+
+        const patientsPath = `municipalities/${type}/${mEntId}/${munId}/patients`;
+        const patientsRef = collection(db, patientsPath);
+        
+        console.log(`[Report Enrichment] Checking ${names.size} patients in path: ${patientsPath}`);
+
+        for (const name of names) {
+            const cacheKey = `${munId}-${name}`;
+            if (patientCache.has(cacheKey)) continue;
+
+            try {
+                // Prefix search to catch names with trailing spaces or subtle variations
+                const nameStart = name;
+                const nameEnd = name + '\uf8ff';
+                
+                const q = query(
+                    patientsRef, 
+                    where('name', '>=', nameStart),
+                    where('name', '<=', nameEnd),
+                    limit(10)
+                );
+                
+                const snap = await getDocs(q);
+                
+                if (!snap.empty) {
+                    // Recovery Strategy: Merge data from all matching duplicates
+                    let combinedDocs: { cns?: string, cpf?: string } = {};
+                    
+                    snap.forEach(d => {
+                        const data = d.data();
+                        const rawCns = onlyNumbers(data.cns);
+                        const rawCpf = onlyNumbers(data.cpf);
+                        
+                        // Pick CNS if it's 15 digits and we don't have one yet
+                        if (rawCns.length === 15 && !combinedDocs.cns) {
+                            combinedDocs.cns = data.cns;
+                        }
+                        // Pick CPF if it's 11 digits and we don't have one yet
+                        if (rawCpf.length === 11 && !combinedDocs.cpf) {
+                            combinedDocs.cpf = data.cpf;
+                        }
+                    });
+
+                    if (combinedDocs.cns || combinedDocs.cpf) {
+                        console.log(`[Report Enrichment] Recovered doc for ${name}: ${combinedDocs.cns || combinedDocs.cpf}`);
+                        patientCache.set(cacheKey, combinedDocs);
+                    }
+                }
+            } catch (err) {
+                console.error(`[Report Enrichment] Error searching for ${name}:`, err);
+            }
+        }
+    }
+
+    // 4. Back-fill records
+    let recoveredCount = 0;
+    records.forEach(r => {
+        const currentDoc = getFormattedCpfOrCns(r);
+        if (currentDoc === '-' && r.municipalityId && (r.patientName || r.patient?.name)) {
+            const pName = removeAccents(r.patientName || r.patient?.name).trim().toUpperCase();
+            const cacheKey = `${r.municipalityId}-${pName}`;
+            const match = patientCache.get(cacheKey);
+            
+            if (match) {
+                recoveredCount++;
+                // Update flat fields
+                if (match.cns) r.patientCns = match.cns;
+                if (match.cpf) r.patientCpf = match.cpf;
+                
+                // CRITICAL: Update nested patient object if it exists to override '-' or empty values
+                if (r.patient) {
+                    if (match.cns) r.patient.cns = match.cns;
+                    if (match.cpf) r.patient.cpf = match.cpf;
+                }
+            }
+        }
+    });
+
+    console.log(`%c[Report Enrichment] FINISHED. Total Recovered: ${recoveredCount}`, "color: white; background: green; font-size: 16px; font-weight: bold;");
+    if (recoveredCount > 0) {
+        console.log("[Report Enrichment] Sample of recovered records:", records.filter(r => (r.patientCns || r.patientCpf) && r.patientCns !== '-').slice(0, 3));
+    }
+    return records;
 };
 
 export const municipalityReportService = {
@@ -445,10 +652,14 @@ export const municipalityReportService = {
             }
 
             const allRecords = [...manualRecords, ...connectorRecords];
-            console.log('[MunicipalityReportService] Got', allRecords.length, 'records from goalService');
+            console.log('[MunicipalityReportService] Got', allRecords.length, 'records. Starting enrichment...');
+
+            // --- SMART DOCUMENT RECOVERY ---
+            // Fix: Fallback lookup for manual records missing CNS/CPF due to duplicate/incomplete patient entries
+            const enrichedRecords = await enrichMissingManualDocuments(allRecords, entityId, municipalitiesList || []);
 
             // 3. Filter Locally
-            const filteredRecords = allRecords.filter(r => {
+            const filteredRecords = enrichedRecords.filter(r => {
                 // Competence Match
                 let rComp = r.competenceMonth || r.competence || (r.productionDate ? r.productionDate.slice(0, 7) : '');
 
@@ -471,6 +682,9 @@ export const municipalityReportService = {
 
                 // Unit Match
                 if (unitIds && unitIds.length > 0 && !unitIds.includes(r.unitId)) return false;
+
+                // Exclude Canceled
+                if (r.status === 'canceled') return false;
 
                 return true;
             });
@@ -501,6 +715,20 @@ export const municipalityReportService = {
                     attDate = r.productionDate.split(' ')[0].split('-').reverse().join('/');
                 }
 
+                // Safe parsing to YYYY-MM-DD
+                const getYYYYMMDD = (dateStr: string): string => {
+                    if (!dateStr) return '';
+                    let d = dateStr.split(' ')[0];
+                    if (d.includes('/')) {
+                        const parts = d.split('/');
+                        if (parts[0].length === 2) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                    } else if (d.includes('-')) {
+                        const parts = d.split('-');
+                        if (parts[0].length === 2) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                    }
+                    return d;
+                };
+
                 return {
                     ...r,
                     professionalName: profName || 'Não Identificado',
@@ -508,10 +736,11 @@ export const municipalityReportService = {
                     procedureName: name,
                     patientAge: age,
                     attendanceDate: attDate,
-                    rawDate: r.productionDate ? r.productionDate.split(' ')[0] : (attDate ? attDate.split('/').reverse().join('-') : ''), // Normalizing to YYYY-MM-DD
+                    rawDate: getYYYYMMDD(r.productionDate || attDate), // Normalizing safely to YYYY-MM-DD
                     // Fix: Map Patient Info correctly (Connector/Manual)
                     patientName: r.patientName || r.patient?.name || 'NÃO IDENTIFICADO',
-                    patientCns: r.patientCns || r.patient?.cns || r.patient?.cpf || '',
+                    patientCns: getFormattedCpfOrCns(r) !== '-' ? getFormattedCpfOrCns(r) : '',
+                    patientCpf: r.patientCpf || r.patient?.cpf || '',
                     // Ensure quantities are numbers
                     quantity: Number(r.quantity) || 1
                 };
@@ -627,6 +856,9 @@ export const municipalityReportService = {
 
     // --- UPDATED BPA-I PDF GENERATION ---
     generatePdfBpaI: (rows: any[], meta: { competence: string, municipalityName: string, entityName: string }) => {
+        // --- EXCLUDE CANCELED RECORDS ---
+        rows = rows.filter(r => r.status !== 'canceled');
+
         const doc = new jsPDF('l', 'mm', 'a4'); // Landscape
 
         // Header
@@ -641,7 +873,9 @@ export const municipalityReportService = {
         rows.sort((a, b) => {
             if (a.source !== b.source) return a.source === 'manual' ? -1 : 1; // Manual first
             if (a.patientName !== b.patientName) return a.patientName.localeCompare(b.patientName);
-            return a.attendanceDate.localeCompare(b.attendanceDate);
+            const normA = (a.attendanceDate || '').includes('/') ? (a.attendanceDate || '').split('/').reverse().join('') : (a.attendanceDate || '');
+            const normB = (b.attendanceDate || '').includes('/') ? (b.attendanceDate || '').split('/').reverse().join('') : (b.attendanceDate || '');
+            return normA.localeCompare(normB);
         });
 
         const tableBody: any[] = [];
@@ -667,7 +901,7 @@ export const municipalityReportService = {
 
             // Patient Header (Group)
             if (r.patientName !== currentPatient) {
-                const patientInfo = `${r.patientName} (CNS: ${r.patientCns || '-'}, Idade: ${r.age})`;
+                const patientInfo = `${r.patientName} (CNS/CPF: ${getFormattedCpfOrCns(r)}, Idade: ${r.age})`;
                 tableBody.push([
                     {
                         content: patientInfo,
@@ -732,12 +966,31 @@ export const municipalityReportService = {
             const response = await fetch(url, { mode: 'cors' });
             if (!response.ok) throw new Error("Fetch failed");
             const blob = await response.blob();
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
                 reader.readAsDataURL(blob);
             });
-        } catch (e) { return ""; }
+        } catch (e) {
+            console.warn("Standard fetch failed, attempting with CORS proxy...", e);
+            try {
+                // Fallback using an alternative CORS proxy that supports raw binary
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error("Proxy fetch failed");
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } catch (proxyError) {
+                console.error("loadImage failed completely:", proxyError);
+                return "";
+            }
+        }
     },
 
     // KEEP GOALS REPORT (Simplified for length constraints in this edit, but in real file keeps full)
@@ -760,6 +1013,9 @@ export const municipalityReportService = {
 
     // KEEP UNIFIED
     generateUnifiedProfessionalProductionPdf: async (records: any[], allProfessionals: any[], meta: any) => {
+        // --- EXCLUDE CANCELED RECORDS ---
+        records = records.filter(r => r.status !== 'canceled');
+
         const doc = new jsPDF();
         let firstPage = true;
 
@@ -833,8 +1089,13 @@ export const municipalityReportService = {
     },
 
     generateProfessionalProductionPdf: async (records: any[], meta: any) => {
+        // --- EXCLUDE CANCELED RECORDS ---
+        records = records.filter(r => r.status !== 'canceled');
+
         const doc = new jsPDF();
         await drawProfessionalPage(doc, records, meta, municipalityReportService);
         doc.save(`Producao_Individual_${meta.competence.replace('/', '-')}.pdf`);
-    }
+    },
+
+    enrichMissingManualDocuments
 };

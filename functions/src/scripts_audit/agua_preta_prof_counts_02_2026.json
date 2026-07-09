@@ -1,0 +1,491 @@
+{
+  "total_records": 12695,
+  "unmatched_records": 6804,
+  "matched_professionals_count": 25,
+  "zero_record_professionals_count": 44,
+  "professionals": [
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_02447047401",
+      "name": "MÔNICA ROBERTA DA SILVA ",
+      "cns": "706308784015374",
+      "isActive": true,
+      "recordCount": 757
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_11432010433",
+      "name": "Stefanny rafaela Alves filho ",
+      "cns": "700000083831805",
+      "isActive": true,
+      "recordCount": 692
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_10462689450",
+      "name": "Gustavo Brito Morais ",
+      "cns": "700007544121504",
+      "isActive": true,
+      "recordCount": 447
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08035392409",
+      "name": "MARIANNA THERESA LUCIO DE CARVALHO FARIA",
+      "cns": "700204986073527",
+      "isActive": true,
+      "recordCount": 407
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_13233652496",
+      "name": "Leticia Rafaella Lins Barros ",
+      "cns": "709009830082618",
+      "isActive": true,
+      "recordCount": 371
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06690835421",
+      "name": "NATALY MYKAELLA MIRANDA DA SILVA",
+      "cns": "706202574657960",
+      "isActive": true,
+      "recordCount": 339
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_07241584481",
+      "name": "Tainá Duarte dos Santos França",
+      "cns": "708608087999880",
+      "isActive": true,
+      "recordCount": 327
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_07880357467",
+      "name": "Edneide Maria da Silva ",
+      "cns": "706800717357224",
+      "isActive": true,
+      "recordCount": 318
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_13574398492",
+      "name": "Ketilly Vitoria da Silva ",
+      "cns": "706507354531196",
+      "isActive": true,
+      "recordCount": 269
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08927759478",
+      "name": "Ricardo José de Brito André Gomes",
+      "cns": "706807766513826",
+      "isActive": true,
+      "recordCount": 252
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_11695178467",
+      "name": "Hellen katrine Santiago da silva ",
+      "cns": "706309733401472",
+      "isActive": true,
+      "recordCount": 245
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08297809471",
+      "name": "Joyce Thais Celestina de Andrade Leitão ",
+      "cns": "700507544036251",
+      "isActive": true,
+      "recordCount": 233
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_09348626728",
+      "name": "Joseane Maria Silva de Oliveira ",
+      "cns": "700805484733887",
+      "isActive": true,
+      "recordCount": 230
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_71155978471",
+      "name": "LÍVIA STEFÂNY FONTES ALVES ",
+      "cns": "700804412037883",
+      "isActive": true,
+      "recordCount": 171
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_71987223420",
+      "name": "Maria José da Silva ",
+      "cns": "707006876197230",
+      "isActive": true,
+      "recordCount": 166
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_11794654402",
+      "name": "Aílla Gabriela Santana Correia",
+      "cns": "702408008448625",
+      "isActive": true,
+      "recordCount": 159
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08191191482",
+      "name": "Ana Cláudia Maria Gouveia ",
+      "cns": "700106946964415",
+      "isActive": true,
+      "recordCount": 144
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12788650477",
+      "name": "Maria katarina Alves da Silva ",
+      "cns": "709204229146333",
+      "isActive": true,
+      "recordCount": 125
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_50084470410",
+      "name": "Alexei José Esteves Xavier ",
+      "cns": "704308567825991",
+      "isActive": true,
+      "recordCount": 125
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06177270409",
+      "name": "Dayse Maria de Oliveira da Silva ",
+      "cns": "700002022334005",
+      "isActive": true,
+      "recordCount": 53
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06039853433",
+      "name": "Cristiane Maria Lima Serafim ",
+      "cns": "704001329718566",
+      "isActive": true,
+      "recordCount": 26
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_11073177467",
+      "name": "Renata Maciel da Silva ",
+      "cns": "704603698820120",
+      "isActive": true,
+      "recordCount": 13
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_35500441434",
+      "name": "FÁTIMA MARIA DE ANDRADE COSTA",
+      "cns": "701204001483719",
+      "isActive": true,
+      "recordCount": 12
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_07154009403",
+      "name": "Adrielly Vitória da Silva Lira ",
+      "cns": "705408430530594",
+      "isActive": true,
+      "recordCount": 8
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12381786422",
+      "name": "Larissa Renata Soares",
+      "cns": "706005362360845",
+      "isActive": true,
+      "recordCount": 2
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_01325998445",
+      "name": "Cicero José da Silva",
+      "cns": "700903938649999",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_01497149479",
+      "name": "Márcia Maria da Silva ",
+      "cns": "700806421930287",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_02529395497",
+      "name": "Edvania maria da silva",
+      "cns": "704608658890424",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_04570276490",
+      "name": "Márcia Maria Florêncio ",
+      "cns": "700006880605103",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_04818429422",
+      "name": "Amélia Anísia Pedrosa Carneiro Tomaz ",
+      "cns": "700005667163807",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_04848996430",
+      "name": "Valdenice Maria da Silva ",
+      "cns": "703409435714000",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_05716094490",
+      "name": "Letícia Maria Cavalcanti santos",
+      "cns": "707004828135334",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06162481484",
+      "name": "Leonardo José da Silva ",
+      "cns": "980016278158006",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06305591474",
+      "name": "Almir Aslley Ferreira Melo",
+      "cns": "708407782742761",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06491493431",
+      "name": "Selma Maria da Silva Nascimento ",
+      "cns": "706007848171748",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06698792403",
+      "name": "Jefferson Maxweber Rodrigues Sá ",
+      "cns": "708708151930696",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_06707474405",
+      "name": "Rayssa Paiva Barbosa ",
+      "cns": "708001828106720",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_07062492400",
+      "name": "Edna maria da silva",
+      "cns": "898003730138849",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_07431971435",
+      "name": "Cássia Polyanna Silva de carvalho",
+      "cns": "709600612047671",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_07621881461",
+      "name": "Erickson Lopes de Lima",
+      "cns": "708206660699641",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08024454467",
+      "name": "Dayanne Alessandra Fernandes Bezerra ",
+      "cns": "700507576345659",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08692283401",
+      "name": "Deyne Joanna Silva Bispo ",
+      "cns": "702306143058618",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_08990926408",
+      "name": "Marcia Maria da Silva Alves ",
+      "cns": "706202522444060",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_09151836416",
+      "name": "Lilian layane Nunes ferreira ",
+      "cns": "706706579667610",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_09192082404",
+      "name": "Claudinete alves da Silva ",
+      "cns": "705008089717751",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_09660700466",
+      "name": "LARISSA MEIRA PORFIRIO",
+      "cns": "702008826177784",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_09782401463",
+      "name": "Paulo Cardoso Lins Filho",
+      "cns": "700506386541553",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_09785723437",
+      "name": "Patrícia Maria Araújo da Silva ",
+      "cns": "700505734170453",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_10320546462",
+      "name": "Karolayne Mayara da Silva Ferreira",
+      "cns": "700001622586306",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_10471771457",
+      "name": "Taciana Ferreira da Silva ",
+      "cns": "700004132591705",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_10956221459",
+      "name": "Ana Cecília dos santos ",
+      "cns": "704800563585447",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_11627909460",
+      "name": "IRIS KAROLAINE GONÇALVES DE FREITAS",
+      "cns": "707409089885674",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12040453482",
+      "name": "Maria Manuella Costa Basto Sobrinho",
+      "cns": "898003715740908",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12062957408",
+      "name": "Luciano Cordeiro dos Santos ",
+      "cns": "700402454605741",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12139654463",
+      "name": "Aureny maria Pereira da Silva ",
+      "cns": "705901588821075",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12434884415",
+      "name": "José Siqueira filho",
+      "cns": "704205586376690",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12659295484",
+      "name": "Adalberto Lucas da Silva Santos ",
+      "cns": "706400656117389",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12760982432",
+      "name": "Daniele Maria Wanderley Melo ",
+      "cns": "709809061775994",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12827868490",
+      "name": "Ednaldo José da Silva Filho ",
+      "cns": "700007189607507",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_12854538488",
+      "name": "Laura Rhayssa Ribeiro de Azevedo ",
+      "cns": "705809426924734",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_13530797405",
+      "name": "Hevylen Mayara Pereira da Silva",
+      "cns": "700605685156270",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_13579570412",
+      "name": "Ana Luiza Santos Silva ",
+      "cns": "700501914178955",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_14935697407",
+      "name": "ÉRIKA IGNACIO FEITOSA ",
+      "cns": "700709401312980",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_14969115478",
+      "name": "Samira Cristina Monteiro Silva ",
+      "cns": "700905976445191",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_15393362471",
+      "name": "Dayse Willyane Melo de Lima ",
+      "cns": "898005848011976",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_54275725468",
+      "name": "Sinésia Esther de Góis Pedrosa ",
+      "cns": "707000832086039",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_70066177405",
+      "name": "Jessica Maria da Silva",
+      "cns": "708004893863622",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_70309278422",
+      "name": "Bruna Rafaela Silva de Melo ",
+      "cns": "700407341953210",
+      "isActive": true,
+      "recordCount": 0
+    },
+    {
+      "docId": "wfgKMoGlzgf5OKzCK3PJ_81759150487",
+      "name": "Renata Petronila da silva ",
+      "cns": "709800005804192",
+      "isActive": true,
+      "recordCount": 0
+    }
+  ]
+}

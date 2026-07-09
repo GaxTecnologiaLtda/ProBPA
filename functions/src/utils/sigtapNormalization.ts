@@ -1,0 +1,195 @@
+/**
+ * Sigtap Normalization Utility
+ * 
+ * Este utilitário traduz códigos internos e atalhos textuais utilizados pelo e-SUS PEC
+ * para códigos formais de 10 dígitos do SIGTAP (Ministério da Saúde).
+ * 
+ * É utilizado primariamente na Cloud Function `aggregateConnectorProduction` antes de salvar os resumos diários.
+ */
+
+// MAPEAMENTO DIRETO (DE -> PARA)
+// Para códigos numéricos internos do PEC que não batem com o SIGTAP.
+export const SIGTAP_DICTIONARY: Record<string, { code: string, name: string }> = {
+    'ABPG010': { code: '0201020033', name: 'COLETA DE MATERIAL DO COLO DE ÚTERO PARA EXAME CITOPATOLÓGICO' },
+    '010': { code: '0201020033', name: 'COLETA DE MATERIAL DO COLO DE ÚTERO PARA EXAME CITOPATOLÓGICO' },
+    'ABPG018': { code: '0301100152', name: 'RETIRADA DE PONTOS DE CIRURGIAS (POR PACIENTE)' },
+    '018': { code: '0301100152', name: 'RETIRADA DE PONTOS DE CIRURGIAS (POR PACIENTE)' },
+    'ABPO010': { code: '0101020082', name: 'EVIDENCIAÇÃO DE PLACA BACTERIANA' },
+    'ODONTO010': { code: '0101020082', name: 'EVIDENCIAÇÃO DE PLACA BACTERIANA' },
+    // NOVO LOTE (Nazaré da Mata & gerais PEC)
+    'ABPG002': { code: '0101040059', name: 'ADMINISTRAÇÃO DE VITAMINA A' },
+    '002': { code: '0101040059', name: 'ADMINISTRAÇÃO DE VITAMINA A' },
+    'ABPG007': { code: '0301100012', name: 'CURATIVO GRAU I (CURATIVO ESPECIAL)' },
+    '007': { code: '0301100012', name: 'CURATIVO GRAU I (CURATIVO ESPECIAL)' },
+    'ABPG011': { code: '0301010048', name: 'EXAME DO PÉ DIABÉTICO' },
+    '011': { code: '0301010048', name: 'EXAME DO PÉ DIABÉTICO' },
+    'ABPG017': { code: '0301100144', name: 'RETIRADA DE CERUME / LAVAGEM DE OUVIDO' },
+    '017': { code: '0301100144', name: 'RETIRADA DE CERUME / LAVAGEM DE OUVIDO' },
+    'ABPG024': { code: '0214010155', name: 'TESTE RÁPIDO PARA DETECÇÃO DE INFECÇÃO PELO HIV' },
+    '024': { code: '0214010155', name: 'TESTE RÁPIDO PARA DETECÇÃO DE INFECÇÃO PELO HIV' },
+    'ABPG025': { code: '0214010295', name: 'TESTE RÁPIDO PARA HEPATITE C' },
+    '025': { code: '0214010295', name: 'TESTE RÁPIDO PARA HEPATITE C' },
+    'ABPG026': { code: '0214010120', name: 'TESTE RÁPIDO PARA SÍFILIS' },
+    'ABEX026': { code: '0214010015', name: 'GLICEMIA CAPILAR' },
+    '026': { code: '0214010015', name: 'GLICEMIA CAPILAR / TESTE RÁPIDO PARA SÍFILIS' }, // Fallback para 026 sem prefixo
+    'ABPG030': { code: '0301100101', name: 'INALAÇÃO / NEBULIZAÇÃO' },
+    '030': { code: '0301100101', name: 'INALAÇÃO / NEBULIZAÇÃO' },
+    'ABPG031': { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' },
+    '031': { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' },
+    'ABPG034': { code: '0301100250', name: 'AFERIÇÃO DE TEMPERATURA' },
+    '034': { code: '0301100250', name: 'AFERIÇÃO DE TEMPERATURA' },
+    'ABPG041': { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' },
+    '041': { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' },
+    'ABPG042': { code: '0101010028', name: 'ORIENTAÇÃO INDIVIDUAL EM SAÚDE' },
+    '042': { code: '0101010028', name: 'ORIENTAÇÃO INDIVIDUAL EM SAÚDE' },
+    // FIM DO NOVO LOTE
+    'ABPG028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
+    '028': { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' },
+    'ABPG027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
+    '027': { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' },
+    'ABPG033': { code: '0301100039', name: 'AFERIÇÃO DE PRESSÃO ARTERIAL' },
+    '033': { code: '0301100039', name: 'AFERIÇÃO DE PRESSÃO ARTERIAL' },
+    'ABPG038': { code: '0101040075', name: 'MEDIÇÃO DE ALTURA' },
+    '038': { code: '0101040075', name: 'MEDIÇÃO DE ALTURA' },
+    'ABPG039': { code: '0101040083', name: 'MEDIÇÃO DE PESO' },
+    '039': { code: '0101040083', name: 'MEDIÇÃO DE PESO' },
+    'ABPO015': { code: '0101020104', name: 'ORIENTAÇÃO DE HIGIENE BUCAL' },
+    '015': { code: '0101020104', name: 'ORIENTAÇÃO DE HIGIENE BUCAL' },
+    'ABPO005': { code: '0101020074', name: 'APLICAÇÃO TÓPICA DE FLÚOR (INDIVIDUAL POR SESSÃO)' },
+    '005': { code: '0101020074', name: 'APLICAÇÃO TÓPICA DE FLÚOR (INDIVIDUAL POR SESSÃO)' },
+    'ABPO019': { code: '0307030059', name: 'RASPAGEM ALISAMENTO E POLIMENTO SUPRAGENGIVAIS (POR SEXTANTE)' },
+    '019': { code: '0307030059', name: 'RASPAGEM ALISAMENTO E POLIMENTO SUPRAGENGIVAIS (POR SEXTANTE)' },
+    'ABPO016': { code: '0307030040', name: 'PROFILAXIA / REMOÇÃO DA PLACA BACTERIANA' },
+    '016': { code: '0307030040', name: 'PROFILAXIA / REMOÇÃO DA PLACA BACTERIANA' },
+    'ODONTO': { code: '0301010048', name: 'CONSULTA DE PROFISSIONAIS DE NIVEL SUPERIOR NA ATENÇÃO ESPECIALIZADA (EXCETO MÉDICO)' },
+};
+
+export const normalizeCns = (cns: string | undefined | null) => {
+    if (!cns) return '';
+    return String(cns).replace(/\D/g, '');
+};
+
+export const normalizeVaccine = (name: string, type: string) => {
+    const rawNameUpper = String(name || '').toUpperCase();
+    const nameUpper = rawNameUpper.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove accents
+    // Avoid false positives where 'HEPATITE' or 'MENINGO' is mentioned in a test/exam
+    if (nameUpper.includes('TESTE') || nameUpper.includes('EXAME') || nameUpper.includes('PESQUISA') || nameUpper.includes('SOROLOGIA') || nameUpper.includes('ANTIGENO') || nameUpper.includes('ANTÍGENO') || nameUpper.includes('ANTICORPO')) {
+        return null; // Abort vaccine normalization, let dict/raw code handle this
+    }
+
+    const isVaccine = type === 'VACCINATION' ||
+        nameUpper.includes('VACINA') ||
+        nameUpper.includes('IMUNIZA') ||
+        nameUpper.includes('TRIPLICE') ||
+        nameUpper.includes('BCG') ||
+        nameUpper.includes('HEPATITE') ||
+        nameUpper.includes('DIFTERIA') ||
+        nameUpper.includes('TETANO') ||
+        nameUpper.includes('ROTAVIRUS') ||
+        nameUpper.includes('POLIOMIELITE') ||
+        nameUpper.includes('MENINGO');
+
+    if (isVaccine) {
+        // 1. VIA ORAL (03.01.10.021-7)
+        if (nameUpper.includes('ORAL') || /\bVOP\b/.test(nameUpper) || nameUpper.includes('ROTAVIRUS') || nameUpper.includes('BOCA') || nameUpper.includes('GOTA') || nameUpper.includes('POLIOMIELITE')) {
+            return { code: '0301100217', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ORAL' };
+        }
+
+        // 2. VIA INTRADÉRMICA (03.01.10.023-3)
+        if (nameUpper.includes('INTRADERMICA') || nameUpper.includes('INTRADÉRMICA') || nameUpper.includes('BCG') || /\bID\b/.test(nameUpper)) {
+            return { code: '0301100233', name: 'ADMINISTRAÇÃO TÓPICA DE MEDICAMENTO(S)' }; // Sigtap closest generic
+        }
+
+        // 3. VIA SUBCUTÂNEA (03.01.10.022-5)
+        if (nameUpper.includes('SUBCUTANEA') || nameUpper.includes('SUBCUTÂNEA') ||
+            nameUpper.includes('TRIPLICE') || nameUpper.includes('SARAMPO') || nameUpper.includes('CAXUMBA') || nameUpper.includes('RUBEOLA') ||
+            nameUpper.includes('FEBRE AMARELA') ||
+            nameUpper.includes('VARICELA') || nameUpper.includes('CATAPORA') ||
+            nameUpper.includes('TETRA VIRAL') || /\bSCR\b/.test(nameUpper) ||
+            /\bSC\b/.test(nameUpper)) {
+            return { code: '0301100225', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA SUBCUTÂNEA' };
+        }
+
+        // 4. VIA INTRAMUSCULAR (03.01.10.020-9) - Broadest Category
+        if (nameUpper.includes('INTRAMUSCULAR') || /\bIM\b/.test(nameUpper) ||
+            nameUpper.includes('HEPATITE') ||
+            nameUpper.includes('PENTA') || nameUpper.includes('DTP') || /\bHIB\b/.test(nameUpper) ||
+            /\bVIP\b/.test(nameUpper) ||
+            nameUpper.includes('PNEUMO') || nameUpper.includes('MENINGO') ||
+            nameUpper.includes('INFLUENZA') || nameUpper.includes('GRIPE') ||
+            nameUpper.includes('COVID') ||
+            nameUpper.includes('DUPLA') || /\bDT\b/.test(nameUpper) ||
+            nameUpper.includes('TETANO') || nameUpper.includes('TÉTANO') ||
+            nameUpper.includes('HPV')) {
+            return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
+        }
+
+        if (nameUpper.includes('ENDOVENOSA')) {
+            return { code: '0301100195', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA ENDOVENOSA' };
+        }
+
+        // Default Fallback for ANY vaccine not matched above is usually IM in reports
+        return { code: '0301100209', name: 'ADMINISTRAÇÃO DE MEDICAMENTOS POR VIA INTRAMUSCULAR' };
+    }
+    return null;
+};
+
+export const resolveSigtapCode = (rec: any): { code: string, name: string } => {
+    const proc = rec.procedure || {};
+    let rawCode = proc.code ? String(proc.code) : (rec.procedureCode ? String(rec.procedureCode) : (rec.code ? String(rec.code) : ''));
+    let code = rawCode.replace(/\D/g, ''); // Extract only digits
+    if (!code && rawCode) code = rawCode.toUpperCase(); // Fallback if it's strictly alphabetical like ODONTO
+
+    let name = proc.name || rec.procedureName || rec.name || 'Procedimento Sem Nome';
+    const type = proc.type || rec.type || '';
+    const profCbo = rec.professional?.cbo || rec.cbo || '';
+
+    // 1. SUBSTITUIÇÃO DIRETA PELO DICIONÁRIO E-SUS -> SIGTAP
+    if (SIGTAP_DICTIONARY[rawCode]) {
+        return SIGTAP_DICTIONARY[rawCode]; // Tenta primeiro com o código bruto (ex: ABPG026)
+    }
+    if (SIGTAP_DICTIONARY[code]) {
+        return SIGTAP_DICTIONARY[code]; // Faz fallback para apenas números (ex: 026)
+    }
+
+    const isSmallCode = code.length <= 5;
+    const nameUpper = name.toUpperCase();
+
+    // 2. NORMALIZAÇÃO DE VACINAS COM CÓDIGOS PEQUENOS
+    if (isSmallCode && (nameUpper.includes('VACINA') || nameUpper.includes('IMUNIZA'))) {
+        const vacNorm = normalizeVaccine(name, type);
+        if (vacNorm) return vacNorm;
+    }
+
+    const vaccineNormalization = normalizeVaccine(name, type);
+    if (vaccineNormalization) return vaccineNormalization;
+
+    // 3. NORMALIZAÇÃO DE ATENDIMENTOS/CONSULTAS
+    const isConsultation =
+        type === 'CONSULTATION' ||
+        code === 'CONSULTA' ||
+        type === 'ODONTOLOGY' ||
+        type === 'ODONTO_PROCEDURE' ||
+        nameUpper.includes('ATENDIMENTO ODONTOLOGICO') ||
+        ['0301010072', '0301010048', '0301010021'].includes(code);
+
+    if (isConsultation) {
+        // Médicos
+        if (profCbo.startsWith('225')) {
+            return { code: '0301010064', name: 'CONSULTA MÉDICA EM ATENÇÃO PRIMÁRIA' };
+        }
+
+        // Outros Profissionais de Nível Superior (Odonto, Enfermeiros, etc)
+        const blacklist = ['0301010072', '0301010048', '0301010021'];
+        if (code.length === 10 && code.startsWith('0') && !blacklist.includes(code)) {
+            return { code, name };
+        }
+        return { code: '0301010030', name: 'CONSULTA DE PROFISSIONAIS DE NÍVEL SUPERIOR NA ATENÇÃO PRIMÁRIA (EXCETO MÉDICO)' };
+    }
+
+    // 4. PRESERVA CÓDIGOS SIGTAP VÁLIDOS (10 DÍGITOS COMEÇANDO COM 0)
+    if (code.length === 10 && code.startsWith('0')) return { code, name };
+
+    // 5. CAI AQUI SE FUGIR DE TUDO E NÃO TIVER NO DICIONÁRIO
+    return { code: code || 'S/N', name };
+};

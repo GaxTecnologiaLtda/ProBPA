@@ -25,7 +25,7 @@ const Units: React.FC = () => {
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,7 +69,7 @@ const Units: React.FC = () => {
   }, [claims?.entityId]);
 
   const toggleSection = (munId: string) => {
-    setCollapsedSections(prev => ({
+    setExpandedSections(prev => ({
       ...prev,
       [munId]: !prev[munId]
     }));
@@ -86,11 +86,11 @@ const Units: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, municipalityId: string) => {
+  const handleDelete = async (unit: Unit) => {
     if (confirm('Tem certeza que deseja excluir esta unidade?')) {
       try {
-        await deleteUnit(id, municipalityId);
-        setUnits(prev => prev.filter(u => u.id !== id));
+        await deleteUnit(unit);
+        setUnits(prev => prev.filter(u => u.id !== unit.id));
         setOpenMenuId(null);
       } catch (error) {
         console.error("Error deleting unit:", error);
@@ -271,7 +271,7 @@ const Units: React.FC = () => {
       <div className="space-y-8">
         {Object.keys(groupedUnits).map((munId) => {
           const { name, units } = groupedUnits[munId];
-          const isCollapsed = collapsedSections[munId];
+          const isExpanded = expandedSections[munId];
 
           return (
             <div key={munId} className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
@@ -292,13 +292,13 @@ const Units: React.FC = () => {
                   </div>
                 </div>
                 <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                  {isCollapsed ? <ChevronDown className="w-5 h-5" /> : <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" />}
+                  {isExpanded ? <ChevronDown className="w-5 h-5 transform rotate-180 transition-transform" /> : <ChevronDown className="w-5 h-5" />}
                 </button>
               </div>
 
               {/* Section Content */}
               <AnimatePresence>
-                {!isCollapsed && (
+                {isExpanded && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
@@ -409,7 +409,7 @@ const Units: React.FC = () => {
                                                   <Copy className="w-3 h-3" /> Duplicar
                                                 </button>
                                                 <button
-                                                  onClick={() => handleDelete(unit.id, unit.municipalityId)}
+                                                  onClick={() => handleDelete(unit)}
                                                   className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                                                 >
                                                   <Trash2 className="w-3 h-3" /> Excluir

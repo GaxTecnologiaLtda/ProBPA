@@ -140,6 +140,9 @@ export interface Municipality {
 
   // Interface Configuration
   interfaceType?: 'PEC' | 'SIMPLIFIED'; // PEC = Full LEDI/e-SUS, SIMPLIFIED = Basic Production Only
+  // External Integration Configuration
+  externalIntegrationToken?: string;
+  externalIntegrationSecret?: string;
 }
 
 export type MunicipalityInput = Omit<Municipality, 'id' | 'usersCount'>;
@@ -355,7 +358,8 @@ export enum LogLevel {
 export enum LogSource {
   ADMIN_PANEL = 'Admin Panel',
   ENTITY_PANEL = 'Entity Panel',
-  PRODUCTION_PANEL = 'Production Panel'
+  PRODUCTION_PANEL = 'Production Panel',
+  CLOUD_FUNCTIONS = 'Cloud Functions'
 }
 
 export interface LogEntry {
@@ -368,4 +372,19 @@ export interface LogEntry {
   ip: string;
   userAgent?: string;
   details?: any;
+}
+
+export interface APIIntegrationLog {
+    id: string;
+    municipalityId: string;
+    municipalityName: string;
+    entityId: string;
+    entityType: string;
+    timestamp: any;
+    recordCount: number;
+    status: 'SUCCESS' | 'ERROR';
+    clientIp: string;
+    errorMessage?: string;
+    competencies?: string[];
+    dateRange?: string;
 }

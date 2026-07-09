@@ -67,10 +67,12 @@ export const loadBpaIRecords = async (competenceMonth: string, user: any): Promi
         );
 
         const snapshot = await getDocs(proceduresQuery);
-        return snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        return snapshot.docs
+            .map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }))
+            .filter((doc: any) => doc.status !== 'canceled');
     } catch (error) {
         console.error("Error loading BPA-I records:", error);
         throw error;

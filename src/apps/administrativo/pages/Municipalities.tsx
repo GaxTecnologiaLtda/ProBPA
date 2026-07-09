@@ -5,7 +5,8 @@ import { Plus, Search, Link2, MapPin, Users, Building2, Hash, UserCircle, Phone,
 import { LicenseStatus, Municipality, EntityType, MunicipalityInput } from '../types';
 import { fetchAllMunicipalities, createMunicipality, updateMunicipality, deleteMunicipality, fetchLediStatusStats } from '../services/municipalitiesService';
 import { fetchEntitiesByType } from '../services/entitiesService';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebase';
 import { DataPreviewTest } from './DataPreviewTest';
 
 // Initial empty form state
@@ -34,7 +35,9 @@ const INITIAL_FORM_STATE: MunicipalityInput = {
         adminPassword: '', // Connector Admin Password
         integrationStatus: 'NOT_CONFIGURED'
     },
-    interfaceType: 'PEC' // Default setting
+    interfaceType: 'PEC', // Default setting
+    externalIntegrationToken: '',
+    externalIntegrationSecret: ''
 };
 
 const Municipalities: React.FC = () => {
@@ -213,6 +216,28 @@ const Municipalities: React.FC = () => {
                 apiKey: result,
                 integrationStatus: 'ACTIVE' // Activating immediately if key generated
             }
+        }));
+    };
+
+    const generateExternalIntegrationCredentials = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        
+        // Public Token
+        let token = 'TKN_';
+        for (let i = 0; i < 24; i++) {
+            token += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        // Secret Password
+        let secret = '';
+        for (let i = 0; i < 32; i++) {
+            secret += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            externalIntegrationToken: token,
+            externalIntegrationSecret: secret
         }));
     };
 
@@ -848,6 +873,84 @@ const Municipalities: React.FC = () => {
                                         Esta senha será solicitada para alterar configurações críticas no App Conector.
                                     </p>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between mt-6">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white pb-2 flex items-center gap-2">
+                                <Link2 className="w-4 h-4 text-blue-500" />
+                                Integração Externa (Sistemas Terceiros)
+                            </h4>
+                            <Badge variant={formData.externalIntegrationToken ? 'success' : 'neutral'}>
+                                {formData.externalIntegrationToken ? 'Habilitado' : 'Desabilitado'}
+                            </Badge>
+                        </div>
+
+                        <div className="p-4 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800 space-y-4">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    URL de Endpoint (Inclui Token)
+                                </label>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Link2 className="w-4 h-4 absolute left-3 top-3 text-blue-400" />
+                                        <Input
+                                            value={formData.externalIntegrationToken ? `https://southamerica-east1-probpa-producao.cloudfunctions.net/ingestExternalProduction?token=${formData.externalIntegrationToken}` : ''}
+                                            readOnly
+                                            className="pl-9 bg-white dark:bg-slate-900 border-slate-200 text-sm"
+                                            placeholder="Gere credenciais para obter a URL"
+                                        />
+                                    </div>
+                                    <Tooltip content="Copiar URL">
+                                        <Button
+                                            variant="outline"
+                                            className="px-3"
+                                            onClick={() => formData.externalIntegrationToken && copyToClipboard(`https://southamerica-east1-probpa-producao.cloudfunctions.net/ingestExternalProduction?token=${formData.externalIntegrationToken}`)}
+                                            disabled={!formData.externalIntegrationToken}
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </Button>
+                                    </Tooltip>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    Senha de Autenticação (Header x-api-key)
+                                </label>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Key className="w-4 h-4 absolute left-3 top-3 text-blue-400" />
+                                        <Input
+                                            value={formData.externalIntegrationSecret || ''}
+                                            readOnly
+                                            className="pl-9 bg-white dark:bg-slate-900 border-slate-200 font-mono text-sm"
+                                            placeholder="Gere a senha de permissão"
+                                        />
+                                    </div>
+                                    <Tooltip content="Copiar Senha">
+                                        <Button
+                                            variant="outline"
+                                            className="px-3"
+                                            onClick={() => formData.externalIntegrationSecret && copyToClipboard(formData.externalIntegrationSecret)}
+                                            disabled={!formData.externalIntegrationSecret}
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </Button>
+                                    </Tooltip>
+                                    <Tooltip content="Gerar Novas Credenciais">
+                                        <Button
+                                            variant="outline"
+                                            className="px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                            onClick={generateExternalIntegrationCredentials}
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                        </Button>
+                                    </Tooltip>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    Forneça a URL e a Senha para o sistema parceiro. A senha deve ser enviada no Header <code>x-api-key</code>.
+                                </p>
                             </div>
                         </div>
                     </div>

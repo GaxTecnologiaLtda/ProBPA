@@ -17,7 +17,9 @@ import {
   Map,
   LifeBuoy,
   AlertTriangle,
-  Calendar
+  Calendar,
+  ChevronDown,
+  History, PlayCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EntityType } from '../types';
@@ -27,7 +29,7 @@ import { getVersionString, LATEST_CHANGES, APP_VERSION } from '../version';
 import NotificationMenu from './NotificationMenu';
 
 interface LayoutProps {
-  type: EntityType;
+  type: EntityType | 'subsede';
 }
 
 const Layout: React.FC<LayoutProps> = ({ type }) => {
@@ -37,6 +39,25 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, claims, loading: authLoading, logout } = useAuth();
+
+  const generateCompetenceOptions = () => {
+    const options = [];
+    const today = new Date();
+    for (let i = -6; i < 18; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const mm = (d.getMonth() + 1).toString().padStart(2, '0');
+      const yyyy = d.getFullYear();
+      options.push(`${mm}/${yyyy}`);
+    }
+    const finalOptions = options.reverse();
+    finalOptions.unshift('Ano Atual');
+    finalOptions.unshift('Global'); // Keep both Global and Ano Atual at top if user wants it, or wait, user said "adicione a opcao Ano Atual". Let's put both.
+    return finalOptions;
+  };
+
+  const [selectedCompetence, setSelectedCompetence] = useState('Global');
+
+  const competenceOptions = generateCompetenceOptions();
 
   // Fetch entity data based on claims
   const { entity, loading: entityLoading } = useEntityData(claims?.entityId);
@@ -77,9 +98,12 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
       }
 
       // Check if user entity type matches the layout type
-      // claims.entityType should be "PUBLIC" or "PRIVATE"
-      // type prop is "public" or "private"
-      const userType = claims.entityType === 'PUBLIC' ? 'public' : 'private';
+      let userType = '';
+      if (claims.role === 'SUBSEDE') {
+        userType = 'subsede';
+      } else {
+        userType = claims.entityType === 'PUBLIC' ? 'public' : 'private';
+      }
 
       if (userType !== type) {
         setAccessDenied(true);
@@ -125,19 +149,53 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
     { icon: Activity, label: 'Produção Global', path: '/privado/producao' },
     { icon: FileText, label: 'Logs de Uso', path: '/privado/logs' },
     { icon: Users, label: 'Gestão Acessos', path: '/privado/usuarios' },
+    { icon: History, PlayCircle, label: 'Cadastros Originais', path: '/privado/cadastros-originais' },
     { icon: LifeBuoy, label: 'Suporte Técnico', path: '/privado/suporte' },
     { icon: Settings, label: 'Configuração', path: '/privado/configuracoes' },
   ];
 
-  // Filter menu items for SUBSEDE
-  const menuItemsPrivate = claims?.role === 'SUBSEDE'
-    ? menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos')
-    : menuItemsPrivateAll;
+  // Filter menu items based on roles
+  let menuItemsPrivate = menuItemsPrivateAll;
+  if (claims?.role === 'SUBSEDE') {
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos' && item.label !== 'Cadastros Originais');
+  } else if (claims?.role === 'COORDENAÇÃO' || claims?.coordenation) {
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Gestão Acessos' && item.label !== 'Cadastros Originais' && item.label !== 'Logs de Uso');
+  } else if (claims?.role !== 'MASTER') {
+    menuItemsPrivate = menuItemsPrivateAll.filter(item => item.label !== 'Cadastros Originais');
+  }
 
-  const menuItems = type === 'public' ? menuItemsPublic : menuItemsPrivate;
-  const primaryColor = type === 'public' ? 'bg-blue-600' : 'bg-emerald-600';
-  const primaryColorText = type === 'public' ? 'text-blue-600' : 'text-emerald-600';
-  const hoverColor = type === 'public' ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20' : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20';
+  // Filter based on entity contractual allowed tabs
+  if (type === 'private' && entity?.allowedTabs && Array.isArray(entity.allowedTabs)) {
+    // Only filter if allowedTabs is explicitly defined, to keep backward compatibility
+    menuItemsPrivate = menuItemsPrivate.filter(item => entity.allowedTabs!.includes(item.label));
+  }
+
+
+  const menuItemsSubsede = [
+    { icon: LayoutDashboard, label: 'Visão Geral', path: '/subsede/dashboard' },
+    { icon: Users, label: 'Corpo Clínico Local', path: '/subsede/profissionais' },
+    { icon: Users, label: 'Pacientes', path: '/subsede/pacientes' },
+    { icon: Activity, label: 'Produção Municipal', path: '/subsede/producao' },
+    { icon: PlayCircle, label: 'Tutoriais', path: '/subsede/tutoriais' },
+  ];
+
+  const menuItems = type === 'public' ? menuItemsPublic : type === 'subsede' ? menuItemsSubsede : menuItemsPrivate;
+  const primaryColor = type === 'public' ? 'bg-blue-600' : type === 'subsede' ? 'bg-orange-600' : 'bg-emerald-600';
+  const primaryColorText = type === 'public' ? 'text-blue-600' : type === 'subsede' ? 'text-orange-600' : 'text-emerald-600';
+  const hoverColor = type === 'public' ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20' : type === 'subsede' ? 'hover:bg-orange-50 dark:hover:bg-orange-900/20' : 'hover:bg-emerald-50 dark:hover:bg-emerald-900/20';
+
+  const [municipalityName, setMunicipalityName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (claims?.role === 'SUBSEDE' && claims?.entityId && claims?.municipalityId) {
+      import('../services/municipalitiesService').then(({ fetchMunicipalitiesByEntity }) => {
+        fetchMunicipalitiesByEntity(claims.entityId).then(muns => {
+          const mun = muns.find(m => m.id === claims.municipalityId);
+          if (mun) setMunicipalityName(mun.name);
+        }).catch(console.error);
+      });
+    }
+  }, [claims?.role, claims?.entityId, claims?.municipalityId]);
 
   if (authLoading || entityLoading) {
     return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
@@ -153,7 +211,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Acesso Negado</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             Seu usuário não tem permissão para acessar o painel de
-            <span className="font-bold"> {type === 'public' ? 'Entidade Pública' : 'Entidade Privada'}</span>.
+            <span className="font-bold"> {type === 'public' ? 'Entidade Pública' : type === 'subsede' ? 'Subsede' : 'Entidade Privada'}</span>.
             Por favor, verifique suas credenciais ou contate o administrador.
           </p>
           <button
@@ -197,7 +255,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
               ProBPA
             </span>
             <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mt-1 whitespace-nowrap">
-              Painel da Entidade {type === 'public' ? 'Pública' : 'Privada'}
+              Painel {type === 'public' ? 'Público' : type === 'subsede' ? 'Subsede' : 'Privado'}
             </span>
           </div>
         </div>
@@ -263,7 +321,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
             </button>
             {/* Breadcrumb simples */}
             <div className="hidden md:flex items-center text-sm text-gray-500 dark:text-gray-400">
-              <span className="capitalize">{type === 'public' ? 'Entidade Pública' : 'Entidade Privada'}</span>
+              <span className="capitalize">{type === 'public' ? 'Entidade Pública' : type === 'subsede' ? 'Painel Subsede' : 'Entidade Privada'}</span>
               <span className="mx-2">/</span>
               <span className="capitalize text-gray-900 dark:text-white font-medium">
                 {location.pathname.split('/').pop()?.replace('-', ' ') || 'Dashboard'}
@@ -283,11 +341,12 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
 
             <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700">
               <div className="text-right hidden md:block">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                <p className="text-sm font-bold text-gray-900 dark:text-white uppercase">
                   {user?.displayName || (claims?.role === 'SUBSEDE' ? 'Coordenador Local' : 'Usuário Master/Coordenação')}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {entity?.name || (type === 'public' ? 'Gestão Municipal' : 'Gestão Institucional')}
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase">
+                  {claims?.role === 'SUBSEDE' && municipalityName ? `${municipalityName} • ` : ''}
+                  {entity?.name || (type === 'public' ? 'Gestão Municipal' : type === 'subsede' ? 'Gestão Local' : 'Gestão Institucional')}
                 </p>
               </div>
               <div className={`h-10 w-10 rounded-full ${primaryColor} text-white flex items-center justify-center font-bold shadow-md`}>
@@ -299,7 +358,7 @@ const Layout: React.FC<LayoutProps> = ({ type }) => {
 
         <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
           <div className="max-w-7xl mx-auto">
-            <Outlet />
+            <Outlet context={{ selectedCompetence, setSelectedCompetence }} />
           </div>
         </main>
       </div>

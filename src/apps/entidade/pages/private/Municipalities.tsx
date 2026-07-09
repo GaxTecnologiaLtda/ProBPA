@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Badge, Modal, Input, Select } from '../../components/ui/Components';
 import { MOCK_UNITS, MOCK_PROFESSIONALS, BRAZILIAN_STATES } from '../../constants'; // Keep stats mocks for now
 import { Municipality, MunicipalityInput, LicenseStatus } from '../../types';
-import { Users, Edit2, Trash2, MapPin, Phone, Plus, Building2, Stethoscope, RefreshCw, Activity, Crown, Briefcase, Eye, AlertTriangle, ShieldCheck, Search, LayoutTemplate } from 'lucide-react';
+import { Users, Edit2, Trash2, MapPin, Phone, Plus, Building2, Stethoscope, RefreshCw, Activity, Crown, Briefcase, Eye, AlertTriangle, ShieldCheck, Search, LayoutTemplate, Key, Upload, Info, CalendarClock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useEntityData } from '../../hooks/useEntityData';
 import { fetchMunicipalitiesByEntity, createMunicipality, updateMunicipality, deleteMunicipality } from '../../services/municipalitiesService';
@@ -12,6 +12,10 @@ import { goalService } from '../../services/goalService';
 import { connectorService } from '../../services/connectorService';
 import { statsCache } from '../../services/statsCache';
 import { Unit, Professional } from '../../types';
+import { UserData, subscribeToEntityUsers, createUser, resetUserPassword, toggleUserStatus, deleteUser } from '../../services/usersService';
+import { functions } from '../../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { logAction } from '../../services/logsService';
 
 const Municipalities: React.FC = () => {
   const { user, claims, logout } = useAuth();
@@ -22,14 +26,41 @@ const Municipalities: React.FC = () => {
   const [units, setUnits] = useState<Unit[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [productionStats, setProductionStats] = useState<Record<string, number>>({});
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
 
   const [loading, setLoading] = useState(true); // Structure loading
   const [loadingStats, setLoadingStats] = useState(false); // Stats loading (background)
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubsedeModalOpen, setIsSubsedeModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const [isToleranceModalOpen, setIsToleranceModalOpen] = useState(false);
+  const [selectedMunForTolerance, setSelectedMunForTolerance] = useState<Municipality | null>(null);
+  const [toleranceDaysInput, setToleranceDaysInput] = useState<number>(0);
+  const [savingTolerance, setSavingTolerance] = useState(false);
+
+  // Patient Modal State
+  const [isPatientsModalOpen, setIsPatientsModalOpen] = useState(false);
+  const [selectedMunForPatients, setSelectedMunForPatients] = useState<Municipality | null>(null);
+  const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
+  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  
+  const [debouncedPatientSearchTerm, setDebouncedPatientSearchTerm] = useState('');
+  const [hasMorePatients, setHasMorePatients] = useState(false);
+  const [loadingMorePatients, setLoadingMorePatients] = useState(false);
+  const [totalPatientsCount, setTotalPatientsCount] = useState(0);
+  
+  const [isEditPatientModalOpen, setIsEditPatientModalOpen] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<any | null>(null);
+  const [editingPatientLoading, setEditingPatientLoading] = useState(false);
+
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{current: number, total: number, files: number} | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const filteredMunicipalities = municipalities.filter(m =>
     m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -38,6 +69,10 @@ const Municipalities: React.FC = () => {
 
   // Form State
   const [formData, setFormData] = useState<Partial<MunicipalityInput>>({});
+  const [subsedeEmail, setSubsedeEmail] = useState('');
+  const [subsedeName, setSubsedeName] = useState('');
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Security Check
   useEffect(() => {
@@ -72,45 +107,17 @@ const Municipalities: React.FC = () => {
 
     setLoadingStats(true);
     try {
-      const [manualProduction, connectorProduction] = await Promise.all([
-        statsCache.getOrFetch(claims.entityId, currentYear, async () => {
-          return await goalService.getEntityProductionStats(
-            claims.entityId,
-            currentYear,
-            undefined,
-            municipalities,
-            professionals
-          );
-        }),
-        connectorService.fetchAggregateConnectorData(
-          claims.entityId,
-          currentYear,
-          municipalities,
-          professionals
-        )
-      ]);
+      const getMunicipalitiesStatsFn = httpsCallable(functions, 'getMunicipalitiesStats');
+      const response = await getMunicipalitiesStatsFn({ year: currentYear });
+      const data = response.data as any;
 
-      const manualFiltered = (manualProduction || []).filter((r: any) => r.source !== 'connector');
-      const allProduction = [...manualFiltered, ...connectorProduction];
-
-      processAndSetStats(allProduction);
+      setProductionStats(data.statsByMun || {});
 
     } catch (error) {
       console.error("Error loading production stats:", error);
     } finally {
       setLoadingStats(false);
     }
-  };
-
-  const processAndSetStats = (rawProduction: any[]) => {
-    const statsByMun: Record<string, number> = {};
-    rawProduction.forEach(record => {
-      if (record.municipalityId) {
-        const qty = record.quantity || 1;
-        statsByMun[record.municipalityId] = (statsByMun[record.municipalityId] || 0) + qty;
-      }
-    });
-    setProductionStats(statsByMun);
   };
 
   // Initial Load (Structure)
@@ -124,6 +131,15 @@ const Municipalities: React.FC = () => {
       loadProduction();
     }
   }, [loading, municipalities]); // Triggered after structure loads
+
+  // Load Users
+  useEffect(() => {
+    if (!claims?.entityId) return;
+    const unsubscribe = subscribeToEntityUsers(claims.entityId, (fetchedUsers) => {
+      setAllUsers(fetchedUsers);
+    });
+    return () => unsubscribe();
+  }, [claims?.entityId]);
 
   const handleOpenModal = (municipality?: Municipality, viewMode: boolean = false) => {
     setIsViewMode(viewMode);
@@ -157,10 +173,54 @@ const Municipalities: React.FC = () => {
         population: 0,
         active: true,
         status: LicenseStatus.ACTIVE,
-        interfaceType: 'PEC'
+        interfaceType: 'SIMPLIFIED',
+        productionToleranceDays: 0
       });
     }
+
+    // Reset subsede form fields
+    setSubsedeEmail('');
+    setSubsedeName('');
+    setGeneratedPassword(null);
     setIsModalOpen(true);
+  };
+
+  const handleOpenSubsedeModal = (municipality: Municipality) => {
+    setEditingId(municipality.id);
+    setSubsedeEmail('');
+    setSubsedeName('');
+    setGeneratedPassword(null);
+    setIsSubsedeModalOpen(true);
+  };
+
+  const handleOpenToleranceModal = (mun: Municipality) => {
+    setSelectedMunForTolerance(mun);
+    setToleranceDaysInput(mun.productionToleranceDays || 0);
+    setIsToleranceModalOpen(true);
+  };
+
+  const handleSaveTolerance = async () => {
+    if (!selectedMunForTolerance || !claims?.entityId) return;
+    setSavingTolerance(true);
+    try {
+      await updateMunicipality(selectedMunForTolerance.id, { productionToleranceDays: toleranceDaysInput }, { linkedEntityId: claims.entityId });
+      
+      await logAction({
+        action: 'CONFIG',
+        target: 'MUNICIPALITY',
+        description: `Configurou a tolerância de produção para ${toleranceDaysInput} dia(s) retroativos.`,
+        entityId: claims.entityId,
+        municipalityId: selectedMunForTolerance.id
+      });
+
+      setMunicipalities(prev => prev.map(m => m.id === selectedMunForTolerance.id ? { ...m, productionToleranceDays: toleranceDaysInput } : m));
+      setIsToleranceModalOpen(false);
+      setSelectedMunForTolerance(null);
+    } catch (err: any) {
+      alert("Erro ao salvar tolerância: " + err);
+    } finally {
+      setSavingTolerance(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -213,7 +273,8 @@ const Municipalities: React.FC = () => {
 
       active: formData.active !== undefined ? formData.active : true,
       status: formData.active ? LicenseStatus.ACTIVE : LicenseStatus.SUSPENDED,
-      interfaceType: formData.interfaceType || 'PEC'
+      interfaceType: 'SIMPLIFIED',
+      productionToleranceDays: formData.productionToleranceDays !== undefined ? Number(formData.productionToleranceDays) : 0
     };
 
     try {
@@ -254,6 +315,330 @@ const Municipalities: React.FC = () => {
 
     return { unitsCount, prosCount, productionCount };
   };
+
+  // Funções de Gestão SUBSEDE
+  const currentSubsedeUsers = editingId ? allUsers.filter(u => u.organizationId === editingId && u.role === 'SUBSEDE') : [];
+
+  const handleCreateSubsedeAccess = async () => {
+    if (!subsedeEmail || !subsedeName || !editingId || !claims?.entityId) return;
+    setActionLoading(true);
+    setGeneratedPassword(null);
+    try {
+      const muni = municipalities.find(m => m.id === editingId);
+      const orgName = muni ? `Filial: ${muni.name} (${muni.uf})` : 'Desconhecido';
+
+      const dataToSave: Partial<UserData> = {
+        name: subsedeName,
+        email: subsedeEmail,
+        cpf: '000.000.000-00', // Mock CPF since it's required by schema but not relevant here
+        phone: '',
+        role: 'SUBSEDE', // Use the SUBSEDE role
+        organizationId: editingId,
+        organizationName: orgName,
+        entityType: claims?.entityType || 'PRIVATE',
+        status: 'active'
+      };
+
+      const result = await createUser(dataToSave);
+      if (result.password) {
+        setGeneratedPassword(result.password);
+      } else {
+        alert('Usuário criado. Peça para o usuário verificar o e-mail para definir a senha.');
+      }
+    } catch (error: any) {
+      alert(`Erro ao criar acesso: ${error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResetSubsedeAccess = async (user: UserData) => {
+    if (confirm(`Deseja redefinir a senha para ${user.email}?`)) {
+      setActionLoading(true);
+      try {
+        const result = await resetUserPassword(user.id);
+        if (result.password) {
+          setGeneratedPassword(result.password);
+        } else {
+          alert('Senha redefinida com sucesso! E-mail de recuperação enviado.');
+        }
+      } catch (error: any) {
+        alert(`Erro ao redefinir senha: ${error.message}`);
+      } finally {
+        setActionLoading(false);
+      }
+    }
+  };
+
+  const handleToggleSubsedeStatus = async (user: UserData) => {
+    setActionLoading(true);
+    try {
+      const newStatus = user.status === 'active' ? 'suspended' : 'active';
+      await toggleUserStatus(user.id, newStatus);
+    } catch (error: any) {
+      alert(`Erro ao alterar status: ${error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteSubsedeAccess = async (user: UserData) => {
+    if (confirm(`Deseja realmente excluir o acesso de ${user.email}? Esta ação não pode ser desfeita.`)) {
+      setActionLoading(true);
+      try {
+        await deleteUser(user.id);
+        // The user will automatically disappear due to the snapshot subscription
+      } catch (error: any) {
+        alert(`Erro ao excluir acesso: ${error.message}`);
+      } finally {
+        setActionLoading(false);
+      }
+    }
+  };
+
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedPatientSearchTerm(patientSearchTerm);
+    }, 600);
+    return () => clearTimeout(handler);
+  }, [patientSearchTerm]);
+
+  const fetchPatients = async (mun: Municipality, reset: boolean = true) => {
+    if (reset) {
+        setLoadingPatients(true);
+        // setPatientsList([]); // Optional flash, better to keep old data until new arrives
+    } else {
+        setLoadingMorePatients(true);
+    }
+    try {
+      const getPatientsFn = httpsCallable(functions, 'getMunicipalityPatients');
+      const payload: any = { 
+          municipalityId: mun.id, 
+          entityType: claims?.entityType || 'PRIVATE',
+          searchTerm: debouncedPatientSearchTerm
+      };
+      
+      if (!reset && patientsList.length > 0) {
+          payload.lastDocId = patientsList[patientsList.length - 1].id;
+      }
+
+      const response = await getPatientsFn(payload);
+      const data = response.data as any;
+      
+      if (reset) {
+        setPatientsList(data.patients || []);
+      } else {
+        setPatientsList(prev => [...prev, ...(data.patients || [])]);
+      }
+      setTotalPatientsCount(data.totalCount || 0);
+      setHasMorePatients(data.hasMore || false);
+    } catch (error) {
+       console.error(error);
+       alert("Erro ao buscar pacientes.");
+    } finally {
+       setLoadingPatients(false);
+       setLoadingMorePatients(false);
+    }
+  };
+
+  const handleOpenPatientsModal = async (mun: Municipality) => {
+    setSelectedMunForPatients(mun);
+    setPatientSearchTerm('');
+    setDebouncedPatientSearchTerm('');
+    setIsPatientsModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (isPatientsModalOpen && selectedMunForPatients) {
+       fetchPatients(selectedMunForPatients, true);
+    }
+  }, [debouncedPatientSearchTerm, isPatientsModalOpen, selectedMunForPatients?.id]);
+
+  const handleEditPatient = (patient: any) => {
+     setEditingPatient({ ...patient });
+     setIsEditPatientModalOpen(true);
+  };
+
+  const handleDeletePatient = async (patientId: string) => {
+    if (confirm('Tem certeza que deseja excluir permanentemente este paciente da base do município?')) {
+        try {
+            const deleteFn = httpsCallable(functions, 'deletePatientRecord');
+            await deleteFn({
+                 municipalityId: selectedMunForPatients!.id,
+                 patientId: patientId,
+                 entityType: claims?.entityType || 'PRIVATE'
+            });
+            setPatientsList(prev => prev.filter(p => p.id !== patientId));
+        } catch(error) {
+            console.error(error);
+            alert("Erro ao deletar paciente.");
+        }
+    }
+  };
+
+  const handleSavePatientEdit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editingPatient) return;
+      setEditingPatientLoading(true);
+      try {
+          const updateFn = httpsCallable(functions, 'updatePatientRecord');
+          await updateFn({
+               municipalityId: selectedMunForPatients!.id,
+               patientId: editingPatient.id,
+               patientData: editingPatient,
+               entityType: claims?.entityType || 'PRIVATE'
+          });
+          setPatientsList(prev => prev.map(p => p.id === editingPatient.id ? editingPatient : p));
+          setIsEditPatientModalOpen(false);
+      } catch (error) {
+          console.error(error);
+          alert("Erro ao atualizar paciente.");
+      } finally {
+          setEditingPatientLoading(false);
+      }
+  };
+
+  const handleImportClick = () => {
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !selectedMunForPatients) return;
+
+    setImporting(true);
+    try {
+      const patientsData: any[] = [];
+      const seenIds = new Set<string>();
+      let emptyIgnored = 0;
+      let localDuplicatesIgnored = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const text = await file.text();
+        let jsonObj;
+        try {
+           jsonObj = JSON.parse(text);
+        } catch (e) {
+           console.warn(`Arquivo ignorado (JSON inválido): ${file.name}`);
+           continue;
+        }
+        
+        const keys = Object.keys(jsonObj);
+        
+        for (const key of keys) {
+          const row = jsonObj[key];
+          if (!row || typeof row !== 'object') continue;
+          
+          const col1 = (row.col_1 || '').toString().replace(/\D/g, ''); // CNS or CPF
+          if (!col1) {
+              emptyIgnored++;
+              continue; // Ignorar sem CNS/CPF
+          }
+
+          if (seenIds.has(col1)) {
+              localDuplicatesIgnored++;
+              continue; // Duplicado no próprio lote do cliente
+          }
+          seenIds.add(col1);
+
+          const col2 = (row.col_2 || '').toString().trim(); // Name
+          const col3 = (row.col_3 || '').toString().trim(); // DOB DD/MM/YYYY
+          
+          let cns = '';
+          let cpf = '';
+          if (col1.length === 11) cpf = col1;
+          else if (col1.length === 15) cns = col1;
+          
+          let dob = '';
+          let ageStr = '';
+          if (col3) {
+             const parts = col3.split('/');
+             if (parts.length === 3) {
+                dob = `${parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD
+                const birthDate = new Date(dob);
+                const today = new Date();
+                let age = today.getFullYear() - birthDate.getFullYear();
+                const m = today.getMonth() - birthDate.getMonth();
+                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                }
+                ageStr = age >= 0 ? age.toString() : '';
+             }
+          }
+          
+          if (!col2) continue; // Skip empty rows
+
+          patientsData.push({
+             cns,
+             cpf,
+             name: col2,
+             dob,
+             age: ageStr,
+             isHomeless: false,
+             nationality: "010",
+             sex: "",
+             unitId: ""
+          });
+        }
+      }
+      
+      const chunkArray = (arr: any[], size: number) => {
+        const chunks = [];
+        for (let i = 0; i < arr.length; i += size) {
+           chunks.push(arr.slice(i, i + size));
+        }
+        return chunks;
+      };
+
+      const chunks = chunkArray(patientsData, 500);
+      const importFn = httpsCallable(functions, 'importPatientsBatch');
+      
+      let totalImported = 0;
+      let totalDuplicates = localDuplicatesIgnored;
+
+      if (chunks.length > 0) {
+         setImportProgress({ current: 0, total: chunks.length, files: files.length });
+      }
+      
+      for (let i = 0; i < chunks.length; i++) {
+         const chunk = chunks[i];
+         const res = await importFn({
+             municipalityId: selectedMunForPatients.id,
+             entityType: claims?.entityType || 'PRIVATE',
+             patientsData: chunk
+         });
+         
+         const data = res.data as any;
+         totalImported += data.count || 0;
+         totalDuplicates += data.duplicates || 0;
+         
+         setImportProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+      }
+      
+      alert(
+          `Processamento de ${files.length} arquivo(s) concluído!\n\n` +
+          `• Adicionados com sucesso: ${totalImported}\n` +
+          `• Ignorados (Sem CPF/CNS definidos): ${emptyIgnored}\n` +
+          `• Ignorados (Já existiam/Duplicados): ${totalDuplicates}`
+      );
+      
+      // Auto-refresh list
+      handleOpenPatientsModal(selectedMunForPatients);
+    } catch (error: any) {
+      console.error(error);
+      alert("Erro ao importar pacientes: Verifique se os objetos JSON contêm a estrutura de col_1, col_2, etc válidas. " + error.message);
+    } finally {
+      setImporting(false);
+      setImportProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // O Backend Filter substitui o filtro local
+  const filteredPatients = patientsList;
+
 
   if (loading || loadingEntity) {
     return <div className="p-8 text-center text-gray-500">Carregando municípios...</div>;
@@ -298,6 +683,15 @@ const Municipalities: React.FC = () => {
                   </button>
                   {!isCoordenacao && (
                     <>
+                      <button onClick={() => handleOpenPatientsModal(mun)} className="bg-blue-500/80 backdrop-blur-sm p-1.5 rounded-lg text-white cursor-pointer hover:bg-blue-500 transition-colors shadow-sm" title="Pacientes da Base">
+                        <Users className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleOpenSubsedeModal(mun)} className="bg-orange-500/80 backdrop-blur-sm p-1.5 rounded-lg text-white cursor-pointer hover:bg-orange-500 transition-colors shadow-sm" title="Gerenciar Acesso Subsede">
+                        <Key className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleOpenToleranceModal(mun)} className="bg-emerald-500/80 backdrop-blur-sm p-1.5 rounded-lg text-white cursor-pointer hover:bg-emerald-500 transition-colors shadow-sm" title="Configurar Tolerância Retroativa">
+                        <CalendarClock className="w-4 h-4" />
+                      </button>
                       <button onClick={() => handleOpenModal(mun)} className="bg-white/20 backdrop-blur-sm p-1.5 rounded-lg text-white cursor-pointer hover:bg-white/30 transition-colors" title="Editar">
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -365,18 +759,7 @@ const Municipalities: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Interface Type Indicator */}
-                <div className="text-xs flex items-center justify-between p-2 rounded border mt-4 mb-2 bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700">
-                  <span className="font-semibold flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <LayoutTemplate className="w-3.5 h-3.5" />
-                    Interface
-                  </span>
-                  <Badge type={mun.interfaceType === 'SIMPLIFIED' ? 'warning' : 'neutral'} className="text-[10px]">
-                    {mun.interfaceType === 'SIMPLIFIED' ? 'Simplificada' : 'Padrão PEC'}
-                  </Badge>
-                </div>
-
-                {/* Conector PEC Status */}
+                {/* Footer com Status Clicável */}
                 {mun.lediConfig?.integrationStatus === 'ACTIVE' && (
                   <div className="text-xs flex items-center justify-between p-2 rounded border mt-2 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/50">
                     <span className="font-semibold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400">
@@ -531,49 +914,6 @@ const Municipalities: React.FC = () => {
             </div>
           </div>
 
-          {/* Configuração de Interface (Novo) */}
-          <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
-            <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center">
-              <LayoutTemplate className="w-4 h-4 mr-2 text-emerald-600" /> Configuração de Interface
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className={`relative flex cursor-pointer rounded-lg border p-3 shadow-sm focus:outline-none ${formData.interfaceType === 'PEC' ? 'border-emerald-500 ring-1 ring-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'}`}>
-                <input
-                  type="radio"
-                  name="interfaceType"
-                  value="PEC"
-                  className="sr-only"
-                  checked={(!formData.interfaceType || formData.interfaceType === 'PEC')}
-                  onChange={() => setFormData(prev => ({ ...prev, interfaceType: 'PEC' }))}
-                  disabled={isViewMode}
-                />
-                <span className="flex flex-col">
-                  <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Interface PEC (Padrão)</span>
-                  <span className="mt-1 flex items-center text-xs text-gray-500">
-                    Fichas completas, SOAP e integração e-SUS.
-                  </span>
-                </span>
-              </label>
-              <label className={`relative flex cursor-pointer rounded-lg border p-3 shadow-sm focus:outline-none ${formData.interfaceType === 'SIMPLIFIED' ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'}`}>
-                <input
-                  type="radio"
-                  name="interfaceType"
-                  value="SIMPLIFIED"
-                  className="sr-only"
-                  checked={formData.interfaceType === 'SIMPLIFIED'}
-                  onChange={() => setFormData(prev => ({ ...prev, interfaceType: 'SIMPLIFIED' }))}
-                  disabled={isViewMode}
-                />
-                <span className="flex flex-col">
-                  <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Interface Simplificada</span>
-                  <span className="mt-1 flex items-center text-xs text-gray-500">
-                    Apenas produção básica e procedimentos.
-                  </span>
-                </span>
-              </label>
-            </div>
-          </div>
-
           {/* Seção 3: Gestão e Contato */}
           <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
             <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center">
@@ -620,6 +960,8 @@ const Municipalities: React.FC = () => {
             </div>
           </div>
 
+          {/* The SUBSEDE Access section has been moved to its own quick-access Modal for better UX. */}
+
           <div className="mt-6 flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
               {isViewMode ? 'Fechar' : 'Cancelar'}
@@ -630,7 +972,307 @@ const Municipalities: React.FC = () => {
           </div>
         </form>
       </Modal>
-    </div >
+
+      {/* Modal Dedicado para Gestão de Acesso SUBSEDE */}
+      <Modal
+        isOpen={isSubsedeModalOpen}
+        onClose={() => setIsSubsedeModalOpen(false)}
+        title="Gestão de Acesso - SUBSEDE"
+      >
+        <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-100 dark:border-orange-800">
+          <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center">
+            <Key className="w-4 h-4 mr-2 text-orange-600" /> Acesso Painel de Coordenação Local (Subsede)
+          </h4>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-6">
+            Crie ou gerencie as credenciais exclusivas para que o Coordenador Local deste município possa acompanhar a produção, as metas e consultar o corpo clínico de forma independente (Read-Only).
+          </p>
+
+          {currentSubsedeUsers.length > 0 && (
+            <div className="mb-6 space-y-4">
+              <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Coordenadores Vinculados</h5>
+              {currentSubsedeUsers.map(user => (
+                <div key={user.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 font-bold text-lg border border-orange-200 dark:border-orange-800">
+                        {user.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">{user.name}</p>
+                        <p className="text-xs text-gray-500 font-mono">{user.email}</p>
+                      </div>
+                    </div>
+                    <Badge type={user.status === 'active' ? 'success' : 'error'}>
+                      {user.status === 'active' ? 'Ativo' : 'Suspenso'}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-3 border-t border-gray-100 dark:border-gray-700/60 mt-3">
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleResetSubsedeAccess(user)} disabled={actionLoading}>
+                      Zerar Senha
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleToggleSubsedeStatus(user)} disabled={actionLoading} className={user.status === 'active' ? "text-red-600 hover:text-red-700 hover:bg-red-50" : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"}>
+                      {user.status === 'active' ? 'Suspender' : 'Reativar'}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => handleDeleteSubsedeAccess(user)} disabled={actionLoading} className="text-gray-500 hover:text-red-600 hover:bg-red-50">
+                      Excluir
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-4 pt-4 border-t border-orange-200 dark:border-orange-800/50">
+            <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Novo Coordenador</h5>
+            <div className="grid grid-cols-1 gap-4">
+              <Input
+                label="Nome do Coordenador Local"
+                value={subsedeName}
+                onChange={e => setSubsedeName(e.target.value)}
+                disabled={actionLoading}
+                placeholder="Ex: João da Silva"
+              />
+              <Input
+                label="E-mail de Acesso (Login)"
+                type="email"
+                value={subsedeEmail}
+                onChange={e => setSubsedeEmail(e.target.value)}
+                disabled={actionLoading}
+                placeholder="coordenador@municipio.gov.br"
+              />
+            </div>
+
+            {generatedPassword && (
+              <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 font-mono text-center mt-4">
+                <p className="text-xs text-orange-600 dark:text-orange-400 mb-1">Senha Gerada com Sucesso:</p>
+                <span className="font-bold text-xl text-orange-700 dark:text-orange-300">{generatedPassword}</span>
+                <p className="text-[10px] text-gray-400 mt-2">Copie e envie ao usuário novo. Ele poderá logar na aba Acesso Subsede.</p>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button type="button" variant="secondary" className="bg-orange-600 hover:bg-orange-700 shadow-md shadow-orange-500/20 w-full" onClick={handleCreateSubsedeAccess} disabled={!subsedeEmail || !subsedeName || actionLoading}>
+                {actionLoading ? 'Gerando Acesso...' : 'Gerar Acesso Subsede'}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+          <Button type="button" variant="outline" onClick={() => setIsSubsedeModalOpen(false)}>
+            Fechar
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Modal de Listagem de Pacientes */}
+      <Modal
+        isOpen={isPatientsModalOpen}
+        onClose={() => setIsPatientsModalOpen(false)}
+        title={`Pacientes da Base - ${selectedMunForPatients?.name || ''}`}
+        className="max-w-5xl w-full"
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+             <div className="relative border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm flex-1">
+               <Search className="w-4 h-4 absolute left-3 top-3.5 text-gray-400" />
+               <input
+                 placeholder="Buscar por Nome, CNS ou CPF..."
+                 className="pl-9 w-full rounded-lg bg-gray-50 dark:bg-gray-800 p-2.5 text-sm dark:text-white outline-none"
+                 value={patientSearchTerm}
+                 onChange={(e) => setPatientSearchTerm(e.target.value)}
+               />
+             </div>
+             
+             <button
+               onClick={handleImportClick}
+               disabled={importing}
+               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-50 whitespace-nowrap"
+             >
+               {importing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+               {importing 
+                  ? (importProgress ? `Importando ${importProgress.current}/${importProgress.total}...` : 'Processando JSON...') 
+                  : 'Importar Lotes'}
+             </button>
+             <input
+               type="file"
+               accept=".json"
+               multiple
+               className="hidden"
+               ref={fileInputRef}
+               onChange={handleFileChange}
+             />
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+             {loadingPatients ? (
+                <div className="p-8 text-center text-gray-500 flex flex-col items-center">
+                   <RefreshCw className="w-6 h-6 animate-spin text-emerald-500 mb-2" />
+                   Buscando pacientes no servidor...
+                </div>
+             ) : (
+                <div className="overflow-x-auto max-h-[60vh]">
+                   <table className="w-full text-left text-sm text-gray-600 dark:text-gray-300">
+                      <thead className="bg-emerald-50 dark:bg-emerald-900/50 text-emerald-900 dark:text-emerald-100 border-b border-emerald-100 dark:border-emerald-800/60 sticky top-0 z-10">
+                         <tr>
+                            <th className="px-4 py-3 font-semibold dark:text-gray-200">Nome do Paciente</th>
+                            <th className="px-4 py-3 font-semibold dark:text-gray-200">CNS</th>
+                            <th className="px-4 py-3 font-semibold dark:text-gray-200">CPF</th>
+                            <th className="px-4 py-3 font-semibold dark:text-gray-200 text-right">Ações</th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                         {filteredPatients.length === 0 ? (
+                           <tr>
+                              <td colSpan={4} className="px-4 py-8 text-center text-gray-500">Nenhum paciente encontrado ou a busca não retornou resultados.</td>
+                           </tr>
+                         ) : (
+                           filteredPatients.map(patient => (
+                              <tr key={patient.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                                    {patient.name || patient.patientName || '-'}
+                                    {(patient.dob || patient.patientDob) && <span className="block text-xs text-gray-400 font-normal mt-0.5">Nasc: {new Date(patient.dob || patient.patientDob).toLocaleDateString()}</span>}
+                                 </td>
+                                 <td className="px-4 py-3 font-mono text-xs pt-4">{patient.cns || '-'}</td>
+                                 <td className="px-4 py-3 font-mono text-xs pt-4">{patient.cpf || '-'}</td>
+                                 <td className="px-4 py-3 text-right">
+                                    <div className="flex justify-end gap-2 isolate pt-1.5">
+                                      <button onClick={() => handleEditPatient(patient)} className="bg-blue-50 text-blue-600 hover:bg-blue-100 p-1.5 rounded-md transition-colors" title="Editar paciente">
+                                         <Edit2 className="w-4 h-4" />
+                                      </button>
+                                      <button onClick={() => handleDeletePatient(patient.id)} className="bg-red-50 text-red-500 hover:bg-red-100 p-1.5 rounded-md transition-colors" title="Excluir paciente">
+                                         <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                 </td>
+                              </tr>
+                           ))
+                         )}
+                      </tbody>
+                   </table>
+                </div>
+             )}
+          </div>
+          <div className="flex justify-between items-center text-xs text-gray-500 px-1">
+             <span>Mostrando {patientsList.length} de {totalPatientsCount} pacientes reais na base.</span>
+             {hasMorePatients && (
+                 <button 
+                     type="button" 
+                     onClick={() => fetchPatients(selectedMunForPatients!, false)} 
+                     disabled={loadingMorePatients}
+                     className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-md font-medium flex items-center transition-colors"
+                 >
+                     {loadingMorePatients ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                     {loadingMorePatients ? 'Carregando lote...' : '▼ Carregar mais 500 pacientes'}
+                 </button>
+             )}
+          </div>
+          <div className="flex justify-end pt-2">
+             <Button type="button" variant="outline" onClick={() => setIsPatientsModalOpen(false)}>
+                Fechar
+             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Secundário de Edição de Paciente */}
+      <Modal
+         isOpen={isEditPatientModalOpen}
+         onClose={() => setIsEditPatientModalOpen(false)}
+         title="Editar Dados Demográficos"
+         className="max-w-lg"
+      >
+         <form onSubmit={handleSavePatientEdit} className="space-y-4">
+            <Input
+               label="Nome Completo"
+               value={editingPatient?.name || editingPatient?.patientName || ''}
+               onChange={e => setEditingPatient({...editingPatient, name: e.target.value})}
+               required
+            />
+            <div className="grid grid-cols-2 gap-4">
+               <Input
+                  label="CNS"
+                  value={editingPatient?.cns || ''}
+                  onChange={e => setEditingPatient({...editingPatient, cns: e.target.value.replace(/\D/g, '')})}
+               />
+               <Input
+                  label="CPF"
+                  value={editingPatient?.cpf || ''}
+                  onChange={e => setEditingPatient({...editingPatient, cpf: e.target.value.replace(/\D/g, '')})}
+               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+               <Input
+                  label="Data Nasc (AAAA-MM-DD)"
+                  type="date"
+                  value={editingPatient?.dob?.split('T')[0] || editingPatient?.patientDob?.split('T')[0] || ''}
+                  onChange={e => setEditingPatient({...editingPatient, dob: e.target.value})}
+               />
+               <Select
+                  label="Sexo"
+                  value={editingPatient?.sex || editingPatient?.patientSex || ''}
+                  onChange={e => setEditingPatient({...editingPatient, sex: e.target.value})}
+               >
+                  <option value="">Selecione</option>
+                  <option value="M">Masculino</option>
+                  <option value="F">Feminino</option>
+               </Select>
+            </div>
+            <Input
+               label="Telefone"
+               value={editingPatient?.phone || editingPatient?.patientPhone || ''}
+               onChange={e => setEditingPatient({...editingPatient, phone: e.target.value})}
+            />
+            
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700 mt-6">
+               <Button type="button" variant="outline" onClick={() => setIsEditPatientModalOpen(false)}>
+                  Cancelar
+               </Button>
+               <Button type="submit" variant="secondary" disabled={editingPatientLoading}>
+                  {editingPatientLoading ? 'Salvando...' : 'Salvar Alterações'}
+               </Button>
+            </div>
+        </form>
+      </Modal>
+
+      {/* Modal de Tolerância Retroativa */}
+      <Modal
+        isOpen={isToleranceModalOpen}
+        onClose={() => setIsToleranceModalOpen(false)}
+        title="Controle de Produção Retroativa"
+        className="max-w-md w-full"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Configure o prazo para digitação retroativa do município <strong>{selectedMunForTolerance?.name}</strong>.
+          </p>
+          <div className="grid grid-cols-1 gap-4">
+            <Input
+              label="Dias de Tolerância no Mês Seguinte"
+              type="number"
+              min="0"
+              max="31"
+              value={toleranceDaysInput}
+              onChange={e => setToleranceDaysInput(Number(e.target.value))}
+              disabled={savingTolerance}
+              className="bg-white dark:bg-gray-800"
+              placeholder="Ex: 5"
+            />
+            <div className="flex items-start text-xs text-gray-500 dark:text-gray-400 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-md border border-emerald-100 dark:border-emerald-800/30">
+              <Info className="w-5 h-5 mr-3 text-emerald-500 shrink-0 mt-0.5" />
+              <p>Se você definir <strong>5</strong>, os profissionais terão até o dia 05 do mês seguinte para registrar atendimentos retroativos do mês anterior. Um valor <strong>0</strong> desabilita a restrição (libera digitação retroativa ilimitada).</p>
+            </div>
+          </div>
+          <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-700 gap-3">
+            <Button type="button" variant="outline" onClick={() => setIsToleranceModalOpen(false)} disabled={savingTolerance}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleSaveTolerance} disabled={savingTolerance} className="bg-emerald-600 hover:bg-emerald-700">
+              {savingTolerance ? 'Salvando...' : 'Salvar Alterações'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
   );
 };
 

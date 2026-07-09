@@ -10,7 +10,9 @@ import {
     QueryDocumentSnapshot,
     DocumentData,
     increment,
-    getDoc
+    getDoc,
+    collectionGroup,
+    setDoc
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { Unit, UnitInput } from "../types";
@@ -19,27 +21,48 @@ const COLLECTION_NAME = "units";
 const MUNICIPALITIES_COLLECTION = "municipalities";
 
 export async function fetchUnitsByEntity(entityId: string): Promise<Unit[]> {
-    const q = query(
-        collection(db, COLLECTION_NAME),
-        where("entityId", "==", entityId)
-    );
+    // Determina o tipo de entidade para montar o path
+    const entityDoc = await getDoc(doc(db, "entities", entityId));
+    if (!entityDoc.exists()) return [];
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(
-        (d: QueryDocumentSnapshot<DocumentData>) =>
-            ({ id: d.id, ...d.data() } as Unit)
-    );
+    const entityData = entityDoc.data();
+    let type = "PUBLIC";
+    if (entityData.type === "Privada" || entityData.type === "PRIVATE") type = "PRIVATE";
+
+    // Busca os municípios vinculados à entidade
+    const municipalitiesSnap = await getDocs(collection(db, "municipalities", type, entityId));
+
+    const units: Unit[] = [];
+
+    // Busca as unidades de cada município em paralelo
+    const promises = municipalitiesSnap.docs.map(async (munDoc) => {
+        const unitsSnap = await getDocs(collection(db, `municipalities/${type}/${entityId}/${munDoc.id}/units`));
+        unitsSnap.forEach(d => {
+            units.push({ id: d.id, ...d.data() } as Unit);
+        });
+    });
+
+    await Promise.all(promises);
+    return units;
 }
 
 export async function createUnit(data: UnitInput): Promise<string> {
-    if (!data.entityId) {
-        throw new Error("entityId é obrigatório para criar unidade.");
-    }
-    if (!data.municipalityId) {
-        throw new Error("municipalityId é obrigatório para criar unidade.");
+    if (!data.entityId) throw new Error("entityId é obrigatório para criar unidade.");
+    if (!data.municipalityId) throw new Error("municipalityId é obrigatório para criar unidade.");
+
+    let resolvedType = data.entityType || 'PRIVATE';
+    if (!data.entityType) {
+        try {
+            const eSnap = await getDoc(doc(db, 'entities', data.entityId));
+            if (eSnap.exists()) {
+                const t = eSnap.data().type;
+                if (t === 'Pública' || t === 'PUBLIC') resolvedType = 'PUBLIC';
+            }
+        } catch (e) { }
     }
 
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), data);
+    const newPath = `municipalities/${resolvedType.toUpperCase()}/${data.entityId}/${data.municipalityId}/units`;
+    const docRef = await addDoc(collection(db, newPath), data);
 
     // Atualiza contador de unidades no município
     try {
@@ -72,21 +95,36 @@ export async function updateUnit(
     data: Partial<UnitInput>,
     previousMunicipalityId?: string
 ): Promise<void> {
-    const unitRef = doc(db, COLLECTION_NAME, id);
+    const { entityId, municipalityId, entityType } = data;
+    if (!entityId || (!municipalityId && !previousMunicipalityId)) {
+        throw new Error("Missing required fields for nested update.");
+    }
 
-    // Atualiza o documento da unidade
-    await updateDoc(unitRef, data);
+    let resolvedType = entityType || 'PRIVATE';
+    if (!entityType) {
+        try {
+            const eSnap = await getDoc(doc(db, 'entities', entityId));
+            if (eSnap.exists()) {
+                const t = eSnap.data().type;
+                if (t === 'Pública' || t === 'PUBLIC') resolvedType = 'PUBLIC';
+            }
+        } catch (e) { }
+    }
 
-    // Se o município mudou, ajusta contadores
-    if (
-        data.municipalityId &&
-        previousMunicipalityId &&
-        data.municipalityId !== previousMunicipalityId
-    ) {
+    const currentMunId = municipalityId || previousMunicipalityId;
+    const newPath = `municipalities/${resolvedType.toUpperCase()}/${entityId}/${currentMunId}/units/${id}`;
+
+    if (municipalityId && previousMunicipalityId && municipalityId !== previousMunicipalityId) {
+        // Move document
+        const oldPath = `municipalities/${resolvedType.toUpperCase()}/${entityId}/${previousMunicipalityId}/units/${id}`;
+        await setDoc(doc(db, newPath), data, { merge: true });
+        try {
+            await deleteDoc(doc(db, oldPath));
+        } catch (e) { }
+
         try {
             const oldRef = doc(db, MUNICIPALITIES_COLLECTION, previousMunicipalityId);
-            const newRef = doc(db, MUNICIPALITIES_COLLECTION, data.municipalityId);
-
+            const newRef = doc(db, MUNICIPALITIES_COLLECTION, municipalityId);
             await Promise.all([
                 updateDoc(oldRef, { unitsCount: increment(-1) }),
                 updateDoc(newRef, { unitsCount: increment(1) })
@@ -94,41 +132,43 @@ export async function updateUnit(
         } catch (error) {
             console.warn("Não foi possível atualizar os contadores de unidades nos municípios:", error);
         }
+    } else {
+        // Just update
+        await updateDoc(doc(db, newPath), data);
     }
 
     // Log Action
     try {
         // @ts-ignore
         const { logAction } = await import('./logsService');
-        // Retrieve entityId if not in data... assuming data is partial.
-        // For accurate logging we might need to fetch the doc if entityId is missing, but let's skip for perf if missing.
         if (data.entityId) {
             await logAction({
                 action: 'UPDATE',
                 target: 'UNIT',
                 description: `Atualizou a unidade ${data.name || 'ID ' + id}`,
                 entityId: data.entityId,
-                municipalityId: data.municipalityId || previousMunicipalityId
+                municipalityId: currentMunId
             });
         }
     } catch (e) { console.error(e); }
 }
 
-export async function deleteUnit(id: string, municipalityId: string): Promise<void> {
-    const unitRef = doc(db, COLLECTION_NAME, id);
-    // Get doc to know entityId and name before deleting
-    let entityId = '';
-    let name = '';
-    try {
-        const snap = await getDoc(unitRef);
-        if (snap.exists()) {
-            const d = snap.data();
-            entityId = d.entityId;
-            name = d.name;
-        }
-    } catch (e) { }
+export async function deleteUnit(unit: Unit): Promise<void> {
+    const { id, entityId, municipalityId, entityType, name } = unit;
 
-    await deleteDoc(unitRef);
+    let resolvedType = entityType || 'PRIVATE';
+    if (!entityType && entityId) {
+        try {
+            const eSnap = await getDoc(doc(db, 'entities', entityId));
+            if (eSnap.exists()) {
+                const t = eSnap.data().type;
+                if (t === 'Pública' || t === 'PUBLIC') resolvedType = 'PUBLIC';
+            }
+        } catch (e) { }
+    }
+
+    const path = `municipalities/${resolvedType.toUpperCase()}/${entityId}/${municipalityId}/units/${id}`;
+    await deleteDoc(doc(db, path));
 
     if (municipalityId) {
         try {

@@ -40,6 +40,12 @@ export interface Municipality {
 
     // Stats (Optional/Computed)
     usersCount?: number;
+    // External Integration
+    externalIntegrationToken?: string;
+    externalIntegrationSecret?: string;
+
+    // Tolerance
+    productionToleranceDays?: number;
 }
 
 export type MunicipalityInput = Omit<Municipality, 'id' | 'usersCount'>;

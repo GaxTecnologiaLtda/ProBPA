@@ -349,7 +349,7 @@ const Settings: React.FC = () => {
           {/* System Info Footer */}
           <div className="text-center pt-8 border-t border-gray-200 dark:border-gray-700/50">
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">ProBPA - Painel da Entidade Privada</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Versão 2.5.0 (Build 20240825) • GAX Tecnologia</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Versão 2.3.0 (Build 20260312) • GAX Tecnologia</p>
           </div>
         </div>
       </div>
