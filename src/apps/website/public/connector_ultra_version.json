@@ -1,6 +1,6 @@
 {
-  "version": "1.0.20",
+  "version": "1.0.21",
   "mandatory": true,
   "download_url": "https://website-probpa.web.app/downloads/Conector_Ultra_Setup.exe",
-  "release_notes": "Adiciona nomes para CIAPs e locais de atendimento, corrige chaves do e-SUS PEC e IDs."
+  "release_notes": "Correção final do sufixo de coluna nas consultas de Odontologia (_1)."
 }
