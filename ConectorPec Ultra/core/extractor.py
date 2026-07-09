@@ -107,6 +107,11 @@ class MunicipalityExtractor:
                 print(f"[EXTRACTOR] Executando extração: {nome_query}...")
                 
                 try:
+                    if hasattr(self, 'cancel_event') and self.cancel_event and self.cancel_event.is_set():
+                        print("[EXTRACTOR] Execução interrompida, pulando restante...")
+                        sucesso_total = False
+                        break
+                        
                     # Somente passa os parâmetros se a query os contiver
                     query_params = params if "%(data_inicio)s" in sql else None
                     df = self.db.execute_query_df(sql, params=query_params)
@@ -133,6 +138,11 @@ class MunicipalityExtractor:
                     BATCH_SIZE = 500
                     total_batches = math.ceil(len(payload_data) / BATCH_SIZE)
                     for idx, chunk in enumerate(self._chunk_list(payload_data, BATCH_SIZE), 1):
+                        if hasattr(self, 'cancel_event') and self.cancel_event and self.cancel_event.is_set():
+                            print("[EXTRACTOR] Extração interrompida pelo usuário.")
+                            sucesso_total = False
+                            break
+                            
                         print(f"[EXTRACTOR]    -> Enviando lote {idx}/{total_batches} ({len(chunk)} registros)...", flush=True)
                         payload = {
                             "collection": nome_query,

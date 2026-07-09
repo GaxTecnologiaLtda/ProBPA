@@ -217,6 +217,10 @@ class ProBPAConnectorApp(ctk.CTk):
                                      command=lambda: self.start_sync("all"))
         btn_sync_all.pack(side="right", padx=(10, 0))
 
+        btn_stop_all = ctk.CTkButton(header, text="⏹ Parar Todos", fg_color="red", hover_color="darkred", 
+                                     command=lambda: self.stop_sync("all"))
+        btn_stop_all.pack(side="right", padx=(10, 0))
+
         btn_clear_logs = ctk.CTkButton(header, text="🧹 Limpar Logs", fg_color="transparent", border_width=1, hover_color=("gray70", "gray30"),
                                        command=self.clear_logs)
         btn_clear_logs.pack(side="right")
@@ -270,6 +274,10 @@ class ProBPAConnectorApp(ctk.CTk):
             btn_sync = ctk.CTkButton(row, text="▶ Executar", width=80, fg_color="green", hover_color="darkgreen",
                                      command=lambda c=conn: self.start_sync(c["id"]))
             btn_sync.pack(side="right", padx=(10, 20), pady=15)
+
+            btn_stop = ctk.CTkButton(row, text="⏹ Parar", width=80, fg_color="red", hover_color="darkred",
+                                     command=lambda c=conn: self.stop_sync(c["id"]))
+            btn_stop.pack(side="right", padx=(10, 0), pady=15)
 
             btn_edit = ctk.CTkButton(row, text="✏️ Editar", width=80, fg_color="transparent", border_width=1,
                                      command=lambda c=conn: self._open_edit_conn_form(c))
@@ -470,6 +478,18 @@ class ProBPAConnectorApp(ctk.CTk):
             if target:
                 print(f"\n[SISTEMA] Disparando extração para: {target.get('municipio_id')}")
                 self.engine.trigger_manual_extraction(target_id)
+
+    def stop_sync(self, target_id):
+        self.select_frame("home")
+        
+        if target_id == "all":
+            print(f"\n[SISTEMA] Solicitando parada de extração para TODOS os municípios...")
+            for c in self.connections:
+                self.engine.cancel_manual_extraction(c["id"])
+        else:
+            target = next((c for c in self.connections if c["id"] == target_id), None)
+            if target:
+                self.engine.cancel_manual_extraction(target_id)
 
 if __name__ == "__main__":
     app = ProBPAConnectorApp()

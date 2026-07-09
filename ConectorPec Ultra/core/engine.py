@@ -8,9 +8,8 @@ class ExtractionEngine:
     def __init__(self):
         self._stop_event = threading.Event()
         self.engine_thread = None
-        # Por padrão, agendamento de 1 em 1 hora, mas o usuário pediu pra ser configurável
-        # Vamos ler do arquivo de configurações gerais depois, por enquanto deixamos 1h
-        self.schedule_frequency_hours = 1 
+        # Por padrão, agendamento de 24 em 24 horas
+        self.schedule_frequency_hours = 24
         self._setup_schedule()
 
     def _setup_schedule(self):
@@ -41,17 +40,32 @@ class ExtractionEngine:
             print(f"[ENGINE] Erro: Conexão com ID {connection_id} não encontrada.")
             return
 
+        cancel_event = threading.Event()
+        if not hasattr(self, 'active_manual_extractions'):
+            self.active_manual_extractions = {}
+            
+        self.active_manual_extractions[connection_id] = cancel_event
+
         def _run_manual():
             print(f"[ENGINE] [MANUAL] Iniciando extração sob demanda do município ID: {connection_id} / Host: {target_config.get('db_host')}")
             extractor = MunicipalityExtractor(target_config)
+            extractor.cancel_event = cancel_event
             success = extractor.run_extraction()
             if success:
                 print(f"[ENGINE] [MANUAL] Extração concluída com sucesso para o ID: {connection_id}.")
+            elif cancel_event.is_set():
+                print(f"[ENGINE] [MANUAL] Extração cancelada para o ID: {connection_id}.")
             else:
                 print(f"[ENGINE] [MANUAL] Falha na extração para o ID: {connection_id}.")
+            self.active_manual_extractions.pop(connection_id, None)
 
         thread = threading.Thread(target=_run_manual, daemon=True)
         thread.start()
+
+    def cancel_manual_extraction(self, connection_id):
+        if hasattr(self, 'active_manual_extractions') and connection_id in self.active_manual_extractions:
+            print(f"[ENGINE] Solicitando cancelamento da extração para o ID {connection_id}...")
+            self.active_manual_extractions[connection_id].set()
 
     def _engine_loop(self):
         print("[ENGINE] Motor em segundo plano iniciado.")
