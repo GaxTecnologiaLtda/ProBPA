@@ -1,5 +1,6 @@
 {
-  "version": "1.0.12",
-  "download_url": "https://github.com/GaxTecnologiaLtda/ProBPA/releases/download/v1.0.12/Conector_Ultra_Setup.exe",
-  "release_notes": "Correções internas do motor de ingestão de dados para uso dos servidores dedicados e da autenticação segura por API KEY."
+  "version": "1.0.13",
+  "mandatory": false,
+  "download_url": "https://github.com/GaxTecnologiaLtda/ProBPA/releases/download/v1.0.13/Conector_Ultra_Setup.exe",
+  "release_notes": "Correções na query cidadania_base e botão de parar extração."
 }
