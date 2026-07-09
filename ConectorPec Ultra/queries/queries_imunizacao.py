@@ -3,6 +3,7 @@
 
 QUERY_VACINAS_APLICADAS = """
 SELECT 
+    fat_vac_detalhe.co_seq_fat_vacinacao_vacina AS id_vacina,
     fat_vac.co_fat_cidadao_pec AS cns_cpf_paciente,
     fat_vac.co_dim_tempo AS data_aplicacao,
     eq.nu_ine AS ine,

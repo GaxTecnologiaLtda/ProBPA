@@ -3,6 +3,7 @@
 
 QUERY_CONDICOES_CLINICAS = """
 SELECT 
+    prob.co_seq_fat_atend_ind_problemas AS id_condicao,
     prob.co_fat_cidadao_pec AS cns_cpf_paciente,
     prob.co_dim_tempo AS data_registro,
     ciap.nu_ciap AS codigo_ciap,
@@ -19,6 +20,7 @@ WHERE prob.co_dim_tempo >= %(data_inicio)s
 
 QUERY_ANTECEDENTES_OBSTETRICOS = """
 SELECT 
+    ant.co_seq_antecedente AS id_antecedente,
     cidadao.co_seq_cidadao AS id_paciente,
     ant.ds_gestacao AS gestante_ativa,
     ant.dt_ultimo_parto AS data_ultimo_parto,

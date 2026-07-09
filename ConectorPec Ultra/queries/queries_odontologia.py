@@ -3,6 +3,7 @@
 
 QUERY_ATENDIMENTO_ODONTO = """
 SELECT 
+    fat_od.co_seq_fat_atendimento_odonto AS id_atendimento_odonto,
     fat_od.co_fat_cidadao_pec AS id_paciente,
     fat_od.co_dim_tempo AS data_atendimento,
     cbo.nu_cbo AS cbo,

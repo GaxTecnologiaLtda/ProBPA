@@ -3,6 +3,7 @@
 
 QUERY_ATENDIMENTO_INDIVIDUAL = """
 SELECT 
+    fat.co_seq_fat_atd_ind AS id_atendimento,
     fat.co_fat_cidadao_pec AS id_paciente,
     fat.co_dim_tempo AS data_atendimento,
     cbo.nu_cbo AS cbo,
