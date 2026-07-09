@@ -72,10 +72,31 @@ export const ingestUltraData = functions
                     break; 
                 }
                 
-                // If the record has an 'id' field, we use it as the doc ID, otherwise auto-generate
+                // Dynamically identify the primary key to prevent duplication
+                const possibleIdFields = [
+                    "id",
+                    "id_atendimento", 
+                    "id_atividade", 
+                    "id_condicao", 
+                    "id_antecedente", 
+                    "id_vacina", 
+                    "id_atendimento_odonto", 
+                    "id_procedimento",
+                    "id_cadastro_domiciliar", 
+                    "id_paciente" // Must be LAST, as it is often a foreign key in other tables!
+                ];
+
+                let docId: string | null = null;
+                for (const field of possibleIdFields) {
+                    if (record[field]) {
+                        docId = String(record[field]);
+                        break;
+                    }
+                }
+
                 let docRef;
-                if (record.id) {
-                    docRef = dedicatedDb.collection(targetCollection).doc(String(record.id));
+                if (docId) {
+                    docRef = dedicatedDb.collection(targetCollection).doc(docId);
                 } else {
                     docRef = dedicatedDb.collection(targetCollection).doc();
                 }
