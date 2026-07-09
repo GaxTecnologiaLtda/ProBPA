@@ -11,14 +11,22 @@ SELECT
     eq.nu_ine AS ine,
     us.nu_cnes AS cnes,
     fat.st_conduta_consulta_agendada AS conduta_agendada,
-    dim_tipo_atd.nu_identificador AS tipo_atendimento, -- 2=Agendada Prog, 6=Consulta no dia, etc
-    dim_local.nu_identificador AS local_atendimento,   -- 2=UBS, 5=Domicílio
+    dim_tipo_atd.ds_tipo_atendimento AS tipo_atendimento,
+    dim_local.ds_local_atendimento AS local_atendimento,
     fat.nu_peso,
     fat.nu_altura,
     fat.nu_pressao_sistolica,
     fat.nu_pressao_diastolica,
-    fat.ds_filtro_ciaps AS ciaps_avaliados,
-    fat.ds_filtro_cids AS cids_avaliados
+    fat.ds_filtro_ciaps AS ciaps_avaliados_codigos,
+    (SELECT string_agg(ciap.no_ciap, ', ') 
+     FROM tb_fat_atd_ind_problemas p 
+     JOIN tb_dim_ciap ciap ON p.co_dim_ciap = ciap.co_seq_dim_ciap 
+     WHERE p.co_fat_atd_ind = fat.co_seq_fat_atd_ind) AS ciaps_avaliados,
+    fat.ds_filtro_cids AS cids_avaliados_codigos,
+    (SELECT string_agg(cid.no_cid, ', ') 
+     FROM tb_fat_atd_ind_problemas p 
+     JOIN tb_dim_cid cid ON p.co_dim_cid = cid.co_seq_dim_cid 
+     WHERE p.co_fat_atd_ind = fat.co_seq_fat_atd_ind) AS cids_avaliados
 FROM tb_fat_atendimento_individual fat
 JOIN tb_dim_cbo cbo ON fat.co_dim_cbo_1 = cbo.co_seq_dim_cbo
 JOIN tb_dim_profissional prof ON fat.co_dim_profissional_1 = prof.co_seq_dim_profissional

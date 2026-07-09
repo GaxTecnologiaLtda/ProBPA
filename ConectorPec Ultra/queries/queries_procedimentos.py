@@ -4,7 +4,7 @@
 QUERY_PROCEDIMENTOS_FATURADOS = """
 SELECT 
     fat_proc.co_seq_fat_proced_atend_proced AS id_procedimento,
-    fat_proc.co_fat_cidadao_pec AS cns_cpf_paciente,
+    fat_proc.co_fat_cidadao_pec AS id_paciente,
     fat_proc.co_dim_tempo AS data_procedimento,
     eq.nu_ine AS ine,
     us.nu_cnes AS cnes,

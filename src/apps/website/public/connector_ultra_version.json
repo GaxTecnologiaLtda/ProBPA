@@ -1,6 +1,6 @@
 {
-  "version": "1.0.19",
+  "version": "1.0.20",
   "mandatory": true,
   "download_url": "https://website-probpa.web.app/downloads/Conector_Ultra_Setup.exe",
-  "release_notes": "Correção dos nomes das chaves primárias nas queries de antecedentes, odonto e procedimentos para o padrão oficial do e-SUS PEC."
+  "release_notes": "Adiciona nomes para CIAPs e locais de atendimento, corrige chaves do e-SUS PEC e IDs."
 }
