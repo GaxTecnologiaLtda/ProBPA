@@ -19,7 +19,7 @@ class MunicipalityExtractor:
         self.municipality_id = self.config.get('municipio_id') or self.config.get('id')
         self.api_token = self.config.get('api_token')
         # API dedicada solicitada pelo usuário
-        self.api_url = "https://southamerica-east1-probpa-025.cloudfunctions.net/ingestPecUltraData"
+        self.api_url = "https://southamerica-east1-probpa-025.cloudfunctions.net/ingestUltraData"
         self.db = DatabaseConnection(db_config)
         
         # Define queries a serem executadas
