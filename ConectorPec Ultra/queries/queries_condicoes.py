@@ -20,7 +20,7 @@ WHERE prob.co_dim_tempo >= %(data_inicio)s
 
 QUERY_ANTECEDENTES_OBSTETRICOS = """
 SELECT 
-    ant.co_seq_antecedente AS id_antecedente,
+    ant.co_antecedente AS id_antecedente,
     cidadao.co_seq_cidadao AS id_paciente,
     ant.ds_gestacao AS gestante_ativa,
     ant.dt_ultimo_parto AS data_ultimo_parto,
