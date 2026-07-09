@@ -25,7 +25,7 @@ export const ingestUltraData = functions
             // In a highly optimized scenario, we could use a memory cache here
             const entityQuery = await db.collection("entities")
                 .where("connectorApiKey", "==", apiKey)
-                .where("status", "==", "ACTIVE")
+                .where("status", "in", ["ACTIVE", "Ativa"])
                 .limit(1)
                 .get();
 
