@@ -15,8 +15,8 @@ FROM tb_fat_atendimento_odonto fat_od
 JOIN tb_dim_cbo cbo ON fat_od.co_dim_cbo_1 = cbo.co_seq_dim_cbo
 LEFT JOIN tb_dim_equipe eq ON fat_od.co_dim_equipe_1 = eq.co_seq_dim_equipe
 JOIN tb_dim_unidade_saude us ON fat_od.co_dim_unidade_saude_1 = us.co_seq_dim_unidade_saude
-LEFT JOIN tb_dim_tipo_consulta_odonto dim_tipo ON fat_od.co_dim_tipo_consulta_odonto_1 = dim_tipo.co_seq_dim_tipo_cnsulta_odonto
-LEFT JOIN tb_dim_local_atendimento dim_local ON fat_od.co_dim_local_atendimento_1 = dim_local.co_seq_dim_local_atendimento
+LEFT JOIN tb_dim_tipo_consulta_odonto dim_tipo ON fat_od.co_dim_tipo_consulta = dim_tipo.co_seq_dim_tipo_cnsulta_odonto
+LEFT JOIN tb_dim_local_atendimento dim_local ON fat_od.co_dim_local_atendimento = dim_local.co_seq_dim_local_atendimento
 WHERE fat_od.co_dim_tempo >= %(data_inicio)s 
   AND fat_od.co_dim_tempo <= %(data_fim)s
 """
