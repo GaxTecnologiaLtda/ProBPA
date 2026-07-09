@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Conector Ultra ProBPA"
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.13"
 #define MyAppPublisher "GAX Tecnologia"
 #define MyAppURL "https://www.probpa.com.br"
 #define MyAppExeName "Conector_Ultra.exe"
