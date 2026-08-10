@@ -27,9 +27,7 @@ jobs:
           pip install pyinstaller
 
       - name: Setup Inno Setup
-        uses: minhng99/download-inno-setup@v1
-        with:
-          version: "6.2.2"
+        run: choco install innosetup --no-progress
 
       - name: Build Executable (PyInstaller)
         run: |
