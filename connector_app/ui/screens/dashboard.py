@@ -84,10 +84,25 @@ class DashboardScreen(ctk.CTkFrame):
         self.log_boxes["GERAL"] = self._create_log_box(tab_geral)
         
         muns = self.config_manager.get_municipalities()
+        used_names = {"Geral"}
         for mun in muns:
             mun_name = mun.get('municipality_name', 'Desconhecido')
             mun_id = mun.get('municipality_id', '???')
-            tab = self.mun_log_tabs.add(mun_name)
+            
+            original_name = mun_name
+            counter = 1
+            while mun_name in used_names:
+                mun_name = f"{original_name} ({counter})"
+                counter += 1
+            used_names.add(mun_name)
+            
+            try:
+                tab = self.mun_log_tabs.add(mun_name)
+            except ValueError:
+                # Fallback if still exists for some reason
+                mun_name = f"{mun_name} - {mun_id[:4]}"
+                tab = self.mun_log_tabs.add(mun_name)
+                
             self.log_boxes[mun_id] = self._create_log_box(tab)
 
     def _create_log_box(self, parent):
@@ -119,10 +134,24 @@ class DashboardScreen(ctk.CTkFrame):
             tab = self.mun_hist_tabs.add("Sem Municípios")
             self.history_boxes["GERAL"] = self._create_log_box(tab)
         else:
+            used_names = set()
             for mun in muns:
                 mun_name = mun.get('municipality_name', 'Desconhecido')
                 mun_id = mun.get('municipality_id', '???')
-                tab = self.mun_hist_tabs.add(mun_name)
+                
+                original_name = mun_name
+                counter = 1
+                while mun_name in used_names:
+                    mun_name = f"{original_name} ({counter})"
+                    counter += 1
+                used_names.add(mun_name)
+                
+                try:
+                    tab = self.mun_hist_tabs.add(mun_name)
+                except ValueError:
+                    mun_name = f"{mun_name} - {mun_id[:4]}"
+                    tab = self.mun_hist_tabs.add(mun_name)
+                    
                 self.history_boxes[mun_id] = self._create_log_box(tab)
 
         self.refresh_history()
