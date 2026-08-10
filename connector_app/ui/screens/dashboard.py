@@ -359,6 +359,11 @@ class DashboardScreen(ctk.CTkFrame):
         return input_value["val"]
 
     def request_admin_action(self, action_type):
+        if action_type == "manage_muns":
+            from ui.screens.municipality_manager import MunicipalityManager
+            MunicipalityManager(self, self.config_manager, on_close=self._update_header_count).grab_set()
+            return
+
         pwd = self._ask_password()
         
         if not pwd: return
@@ -369,9 +374,6 @@ class DashboardScreen(ctk.CTkFrame):
             if action_type == "reset":
                 self.config_manager.clear_config()
                 self.on_reset()
-            elif action_type == "manage_muns":
-                from ui.screens.municipality_manager import MunicipalityManager
-                MunicipalityManager(self, self.config_manager, on_close=self._update_header_count).grab_set()
         else:
             self.log("Tentativa de acesso não autorizado nas configs.")
 
