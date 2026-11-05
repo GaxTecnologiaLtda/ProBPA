@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_all
 datas, binaries, hiddenimports = collect_all('customtkinter')
 
 # Add our other deps
-hiddenimports += ['psycopg2', 'requests', 'dotenv', 'cryptography', 'PIL']
+hiddenimports += ['psycopg2', 'requests', 'dotenv', 'cryptography', 'PIL', 'packaging', 'packaging.version']
 
 block_cipher = None
 

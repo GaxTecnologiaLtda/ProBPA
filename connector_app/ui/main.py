@@ -9,6 +9,7 @@ from core.single_instance import SingleInstance
 from ui.screens.activation import ActivationScreen
 from ui.screens.dashboard import DashboardScreen
 from ui.screens.welcome import WelcomeScreen
+from version import __version__
 
 import os
 
@@ -36,7 +37,7 @@ class MainWindow(ctk.CTk):
             self.single_instance.notify_existing()
             sys.exit(0)
             
-        self.title("Conector ProBPA v3.2 (Background Service)")
+        self.title(f"Conector ProBPA v{__version__} (PostgreSQL Direct)")
         self.geometry("900x700")
         
         # Load Icon

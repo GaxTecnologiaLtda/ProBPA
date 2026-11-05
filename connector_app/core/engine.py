@@ -1,16 +1,18 @@
 import os
 import sys
+import time
 import psycopg2
 import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Callable, Optional, Generator
 
-DEFAULT_API_URL = 'https://southamerica-east1-probpa-025.cloudfunctions.net/ingestPecData'
+DEFAULT_API_URL = 'https://sql.probpa.com.br/ingestPecData'
 
 class PecConnectorEngine:
     def __init__(self, config_manager):
         self.config = config_manager
         self.aborted = False
+        self.http_session = requests.Session()
 
     def abort(self):
         self.aborted = True
@@ -426,27 +428,47 @@ class PecConnectorEngine:
             payload.append(record)
             
             if len(payload) >= BATCH_SIZE:
-                if self._post_to_api(payload, mun_config):
-                    yield ('INFO', f"   -> Batch of {len(payload)} sent.", mun_id)
+                ok, err_detail = self._post_to_api(payload, mun_config)
+                if ok:
+                    yield ('INFO', f"   -> Batch of {len(payload)} sent (PostgreSQL Direct).", mun_id)
                 else:
-                    yield ('ERROR', "   -> Upload Failed.", mun_id)
+                    yield ('ERROR', f"   -> Upload Failed: {err_detail}", mun_id)
                 payload = []
         
         if payload:
-            if self._post_to_api(payload, mun_config):
-                yield ('INFO', f"   -> Final batch of {len(payload)} sent.", mun_id)
+            ok, err_detail = self._post_to_api(payload, mun_config)
+            if ok:
+                yield ('INFO', f"   -> Final batch of {len(payload)} sent (PostgreSQL Direct).", mun_id)
             else:
-                 yield ('ERROR', "   -> Final Upload Failed.", mun_id)
+                yield ('ERROR', f"   -> Final Upload Failed: {err_detail}", mun_id)
+
+    def _resolve_api_url(self, mun_config) -> str:
+        custom_url = str(mun_config.get('api_url') or self.config.get_global('api_url') or '').strip()
+        if custom_url and 'cloudfunctions.net' not in custom_url:
+            return custom_url
+        return DEFAULT_API_URL
 
     def _post_to_api(self, data, mun_config):
-        url = DEFAULT_API_URL
+        url = self._resolve_api_url(mun_config)
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f"Bearer {mun_config.get('api_key')}",
-            'X-Municipality-Id': mun_config.get('municipality_id')
+            'X-Municipality-Id': str(mun_config.get('municipality_id') or '')
         }
-        try:
-            res = requests.post(url, json={'records': data}, headers=headers, timeout=10)
-            return res.status_code in [200, 201]
-        except Exception:
-            return False
+        last_err = "Unknown error"
+        for attempt in range(1, 4):
+            if self.aborted:
+                return False, "Aborted"
+            try:
+                res = self.http_session.post(url, json={'records': data}, headers=headers, timeout=30)
+                if res.status_code in [200, 201]:
+                    return True, ""
+                last_err = f"HTTP {res.status_code}: {res.text[:160]}"
+                # Non-retryable auth/not-found errors fail immediately
+                if res.status_code in [400, 401, 403, 404]:
+                    return False, last_err
+            except Exception as e:
+                last_err = str(e)
+            if attempt < 3:
+                time.sleep(1.5 * attempt)
+        return False, last_err

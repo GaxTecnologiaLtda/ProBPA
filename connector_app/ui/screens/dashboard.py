@@ -88,21 +88,20 @@ class DashboardScreen(ctk.CTkFrame):
         for mun in muns:
             mun_name = mun.get('municipality_name', 'Desconhecido')
             mun_id = mun.get('municipality_id', '???')
-            
+
             original_name = mun_name
             counter = 1
             while mun_name in used_names:
                 mun_name = f"{original_name} ({counter})"
                 counter += 1
             used_names.add(mun_name)
-            
+
             try:
                 tab = self.mun_log_tabs.add(mun_name)
             except ValueError:
-                # Fallback if still exists for some reason
                 mun_name = f"{mun_name} - {mun_id[:4]}"
                 tab = self.mun_log_tabs.add(mun_name)
-                
+
             self.log_boxes[mun_id] = self._create_log_box(tab)
 
     def _create_log_box(self, parent):
@@ -138,20 +137,20 @@ class DashboardScreen(ctk.CTkFrame):
             for mun in muns:
                 mun_name = mun.get('municipality_name', 'Desconhecido')
                 mun_id = mun.get('municipality_id', '???')
-                
+
                 original_name = mun_name
                 counter = 1
                 while mun_name in used_names:
                     mun_name = f"{original_name} ({counter})"
                     counter += 1
                 used_names.add(mun_name)
-                
+
                 try:
                     tab = self.mun_hist_tabs.add(mun_name)
                 except ValueError:
                     mun_name = f"{mun_name} - {mun_id[:4]}"
                     tab = self.mun_hist_tabs.add(mun_name)
-                    
+
                 self.history_boxes[mun_id] = self._create_log_box(tab)
 
         self.refresh_history()
@@ -432,7 +431,7 @@ class DashboardScreen(ctk.CTkFrame):
             if available:
                 version = info.get("version")
                 notes = info.get("notes", "")
-                url = info.get("url")
+                url = info.get("url") or info.get("download_url")
                 
                 self.after(0, self.log, f"Nova versão encontrada: {version}", "update")
                 self.after(0, lambda: self._prompt_update(version, notes, url, updater))

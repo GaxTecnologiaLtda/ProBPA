@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "Conector ProBPA"
-#define MyAppVersion "3.2"
+#define MyAppVersion "3.6.0"
 #define MyAppPublisher "GAX Tecnologia"
 #define MyAppURL "https://www.probpa.com.br"
 #define MyAppExeName "ProBPA_Connector.exe"
@@ -30,6 +30,7 @@ OutputBaseFilename=ProBPA_Connector_Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=force
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
